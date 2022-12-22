@@ -1,11 +1,6 @@
 name: "terraform-plan"
 
 inputs:
-  environment:
-    description: "The environment to plan against to (dev, test, prod, etc.)"
-    required: true
-    default: "dev"
-    type: string
   terraform-folder:
     description: "The folder containing the Terraform projects"
     required: true
