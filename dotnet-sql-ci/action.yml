@@ -1,6 +1,9 @@
 name: "dotnet-sql-ci"
 
 inputs:
+  environment:
+    description: "The environment to publish to e.g. 'dev', 'test', 'prd'"
+    required: true
   sql-server-fqdn:
     description: "The SQL Server fully qualified domain name"
     required: true
@@ -43,4 +46,5 @@ runs:
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
-        build-arguments: '-c Release'                 
+        build-arguments: '-c Release'
+        arguments: '/Variables:env=${{ inputs.environment }}'        
