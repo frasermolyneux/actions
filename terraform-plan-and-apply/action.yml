@@ -81,7 +81,7 @@ runs:
         cd ${{ inputs.terraform-folder }}
         terraform apply -auto-approve -var-file=${{ inputs.terraform-var-file }}
       env:
-        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
         ARM_USE_OIDC: true
