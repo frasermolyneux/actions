@@ -1,0 +1,46 @@
+name: "deploy-app-service"
+
+inputs:
+  web-artifact-name:
+    description: "The name of the web artifact to deploy"
+    required: true
+  web-app-name:
+    description: "The name of the web app the deploy to"
+    required: true
+  AZURE_CLIENT_ID: 
+    description: "The azure client/application ID configured for federated access"
+    required: true
+    type: string
+  AZURE_TENANT_ID: 
+    description: "The target Azure tenant"
+    required: true
+    type: string
+  AZURE_SUBSCRIPTION_ID: 
+    description: "The target Azure subscription"
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+
+  steps:
+    - uses: actions/checkout@v3
+
+    - name: 'Az CLI Login'
+      uses: azure/login@v1
+      with:
+        client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Download artifact from build job
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ inputs.web-artifact-name }}
+
+    - name: Deploy to Azure Web App
+      id: deploy-to-webapp
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ inputs.web-app-name }}
+        package: '.'
