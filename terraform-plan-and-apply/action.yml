@@ -45,6 +45,7 @@ runs:
     - name: Create Terraform State Storage Account
       shell: pwsh
       run: |
+        cd ${{ inputs.terraform-folder }}
         $backend = ConvertFrom-StringData (Get-Content ${{ inputs.terraform-backend-file }} -Raw)
 
         az group create --location "uksouth" --name $backend.resource_group_name
