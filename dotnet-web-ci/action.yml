@@ -1,0 +1,59 @@
+name: "dotnet-web-ci"
+
+inputs:
+  dotnet-project:
+    description: "The .NET project to build and test"
+    required: true
+  dotnet-version:
+    description: "The version of .NET to use"
+    required: true
+    default: "7.0.x"
+  src-folder:
+    description: "The folder containing the .NET projects"
+    required: true
+    default: "src"
+  
+runs:
+  using: "composite"
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Setup Package Cache
+      uses: actions/cache@v3
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+        
+    - name: Restore Dependencies
+      shell: bash
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet restore
+      
+    - name: Build
+      shell: bash
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet build --no-restore
+      
+    - name: Test
+      shell: bash
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet test --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
+
+    - name: dotnet publish ${{ inputs.dotnet-project }}
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet publish ${{ inputs.dotnet-project }}/${{ inputs.dotnet-project }}.csproj --configuration Release --output ${{env.DOTNET_ROOT}}/${{ inputs.dotnet-project }}
+
+    - name: Upload artifact ${{ inputs.dotnet-project }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ inputs.dotnet-project }}
+        path: ${{env.DOTNET_ROOT}}/${{ inputs.dotnet-project }}
