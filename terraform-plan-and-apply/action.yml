@@ -42,6 +42,15 @@ runs:
         tenant-id: ${{ inputs.AZURE_TENANT_ID }}
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
+    - name: Create Terraform State Storage Account
+      shell: pwsh
+      run: |
+        $backend = ConvertFrom-StringData (Get-Content ${{ inputs.terraform-backend-file }} -Raw)
+
+        az group create --location "uksouth" --name $backend.resource_group_name
+        az storage account create --name $backend.storage_account_name --resource-group $backend.resource_group_name --location "uksouth" --sku "Standard_LRS"
+        az storage container create --name $backend.container_name --account-name $backend.storage_account_name
+
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v1
       with:
