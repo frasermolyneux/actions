@@ -12,18 +12,6 @@ inputs:
   api-base-url:
     description: "The base URL of the API to test"
     required: true
-  AZURE_CLIENT_ID: 
-    description: "The azure client/application ID configured for federated access"
-    required: true
-    type: string
-  AZURE_TENANT_ID: 
-    description: "The target Azure tenant"
-    required: true
-    type: string
-  AZURE_SUBSCRIPTION_ID: 
-    description: "The target Azure subscription"
-    required: true
-    type: string
 
 runs:
   using: "composite"
