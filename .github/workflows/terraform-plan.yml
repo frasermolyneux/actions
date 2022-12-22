@@ -49,8 +49,8 @@ jobs:
         with:
           terraform_wrapper: false
 
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v1
+      #- name: Setup TFLint
+      #  uses: terraform-linters/setup-tflint@v1
       
       - name: Terraform Init
         shell: bash
@@ -69,17 +69,17 @@ jobs:
           cd ${{ inputs.terraform-folder }}
           terraform validate
 
-      - name: Init TFLint
-        shell: bash
-        run: |
-          cd ${{ inputs.terraform-folder }}
-          tflint --init
+      #- name: Init TFLint
+      #  shell: bash
+      #  run: |
+      #    cd ${{ inputs.terraform-folder }}
+      #    tflint --init
 
-      - name: Run TFLint
-        shell: bash
-        run: |
-          cd ${{ inputs.terraform-folder }}
-          tflint -f compact
+      #- name: Run TFLint
+      #  shell: bash
+      #  run: |
+      #    cd ${{ inputs.terraform-folder }}
+      #    tflint -f compact
 
       - name: Terraform Plan
         shell: bash
