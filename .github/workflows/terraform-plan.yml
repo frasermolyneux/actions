@@ -29,57 +29,57 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-    - name: 'Az CLI Login'
-      uses: azure/login@v1
-      with:
-        client-id: ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: 'Az CLI Login'
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v1
-      with:
-        terraform_wrapper: false
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_wrapper: false
 
-    - name: Setup TFLint
-      uses: terraform-linters/setup-tflint@v1
-    
-    - name: Terraform Init
-      shell: bash
-      run: |
-        cd ${{ inputs.terraform-folder }}
-        terraform init -backend-config=${{ inputs.terraform-backend-file }} -var-file=${{ inputs.terraform-var-file }}
-      env:
-        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        ARM_USE_OIDC: true
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v1
+      
+      - name: Terraform Init
+        shell: bash
+        run: |
+          cd ${{ inputs.terraform-folder }}
+          terraform init -backend-config=${{ inputs.terraform-backend-file }} -var-file=${{ inputs.terraform-var-file }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
 
-    - name: Terraform Validate
-      shell: bash
-      run: |
-        cd ${{ inputs.terraform-folder }}
-        terraform validate
+      - name: Terraform Validate
+        shell: bash
+        run: |
+          cd ${{ inputs.terraform-folder }}
+          terraform validate
 
-    - name: Init TFLint
-      shell: bash
-      run: |
-        cd ${{ inputs.terraform-folder }}
-        tflint --init
+      - name: Init TFLint
+        shell: bash
+        run: |
+          cd ${{ inputs.terraform-folder }}
+          tflint --init
 
-    - name: Run TFLint
-      shell: bash
-      run: |
-        cd ${{ inputs.terraform-folder }}
-        tflint -f compact
+      - name: Run TFLint
+        shell: bash
+        run: |
+          cd ${{ inputs.terraform-folder }}
+          tflint -f compact
 
-    - name: Terraform Plan
-      shell: bash
-      run: |
-        cd ${{ inputs.terraform-folder }}
-        terraform plan -var-file=${{ inputs.terraform-var-file }}
-      env:
-        ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-        ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        ARM_USE_OIDC: true
+      - name: Terraform Plan
+        shell: bash
+        run: |
+          cd ${{ inputs.terraform-folder }}
+          terraform plan -var-file=${{ inputs.terraform-var-file }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_USE_OIDC: true
