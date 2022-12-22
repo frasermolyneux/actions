@@ -48,6 +48,7 @@ runs:
         dotnet test --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
 
     - name: dotnet publish ${{ inputs.dotnet-project }}
+      shell: bash
       run: |
         cd ${{ inputs.src-folder }}
         dotnet publish ${{ inputs.dotnet-project }}/${{ inputs.dotnet-project }}.csproj --configuration Release --output ${{env.DOTNET_ROOT}}/${{ inputs.dotnet-project }}
