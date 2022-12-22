@@ -76,6 +76,7 @@ runs:
         ARM_USE_OIDC: true
 
     - name: Terraform Apply
+      shell: bash
       run: |
         cd ${{ inputs.terraform-folder }}
         terraform apply -auto-approve -var-file=${{ inputs.terraform-var-file }}
