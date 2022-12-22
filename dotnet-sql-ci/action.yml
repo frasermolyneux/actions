@@ -15,10 +15,29 @@ inputs:
     description: "The SQL Project file"
     required: true
     default: "database.sqlproj"
+  AZURE_CLIENT_ID: 
+    description: "The azure client/application ID configured for federated access"
+    required: true
+    type: string
+  AZURE_TENANT_ID: 
+    description: "The target Azure tenant"
+    required: true
+    type: string
+  AZURE_SUBSCRIPTION_ID: 
+    description: "The target Azure subscription"
+    required: true
+    type: string
   
 runs:
   using: "composite"
   steps:
+    - name: 'Az CLI Login'
+      uses: azure/login@v1
+      with:
+        client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+
     - uses: azure/sql-action@v2
       with:  
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
