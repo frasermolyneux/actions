@@ -1,6 +1,12 @@
 name: "dotnet-sql-ci"
 
 inputs:
+  sql-server-fqdn:
+    description: "The SQL Server fully qualified domain name"
+    required: true
+  sql-database-name:
+    description: "The target SQL Database name"
+    required: true
   project-folder:
     description: "The folder containing the SQL Project"
     required: true
@@ -14,7 +20,8 @@ runs:
   using: "composite"
   steps:
     - uses: azure/sql-action@v2
-      with:        
+      with:  
+        connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
         build-arguments: '-c Release'                 
