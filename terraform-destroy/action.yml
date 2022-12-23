@@ -1,0 +1,80 @@
+name: "terraform-destroy"
+
+inputs:
+  terraform-folder:
+    description: "The folder containing the Terraform projects"
+    required: true
+    default: "terraform"
+    type: string
+  terraform-var-file:
+    description: "The var-file to to be used for the Terraform plan (tfvars/dev.tfvars, tfvars/test.tfvars, tfvars/prod.tfvars, etc.)"
+    required: true
+    default: "tfvars/dev.tfvars"
+    type: string
+  terraform-backend-file:
+    description: "The backend-file to to be used for the Terraform plan (backends/dev.backend.hcl, backends/test.backend.hcl, backends/prod.backend.hcl, etc.)"
+    required: true
+    default: "backends/dev.backend.hcl"
+    type: string
+  AZURE_CLIENT_ID: 
+    description: "The azure client/application ID configured for federated access"
+    required: true
+    type: string
+  AZURE_TENANT_ID: 
+    description: "The target Azure tenant"
+    required: true
+    type: string
+  AZURE_SUBSCRIPTION_ID: 
+    description: "The target Azure subscription"
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+
+  steps:
+    - uses: actions/checkout@v3
+
+    - name: 'Az CLI Login'
+      uses: azure/login@v1
+      with:
+        client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Create Terraform State Storage Account
+      shell: pwsh
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        $backend = ConvertFrom-StringData (Get-Content ${{ inputs.terraform-backend-file }} -Raw)
+
+        az group create --location "uksouth" --name $backend.resource_group_name
+        az storage account create --name $backend.storage_account_name --resource-group $backend.resource_group_name --location "uksouth" --sku "Standard_LRS"
+        az storage container create --name $backend.container_name --account-name $backend.storage_account_name
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v1
+      with:
+        terraform_wrapper: false
+
+    - name: Terraform Init
+      shell: bash
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        terraform init -backend-config=${{ inputs.terraform-backend-file }} -var-file=${{ inputs.terraform-var-file }}
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_OIDC: true
+
+    - name: Terraform Destroy
+      shell: bash
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        terraform destroy -auto-approve -var-file=${{ inputs.terraform-var-file }}
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_OIDC: true
