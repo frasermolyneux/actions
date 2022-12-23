@@ -1,4 +1,4 @@
-name: "dotnet-sql-ci"
+name: "deploy-sql-database"
 
 inputs:
   environment:
