@@ -12,6 +12,15 @@ inputs:
   api-base-url:
     description: "The base URL of the API to test"
     required: true
+  integration-test-client-id:
+    description: "The test account client id"
+    required: true
+  integration-test-client-secret:
+    description: "The test account client secret"
+    required: true
+  integration-test-api-key:
+    description: "The test account API key"
+    required: true
 
 runs:
   using: "composite"
@@ -51,3 +60,6 @@ runs:
         dotnet test --no-build --verbosity normal --filter FullyQualifiedName~IntegrationTests
       env:
         api_base_url: ${{ inputs.api-base-url}}
+        integration_test_client_id: ${{ inputs.integration-test-client-id}}
+        integration_test_client_secret: ${{ inputs.integration-test-client-secret}}
+        integration_test_api_key: ${{ inputs.integration-test-api-key}}
