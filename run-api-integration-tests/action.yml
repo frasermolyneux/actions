@@ -12,14 +12,17 @@ inputs:
   api-base-url:
     description: "The base URL of the API to test"
     required: true
-  integration-test-client-id:
+  api-key:
+    description: "The test account API key"
+    required: true
+  AZURE_CLIENT_ID:
     description: "The test account client id"
     required: true
-  integration-test-client-secret:
+  AZURE_CLIENT_SECRET:
     description: "The test account client secret"
     required: true
-  integration-test-api-key:
-    description: "The test account API key"
+  AZURE_TENANT_ID:
+    description: "The test account tenant id"
     required: true
 
 runs:
@@ -60,6 +63,8 @@ runs:
         dotnet test --no-build --verbosity normal --filter FullyQualifiedName~IntegrationTests
       env:
         api_base_url: ${{ inputs.api-base-url}}
-        integration_test_client_id: ${{ inputs.integration-test-client-id}}
-        integration_test_client_secret: ${{ inputs.integration-test-client-secret}}
-        integration_test_api_key: ${{ inputs.integration-test-api-key}}
+        api_key: ${{ inputs.api-key}}
+        AZURE_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID}}
+        AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET}}
+        AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET}}
+        AZURE_TENANT_ID: ${{ inputs.AZURE_TENANT_ID}}
