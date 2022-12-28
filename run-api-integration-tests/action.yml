@@ -70,5 +70,4 @@ runs:
         api_audience: ${{ inputs.api-audience }}
         AZURE_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET }}
-        AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET }}
         AZURE_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
