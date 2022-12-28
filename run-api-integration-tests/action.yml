@@ -15,6 +15,9 @@ inputs:
   api-key:
     description: "The test account API key"
     required: true
+  api-audience:
+    description: "The API audience"
+    required: true
   AZURE_CLIENT_ID:
     description: "The test account client id"
     required: true
@@ -62,9 +65,10 @@ runs:
         cd ${{ inputs.src-folder }}
         dotnet test --no-build --verbosity normal --filter FullyQualifiedName~IntegrationTests
       env:
-        api_base_url: ${{ inputs.api-base-url}}
-        api_key: ${{ inputs.api-key}}
-        AZURE_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID}}
-        AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET}}
-        AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET}}
-        AZURE_TENANT_ID: ${{ inputs.AZURE_TENANT_ID}}
+        api_base_url: ${{ inputs.api-base-url }}
+        api_key: ${{ inputs.api-key }}
+        api_audience: ${{ inputs.api-audience }}
+        AZURE_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET }}
+        AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET }}
+        AZURE_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
