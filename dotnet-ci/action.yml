@@ -19,6 +19,7 @@ runs:
         Import-Module ${{ github.action_path }}\..\build\GetBuildVersion.psm1
         Write-Host $Env:GITHUB_REF
         $version = GetBuildVersion -VersionString $Env:GITHUB_REF
+        Write-Host "Using version: $version"
         echo "BUILD_VERSION=$version" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       
     - name: Setup .NET
