@@ -50,7 +50,7 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
-        dotnet build -p:Version=$BUILD_VERSION --no-restore
+        dotnet build --configuration Release -p:Version=$BUILD_VERSION --no-restore
       
     - name: Test
       shell: bash
@@ -62,4 +62,4 @@ runs:
       uses: actions/upload-artifact@v3
       with:
         name: nuget-packages
-        path: '**/Release/**/*.nupkg'
+        path: '**/*.nupkg'
