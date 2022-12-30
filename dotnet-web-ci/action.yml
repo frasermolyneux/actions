@@ -59,7 +59,7 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
-        dotnet test --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
+        dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
 
     - name: dotnet publish ${{ inputs.dotnet-project }}
       shell: bash
