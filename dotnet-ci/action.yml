@@ -22,7 +22,7 @@ runs:
       run: |
         $version = ${{ inputs.majorMinorVersion }}.${{ github.run_id }}.${{ github.run_number }}${{ github.run_attempt }}
         if (-not "${{ github.ref }}".StartsWith("refs/heads/main")) {
-          $version = $version + "-preview"
+          $version = "$version-preview"
         }
         Write-Host "Using build version: $version"
         echo "BUILD_VERSION=$version" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
