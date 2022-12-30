@@ -57,3 +57,9 @@ runs:
       run: |
         cd ${{ inputs.src-folder }}
         dotnet test --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
+
+    - name: Upload NuGet Packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: nuget-packages
+        path: "**\*.nupkg"

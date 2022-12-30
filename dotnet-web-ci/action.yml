@@ -72,3 +72,9 @@ runs:
       with:
         name: ${{ inputs.dotnet-project }}
         path: ${{env.DOTNET_ROOT}}/${{ inputs.dotnet-project }}
+
+    - name: Upload NuGet Packages
+      uses: actions/upload-artifact@v3
+      with:
+        name: nuget-packages
+        path: "**\*.nupkg"
