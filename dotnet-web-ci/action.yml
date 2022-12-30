@@ -12,6 +12,10 @@ inputs:
     description: "The folder containing the .NET projects"
     required: true
     default: "src"
+  majorMinorVersion:
+    description: "The major and minor version of the project"
+    required: true
+    default: "1.0"
   
 runs:
   using: "composite"
@@ -19,7 +23,7 @@ runs:
     - name: Get Build Version
       shell: pwsh
       run: |
-        $version = ${{ inputs.majorMinorVersion }}.${{ github.run_id }}.${{ github.run_id }}${{ github.run_attempt }}
+        $version = ${{ inputs.majorMinorVersion }}.${{ github.run_id }}.${{ github.run_number }}${{ github.run_attempt }}
         if (-not "${{ github.ref }}".StartsWith("refs/heads/main")) {
           $version = $version + "-preview"
         }
