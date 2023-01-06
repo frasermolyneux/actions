@@ -65,4 +65,4 @@ runs:
       uses: actions/upload-artifact@v3
       with:
         name: ${{ inputs.dotnet-project }}
-        path: 'src/${{ inputs.dotnet-project }}/bin/Release/*/'
+        path: 'src/${{ inputs.dotnet-project }}/bin/Release/net*/'
