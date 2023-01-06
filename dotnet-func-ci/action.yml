@@ -54,15 +54,23 @@ runs:
       run: |
         cd ${{ inputs.src-folder }}
         dotnet build --configuration Release -p:Version=$BUILD_VERSION --no-restore
-      
+
     - name: Test
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
         dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
 
+    - name: Get project artifact path
+      shell: pwsh
+      run: |
+        $netVersionFolder = "${{ inputs.dotnet-version }}".Substring(0, 2)
+        $artifactPath = "src/${{ inputs.dotnet-project }}/bin/Release/net$netVersionFolder/"
+        Write-Host "Using artifact path: $artifactPath"
+        echo "ARTIFACT_PATH=$artifactPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
     - name: Upload artifact ${{ inputs.dotnet-project }}
       uses: actions/upload-artifact@v3
       with:
         name: ${{ inputs.dotnet-project }}
-        path: 'src/${{ inputs.dotnet-project }}/bin/Release/net*/**'
+        path: 'src/${{ inputs.dotnet-project }}/bin/Release/${{ env.ARTIFACT_PATH }}/'
