@@ -58,6 +58,11 @@ runs:
       run: |
         cd ${{ inputs.src-folder }}
         dotnet build --no-restore
+
+    - name: Warming
+      shell: pwsh
+      run: |
+        Invoke-WebRequest -Uri ${{ inputs.api-base-url }} -MaximumRetryCount 10 -RetryIntervalSec 5
       
     - name: Test
       shell: bash
