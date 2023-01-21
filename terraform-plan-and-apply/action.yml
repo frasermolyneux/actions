@@ -49,7 +49,7 @@ runs:
         $backend = ConvertFrom-StringData (Get-Content ${{ inputs.terraform-backend-file }} -Raw)
 
         az group create --location "uksouth" --name $backend.resource_group_name
-        az storage account create --name $backend.storage_account_name --resource-group $backend.resource_group_name --location "uksouth" --sku "Standard_LRS"
+        az storage account create --name $backend.storage_account_name --resource-group $backend.resource_group_name --location "uksouth" --sku "Standard_GRS"
         az storage container create --name $backend.container_name --account-name $backend.storage_account_name
 
     - name: Setup Terraform
