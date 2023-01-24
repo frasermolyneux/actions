@@ -20,7 +20,9 @@ runs:
     - name: Get Build Version
       shell: pwsh
       run: |
-        $version = "${{ inputs.majorMinorVersion }}.${{ github.run_number }}${{ github.run_attempt }}"
+        $date = Get-Date
+        $version = "${{ inputs.majorMinorVersion }}.$($date.Year)$($date.Month)$($date.Day)${{ github.run_attempt }}"
+        
         if (-not "${{ github.ref }}".StartsWith("refs/heads/main")) {
           $version = "$version-preview"
         }
