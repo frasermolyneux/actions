@@ -90,7 +90,7 @@ runs:
         terraform_wrapper: false
 
     - name: Terraform Init
-      shell: bash
+      shell: pwsh
       run: |
         cd ${{ inputs.terraform-folder }}
           

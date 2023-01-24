@@ -94,7 +94,7 @@ runs:
     #  uses: terraform-linters/setup-tflint@v1
     
     - name: Terraform Init
-      shell: bash
+      shell: pwsh
       run: |
         cd ${{ inputs.terraform-folder }}
           
