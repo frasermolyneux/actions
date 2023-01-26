@@ -1,8 +1,8 @@
 name: "deploy-sql-database"
 
 inputs:
-  environment:
-    description: "The environment to publish to e.g. 'dev', 'test', 'prd'"
+  sql-args:
+    description: "Sql args that can contain environment variable se.g. /Variables:env=dev /Variables:instance=01"
     required: true
   sql-server-fqdn:
     description: "The SQL Server fully qualified domain name"
@@ -47,4 +47,4 @@ runs:
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
         build-arguments: '-c Release'
-        arguments: '/Variables:env=${{ inputs.environment }}'        
+        arguments: '${{ inputs.sql-args }}'        
