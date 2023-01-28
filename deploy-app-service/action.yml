@@ -7,6 +7,9 @@ inputs:
   web-app-name:
     description: "The name of the web app the deploy to"
     required: true
+  resource-group-name:
+    description: 'Enter the resource group name of the web app'
+    required: true
   AZURE_CLIENT_ID: 
     description: "The azure client/application ID configured for federated access"
     required: true
@@ -44,4 +47,5 @@ runs:
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ inputs.web-app-name }}
+        resource-group-name: ${{ inputs.resource-group-name }}
         package: '.'
