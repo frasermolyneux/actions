@@ -18,6 +18,9 @@ inputs:
   api-audience:
     description: "The API audience"
     required: true
+  api-path-prefix:
+    description: "The API path prefix"
+    required: true
   AZURE_CLIENT_ID:
     description: "The test account client id"
     required: true
@@ -68,6 +71,7 @@ runs:
         api_base_url: ${{ inputs.api-base-url }}
         api_key: ${{ inputs.api-key }}
         api_audience: ${{ inputs.api-audience }}
+        api_path_prefix: ${{ inputs.api-path-prefix }}
         AZURE_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET }}
         AZURE_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
