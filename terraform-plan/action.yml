@@ -102,7 +102,7 @@ runs:
           }
         }
 
-        $blobExists = az storage blob show --account-name $backend.storage_account_name --container-name $backend.container_name --name $backend.key --auth-mode key | ConvertFrom-Json
+        $blobExists = az storage blob exists --account-name $backend.storage_account_name --container-name $backend.container_name --name $backend.key --auth-mode key | ConvertFrom-Json
         if ($blobExists.exists -eq $true) {
           do { 
               Write-Host "Checking if blob is available..." 
