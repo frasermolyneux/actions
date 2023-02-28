@@ -97,11 +97,14 @@ runs:
           }
         }
 
-        do { 
-            Write-Host "Checking if blob is available..." 
-            $blob = az storage blob show --account-name $backend.storage_account_name --container-name $backend.container_name --name $backend.key --auth-mode key | ConvertFrom-Json
-            Start-Sleep -Seconds 5 
-        } until ($blob.properties.lease.state -eq "available" -or $blob.properties.lease.state -eq "broken")
+        $blobExists = az storage blob show --account-name $backend.storage_account_name --container-name $backend.container_name --name $backend.key --auth-mode key | ConvertFrom-Json
+        if ($blobExists.exists -eq $true) {
+          do { 
+              Write-Host "Checking if blob is available..." 
+              $blob = az storage blob show --account-name $backend.storage_account_name --container-name $backend.container_name --name $backend.key --auth-mode key | ConvertFrom-Json
+              Start-Sleep -Seconds 5 
+          } until ($blob.properties.lease.state -eq "available" -or $blob.properties.lease.state -eq "broken")
+        }
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v1
