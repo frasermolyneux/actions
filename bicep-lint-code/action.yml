@@ -33,7 +33,7 @@ runs:
     - name: RunBicepBuild
       shell: pwsh
       run: |
-        $files = Get-ChildItem '${{ parameters.bicepDirectory }}/*.bicep' -Recurse
+        $files = Get-ChildItem '${{ inputs.bicepDirectory }}/*.bicep' -Recurse
         foreach ($file in $files) {
           Write-Host "Running az bicep restore and build for '$($file.FullName)'"
           bicep restore $file.FullName --force
