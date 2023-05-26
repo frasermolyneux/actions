@@ -1,0 +1,47 @@
+name: "bicep-lint-code"
+
+inputs:
+  bicepDirectory:
+    description: "The directory containing the bicep files"
+    required: true
+  AZURE_CLIENT_ID:
+    description: "The azure client/application ID configured for federated access"
+    required: true
+    type: string
+  AZURE_TENANT_ID:
+    description: "The target Azure tenant"
+    required: true
+    type: string
+  AZURE_SUBSCRIPTION_ID:
+    description: "The target Azure subscription"
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+
+  steps:
+    - uses: actions/checkout@v3
+
+    - name: "Az CLI Login"
+      uses: azure/login@v1
+      with:
+        client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+
+    - name: RunBicepBuild
+      shell: pwsh
+      run: |
+        $files = Get-ChildItem '${{ inputs.bicepDirectory }}/*.bicep' -Recurse
+        foreach ($file in $files) {
+          Write-Host "Running az bicep restore and build for '$($file.FullName)'"
+          bicep restore $file.FullName --force
+          bicep build $file.FullName
+        }
+
+    - name: Analyze Azure template files
+      uses: Microsoft/ps-rule@main
+      with:
+        outputFormat: NUnit3
+        outputPath: reports/ps-rule-results.xml
