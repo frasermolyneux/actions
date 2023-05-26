@@ -43,7 +43,7 @@ runs:
 
     - name: Deploy to Azure Web App
       id: deploy-to-webapp
-      uses: azure/webapps-deploy@master
+      uses: azure/webapps-deploy@2.2.9
       with:
         app-name: ${{ inputs.web-app-name }}
         resource-group-name: ${{ inputs.resource-group-name }}
