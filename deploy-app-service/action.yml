@@ -36,6 +36,11 @@ runs:
         tenant-id: ${{ inputs.AZURE_TENANT_ID }}
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
+    - name: Get Publish Profile
+      run: |
+        echo "::set-output name=PUBLISH_PROFILE::$(az webapp deployment list-publishing-profiles -g '${{ inputs.resource-group-name }}'' -n '${{ inputs.web-app-name }}' --xml)"
+      id: getPublishProfile
+
     - name: Download artifact from build job
       uses: actions/download-artifact@v3
       with:
@@ -43,8 +48,8 @@ runs:
 
     - name: Deploy to Azure Web App
       id: deploy-to-webapp
-      uses: azure/webapps-deploy@v2.2.5
+      uses: azure/webapps-deploy@v2.2.9
       with:
         app-name: ${{ inputs.web-app-name }}
-        resource-group-name: ${{ inputs.resource-group-name }}
+        publish-profile: ${{ steps.getPublishProfile.outputs.PUBLISH_PROFILE }}
         package: '.'
