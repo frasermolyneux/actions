@@ -37,6 +37,7 @@ runs:
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Get Publish Profile
+      shell: pwsh
       run: |
         echo "::set-output name=PUBLISH_PROFILE::$(az webapp deployment list-publishing-profiles -g '${{ inputs.resource-group-name }}'' -n '${{ inputs.web-app-name }}' --xml)"
       id: getPublishProfile
