@@ -52,6 +52,6 @@ runs:
       uses: azure/webapps-deploy@v2.2.9
       with:
         app-name: ${{ inputs.web-app-name }}
-        resource-group: ${{ inputs.resource-group-name }}
+        resource-group-name: ${{ inputs.resource-group-name }}
         #publish-profile: ${{ steps.getPublishProfile.outputs.PUBLISH_PROFILE }}
         package: '.'
