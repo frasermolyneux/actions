@@ -16,4 +16,4 @@ runs:
       uses: actions/upload-artifact@v3
       with:
         name: ${{ inputs.logic-project }}
-        path: "src/${{ inputs.dotnet-project }}"
+        path: "src/${{ inputs.logic-project }}"
