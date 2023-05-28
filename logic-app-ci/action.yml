@@ -1,0 +1,19 @@
+name: "logic-app-ci"
+
+inputs:
+  logic-project:
+    description: "The name of the logic app (same as the folder name)"
+    required: true
+  src-folder:
+    description: "The folder containing the projects"
+    required: true
+    default: "src"
+  
+runs:
+  using: "composite"
+  steps:
+    - name: Upload artifact ${{ inputs.logic-project }}
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ inputs.logic-project }}
+        path: "src/${{ inputs.dotnet-project }}"
