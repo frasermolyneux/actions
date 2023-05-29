@@ -33,6 +33,11 @@ inputs:
     required: false
     default: "tfstate"
     type: string
+  backend-key:
+    description: "The backend key if the terraform-backend-file is not being used"
+    required: false
+    default: "terraform.tfstate"
+    type: string
   AZURE_CLIENT_ID: 
     description: "The azure client/application ID configured for federated access"
     required: true
