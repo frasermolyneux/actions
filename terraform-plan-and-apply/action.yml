@@ -37,6 +37,11 @@ inputs:
     required: false
     default: "terraform.tfstate"
     type: string
+  backend-tags:
+    description: "The backend tags to be applied to the storage account"
+    required: false
+    type: string
+    default: ""
   AZURE_CLIENT_ID: 
     description: "The azure client/application ID configured for federated access"
     required: true
@@ -81,7 +86,7 @@ runs:
         }
 
         az group create --location "uksouth" --name $backend.resource_group_name
-        az storage account create --name $backend.storage_account_name --resource-group $backend.resource_group_name --location "uksouth" --sku "Standard_GRS"
+        az storage account create --name $backend.storage_account_name --resource-group $backend.resource_group_name --location "uksouth" --sku "Standard_GRS" --tags ${{ inputs.backend-tags }}
         az storage container create --name $backend.container_name --account-name $backend.storage_account_name
 
     - name: Wait for other deployments to finish
