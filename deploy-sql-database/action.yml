@@ -41,7 +41,7 @@ runs:
         tenant-id: ${{ inputs.AZURE_TENANT_ID }}
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
-    - uses: azure/sql-action@v2
+    - uses: azure/sql-action@v2.2
       with:  
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
