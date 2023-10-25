@@ -68,53 +68,6 @@ runs:
         tenant-id: ${{ inputs.AZURE_TENANT_ID }}
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
-    - name: Create Terraform State Storage Account
-      shell: pwsh
-      run: |
-        cd ${{ inputs.terraform-folder }}
-
-        if ("${{ inputs.terraform-backend-file }}" -ne "") {
-          $backend = ConvertFrom-StringData (Get-Content ${{ inputs.terraform-backend-file }} -Raw)
-        } else {
-          $backend = @{
-            "subscription_id" = "${{ inputs.backend-subscription-id }}"
-            "resource_group_name" = "${{ inputs.backend-resource-group-name }}"
-            "storage_account_name" = "${{ inputs.backend-storage-account-name }}"
-            "container_name" = "${{ inputs.backend-container-name }}"
-            "key" = "${{ inputs.backend-key }}"
-          }
-        }
-
-        az group create --location "uksouth" --name $backend.resource_group_name
-        az storage account create --name $backend.storage_account_name --resource-group $backend.resource_group_name --location "uksouth" --sku "Standard_GRS" --tags ${{ inputs.backend-tags }}
-        az storage container create --name $backend.container_name --account-name $backend.storage_account_name
-
-    - name: Wait for other deployments to finish
-      shell: pwsh
-      run: |
-        cd ${{ inputs.terraform-folder }}
-
-        if ("${{ inputs.terraform-backend-file }}" -ne "") {
-          $backend = ConvertFrom-StringData (Get-Content ${{ inputs.terraform-backend-file }} -Raw)
-        } else {
-          $backend = @{
-            "subscription_id" = "${{ inputs.backend-subscription-id }}"
-            "resource_group_name" = "${{ inputs.backend-resource-group-name }}"
-            "storage_account_name" = "${{ inputs.backend-storage-account-name }}"
-            "container_name" = "${{ inputs.backend-container-name }}"
-            "key" = "${{ inputs.backend-key }}"
-          }
-        }
-
-        $blobExists = az storage blob exists --account-name $backend.storage_account_name --container-name $backend.container_name --name $backend.key --auth-mode key | ConvertFrom-Json
-        if ($blobExists.exists -eq $true) {
-          do { 
-              Write-Host "Checking if blob is available..." 
-              $blob = az storage blob show --account-name $backend.storage_account_name --container-name $backend.container_name --name $backend.key --auth-mode key | ConvertFrom-Json
-              Start-Sleep -Seconds 5 
-          } until ($blob.properties.lease.state -eq "available" -or $blob.properties.lease.state -eq "broken")
-        }
-
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v2
       with:
