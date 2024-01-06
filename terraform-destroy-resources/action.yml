@@ -99,7 +99,7 @@ runs:
       run: |
         cd ${{ inputs.terraform-folder }}
 
-        resourceInput="${{ inputs.resources }}"
+        resourceInput='${{ inputs.resources }}''
 
         # Convert the JSON array to a Bash array
         resourceArray=($(echo $resourceInput | jq -r '.[]'))
