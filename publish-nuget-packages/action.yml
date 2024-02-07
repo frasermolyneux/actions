@@ -16,7 +16,7 @@ runs:
     - uses: actions/checkout@v4
 
     - name: Download artifact from build job
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
 
