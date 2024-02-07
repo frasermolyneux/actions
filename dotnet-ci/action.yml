@@ -30,12 +30,12 @@ runs:
         echo "BUILD_VERSION=$version" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
       
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
     - name: Setup Package Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.nuget/packages
         key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
@@ -61,7 +61,7 @@ runs:
         dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
 
     - name: Upload NuGet Packages
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: nuget-packages
         path: '**/bin/Release/**/*.nupkg'
