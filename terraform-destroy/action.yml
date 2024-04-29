@@ -70,7 +70,7 @@ runs:
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
+      uses: hashicorp/setup-terraform@v3
       with:
         terraform_wrapper: false
 
