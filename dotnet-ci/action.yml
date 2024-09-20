@@ -65,5 +65,3 @@ runs:
       with:
         name: nuget-packages
         path: '**/bin/Release/**/*.nupkg'
-        if-no-files-found: error
-        include-hidden-files: true
