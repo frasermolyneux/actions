@@ -7,7 +7,7 @@ inputs:
   dotnet-version:
     description: "The version of .NET to use"
     required: true
-    default: "8.0.x"
+    default: "9.0.x"
   src-folder:
     description: "The folder containing the .NET projects"
     required: true
