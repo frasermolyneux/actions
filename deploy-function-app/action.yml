@@ -37,11 +37,11 @@ runs:
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.function-app-artifact-name }}
-        path: artifacts/${{ inputs.logic-app-artifact-name }}
+        path: artifacts/${{ inputs.function-app-artifact-name }}
 
     - name: Deploy to Azure Function App
       id: deploy-to-webapp
       uses: azure/functions-action@v1
       with:
         app-name: ${{ inputs.function-app-name }}
-        package: artifacts/${{ inputs.logic-app-artifact-name }}
+        package: artifacts/${{ inputs.function-app-artifact-name }}
