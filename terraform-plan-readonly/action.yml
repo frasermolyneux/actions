@@ -16,6 +16,11 @@ inputs:
     required: false
     default: ""
     type: string
+  terraform-additional-args:
+    description: "Additional arguments to be passed to the Terraform"
+    required: false
+    default: ""
+    type: string
   backend-subscription-id:
     description: "The backend subscription_id if the terraform-backend-file is not being used"
     required: false
@@ -101,7 +106,7 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.terraform-folder }}
-        terraform plan -var-file=${{ inputs.terraform-var-file }}
+        terraform plan -var-file=${{ inputs.terraform-var-file }} ${{ inputs.terraform-additional-args }}
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}

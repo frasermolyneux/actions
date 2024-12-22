@@ -16,6 +16,11 @@ inputs:
     required: false
     default: ""
     type: string
+  terraform-additional-args:
+    description: "Additional arguments to be passed to the Terraform"
+    required: false
+    default: ""
+    type: string
   backend-subscription-id:
     description: "The backend subscription_id if the terraform-backend-file is not being used"
     required: false
@@ -108,7 +113,7 @@ runs:
         # Loop over the array and call terraform destroy for each item
         for resource in "${resourceArray[@]}"
         do
-          terraform destroy -auto-approve -target="$resource" -var-file=${{ inputs.terraform-var-file }}
+          terraform destroy -auto-approve -target="$resource" -var-file=${{ inputs.terraform-var-file }} ${{ inputs.terraform-additional-args }}
         done
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
