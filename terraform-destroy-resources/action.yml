@@ -87,12 +87,40 @@ runs:
       shell: pwsh
       run: |
         cd ${{ inputs.terraform-folder }}
-          
+
+        $params = @("init")
+
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
-          terraform init -backend-config="${{ inputs.terraform-backend-file }}" -var-file="${{ inputs.terraform-var-file }}"
-        } else {
-          terraform init -backend-config="subscription_id=${{ inputs.backend-subscription-id }}" -backend-config="resource_group_name=${{ inputs.backend-resource-group-name }}" -backend-config="storage_account_name=${{ inputs.backend-storage-account-name }}" -backend-config="container_name=${{ inputs.backend-container-name }}" -backend-config="key=${{ inputs.backend-key }}" -var-file="${{ inputs.terraform-var-file }}"
+          $params += "-backend-config=${{ inputs.terraform-backend-file }}"
         }
+
+        if ("${{ inputs.backend-subscription-id }}" -ne "") {
+          $params += "-backend-config=subscription_id=${{ inputs.backend-subscription-id }}"
+        }
+
+        if ("${{ inputs.backend-resource-group-name }}" -ne "") {
+          $params += "-backend-config=resource_group_name=${{ inputs.backend-resource-group-name }}"
+        }
+
+        if ("${{ inputs.backend-storage-account-name }}" -ne "") {
+          $params += "-backend-config=storage_account_name=${{ inputs.backend-storage-account-name }}"
+        }
+
+        if ("${{ inputs.backend-container-name }}" -ne "") {
+          $params += "-backend-config=container_name=${{ inputs.backend-container-name }}"
+        }
+
+        if ("${{ inputs.backend-key }}" -ne "") {
+          $params += "-backend-config=key=${{ inputs.backend-key }}"
+        }
+
+        if ("${{ inputs.backend-tags }}" -ne "") {
+          $params += "-backend-config=tags=${{ inputs.backend-tags }}"
+        }
+
+        $params += "-var-file=${{ inputs.terraform-var-file }}"
+
+        terraform $params
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
