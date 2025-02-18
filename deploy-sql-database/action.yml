@@ -41,6 +41,10 @@ runs:
         tenant-id: ${{ inputs.AZURE_TENANT_ID }}
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
+    - name: Restore dotnet tools
+      shell: bash
+      run: dotnet tool install --tool-path /usr/local/bin/microsoft.sqlpackage
+
     - uses: azure/sql-action@v2.3
       with:  
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
