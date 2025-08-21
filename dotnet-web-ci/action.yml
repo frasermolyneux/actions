@@ -71,13 +71,15 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
-        dotnet publish ${{ inputs.dotnet-project }}/${{ inputs.dotnet-project }}.csproj --configuration Release -p:Version=$BUILD_VERSION --output ${{env.DOTNET_ROOT}}/${{ inputs.dotnet-project }}
+        publish_dir="$RUNNER_TEMP/dotnet-publish/${{ inputs.dotnet-project }}"
+        mkdir -p "$publish_dir"
+        dotnet publish ${{ inputs.dotnet-project }}/${{ inputs.dotnet-project }}.csproj --configuration Release -p:Version=$BUILD_VERSION --output "$publish_dir"
 
     - name: Upload artifact ${{ inputs.dotnet-project }}
       uses: actions/upload-artifact@v4
       with:
         name: ${{ inputs.dotnet-project }}
-        path: ${{env.DOTNET_ROOT}}/${{ inputs.dotnet-project }}
+        path: ${{ runner.temp }}/dotnet-publish/${{ inputs.dotnet-project }}
         if-no-files-found: error
         include-hidden-files: true
 
