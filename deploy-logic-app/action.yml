@@ -24,8 +24,6 @@ runs:
   using: "composite"
 
   steps:
-    - uses: actions/checkout@v5
-
     - name: 'Az CLI Login'
       uses: azure/login@v2
       with:
