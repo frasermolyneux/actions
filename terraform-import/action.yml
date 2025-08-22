@@ -1,0 +1,162 @@
+name: "terraform-import"
+
+inputs:
+  terraform-folder:
+    description: "The folder containing the Terraform project"
+    required: true
+    default: "terraform"
+    type: string
+  terraform-var-file:
+    description: "The var-file to to be used for the Terraform plan/import context (tfvars/dev.tfvars, tfvars/test.tfvars, tfvars/prod.tfvars, etc.)"
+    required: true
+    default: "tfvars/dev.tfvars"
+    type: string
+  terraform-backend-file:
+    description: "The backend-file to to be used for Terraform init (backends/dev.backend.hcl, backends/test.backend.hcl, backends/prod.backend.hcl, etc.)"
+    required: false
+    default: ""
+    type: string
+  terraform-additional-args:
+    description: "Additional arguments to be passed to the terraform import command"
+    required: false
+    default: ""
+    type: string
+  backend-subscription-id:
+    description: "The backend subscription_id if the terraform-backend-file is not being used"
+    required: false
+    type: string
+  backend-resource-group-name:
+    description: "The backend resource_group_name if the terraform-backend-file is not being used"
+    required: false
+    type: string
+  backend-storage-account-name:
+    description: "The backend storage_account_name if the terraform-backend-file is not being used"
+    required: false
+    type: string
+  backend-container-name:
+    description: "The backend container_name if the terraform-backend-file is not being used"
+    required: false
+    default: "tfstate"
+    type: string
+  backend-key:
+    description: "The backend key if the terraform-backend-file is not being used"
+    required: false
+    default: "terraform.tfstate"
+    type: string
+  backend-tags:
+    description: "The backend tags to be applied to the storage account"
+    required: false
+    type: string
+    default: ""
+  AZURE_CLIENT_ID: 
+    description: "The azure client/application ID configured for federated access"
+    required: true
+    type: string
+  AZURE_TENANT_ID: 
+    description: "The target Azure tenant"
+    required: true
+    type: string
+  AZURE_SUBSCRIPTION_ID: 
+    description: "The target Azure subscription"
+    required: true
+    type: string
+  import-address:
+    description: "The Terraform address (e.g. module.modname.azurerm_resource.example or azurerm_resource_group.rg) of the resource to import"
+    required: true
+    type: string
+  import-id:
+    description: "The cloud provider ID of the existing resource (e.g. full Azure resource ID)"
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+
+  steps:
+    - uses: actions/checkout@v5
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_wrapper: false
+
+    - name: Terraform Init
+      shell: pwsh
+      run: |
+        cd ${{ inputs.terraform-folder }}
+
+        $params = @("init")
+
+        if ("${{ inputs.terraform-backend-file }}" -ne "") {
+          $params += "-backend-config=${{ inputs.terraform-backend-file }}"
+        }
+
+        if ("${{ inputs.backend-subscription-id }}" -ne "") {
+          $params += "-backend-config=subscription_id=${{ inputs.backend-subscription-id }}"
+        }
+
+        if ("${{ inputs.backend-resource-group-name }}" -ne "") {
+          $params += "-backend-config=resource_group_name=${{ inputs.backend-resource-group-name }}"
+        }
+
+        if ("${{ inputs.backend-storage-account-name }}" -ne "") {
+          $params += "-backend-config=storage_account_name=${{ inputs.backend-storage-account-name }}"
+        }
+
+        if ("${{ inputs.backend-container-name }}" -ne "") {
+          $params += "-backend-config=container_name=${{ inputs.backend-container-name }}"
+        }
+
+        if ("${{ inputs.backend-key }}" -ne "") {
+          $params += "-backend-config=key=${{ inputs.backend-key }}"
+        }
+
+        if ("${{ inputs.backend-tags }}" -ne "") {
+          $params += "-backend-config=tags=${{ inputs.backend-tags }}"
+        }
+
+        $params += "-var-file=${{ inputs.terraform-var-file }}"
+
+        terraform $params
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
+
+    - name: Terraform Validate
+      shell: bash
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        terraform validate
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
+
+    - name: Terraform Import
+      shell: bash
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        terraform import ${{ inputs.terraform-additional-args }} ${{ inputs.import-address }} ${{ inputs.import-id }}
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
+
+    - name: Terraform Plan (post-import)
+      shell: bash
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        terraform plan -var-file=${{ inputs.terraform-var-file }}
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
