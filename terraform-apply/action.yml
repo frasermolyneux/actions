@@ -1,4 +1,4 @@
-name: "terraform-plan-and-apply"
+name: "terraform-apply"
 
 inputs:
   terraform-folder:
@@ -6,17 +6,8 @@ inputs:
     required: true
     default: "terraform"
     type: string
-  terraform-var-file:
-    description: "The var-file to to be used for the Terraform plan (tfvars/dev.tfvars, tfvars/test.tfvars, tfvars/prod.tfvars, etc.)"
-    required: true
-    default: "tfvars/dev.tfvars"
-    type: string
   terraform-backend-file:
-    description: "The backend-file to to be used for the Terraform plan (backends/dev.backend.hcl, backends/test.backend.hcl, backends/prod.backend.hcl, etc.)"
-    required: false
-    type: string
-  terraform-additional-args:
-    description: "Additional arguments to be passed to the Terraform"
+    description: "The backend-file to to be used for the Terraform init (backends/dev.backend.hcl, etc.)"
     required: false
     default: ""
     type: string
@@ -35,41 +26,56 @@ inputs:
   backend-container-name:
     description: "The backend container_name if the terraform-backend-file is not being used"
     required: false
-    default: ""
+    default: "tfstate"
     type: string
   backend-key:
     description: "The backend key if the terraform-backend-file is not being used"
     required: false
-    default: ""
+    default: "terraform.tfstate"
     type: string
   backend-tags:
     description: "The backend tags to be applied to the storage account"
     required: false
     type: string
     default: ""
-  AZURE_CLIENT_ID: 
+  plan-file-name:
+    description: "The filename of the previously generated plan artifact (binary .tfplan)."
+    required: false
+    default: "plan.tfplan"
+    type: string
+  plan-artifact-name:
+    description: "The GitHub Actions artifact name that contains the plan file."
+    required: false
+    default: "terraform-plan"
+    type: string
+  terraform-additional-apply-args:
+    description: "Additional arguments to pass to terraform apply (excluding the plan file)."
+    required: false
+    default: ""
+    type: string
+  AZURE_CLIENT_ID:
     description: "The azure client/application ID configured for federated access"
     required: true
     type: string
-  AZURE_TENANT_ID: 
+  AZURE_TENANT_ID:
     description: "The target Azure tenant"
     required: true
     type: string
-  AZURE_SUBSCRIPTION_ID: 
+  AZURE_SUBSCRIPTION_ID:
     description: "The target Azure subscription"
     required: true
-    type: string
-  plan-file-name:
-    description: "Filename to write the terraform plan output (-out) and later apply"
-    required: false
-    default: "plan.tfplan"
     type: string
 
 runs:
   using: "composite"
-
   steps:
     - uses: actions/checkout@v5
+
+    - name: Download Terraform Plan Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.plan-artifact-name }}
+        path: ${{ inputs.terraform-folder }}
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
@@ -111,8 +117,6 @@ runs:
           $params += "-backend-config=tags=${{ inputs.backend-tags }}"
         }
 
-        $params += "-var-file=${{ inputs.terraform-var-file }}"
-
         terraform $params
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
@@ -121,36 +125,18 @@ runs:
         ARM_USE_AZUREAD: true
         ARM_USE_OIDC: true
 
-    - name: Terraform Validate
+    - name: Terraform Apply (from plan)
       shell: bash
       run: |
-        cd ${{ inputs.terraform-folder }}
-        terraform validate
-
-    - name: Terraform Plan
-      shell: bash
-      run: |
-        cd ${{ inputs.terraform-folder }}
-        terraform plan -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" ${{ inputs.terraform-additional-args }}
-        # Show the plan in human readable form
-        terraform show "${{ inputs.plan-file-name }}"
-      env:
-        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
-        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
-        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
-        ARM_USE_AZUREAD: true
-        ARM_USE_OIDC: true
-
-    - name: Terraform Apply
-      shell: bash
-      run: |
-        cd ${{ inputs.terraform-folder }}
+        set -euo pipefail
+        cd "${{ inputs.terraform-folder }}"
         if [ ! -f "${{ inputs.plan-file-name }}" ]; then
-          echo "Expected plan file '${{ inputs.plan-file-name }}' not found" >&2
+          echo "Plan file '${{ inputs.plan-file-name }}' not found in $PWD" >&2
           ls -al
           exit 1
         fi
-        terraform apply -auto-approve ${{ inputs.terraform-additional-args }} "${{ inputs.plan-file-name }}"
+        echo "Applying plan file ${{ inputs.plan-file-name }}"
+        terraform apply -auto-approve ${{ inputs.terraform-additional-apply-args }} "${{ inputs.plan-file-name }}"
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
