@@ -141,7 +141,7 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.terraform-folder }}
-        terraform import ${{ inputs.terraform-additional-args }} ${{ inputs.import-address }} ${{ inputs.import-id }}
+        terraform import -var-file=${{ inputs.terraform-var-file }} ${{ inputs.terraform-additional-args }} ${{ inputs.import-address }} ${{ inputs.import-id }}
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
