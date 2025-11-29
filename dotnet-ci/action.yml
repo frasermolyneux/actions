@@ -2,7 +2,7 @@ name: "dotnet-ci"
 
 inputs:
   dotnet-version:
-    description: "The version of .NET to use"
+    description: "The version(s) of .NET to use (comma or newline separated)"
     required: true
     default: "9.0.x"
   src-folder:
@@ -20,19 +20,41 @@ runs:
     - name: Get Build Version
       shell: pwsh
       run: |
-        $date = Get-Date
-        $version = "${{ inputs.majorMinorVersion }}.${{ github.run_number }}.${{ github.run_attempt }}"
-        
-        if (-not "${{ github.ref }}".StartsWith("refs/heads/main")) {
-          $version = "$version-preview"
+        $ref = "${{ github.ref }}"
+        if ($ref -like 'refs/tags/v*') {
+          $tag = ($ref.Split('/')[-1]).TrimStart('v')
+          $version = $tag
+        }
+        else {
+          $version = "${{ inputs.majorMinorVersion }}.${{ github.run_number }}.${{ github.run_attempt }}"
+          if (-not $version.EndsWith('-preview')) {
+            $version = "$version-preview"
+          }
         }
         Write-Host "Using build version: $version"
-        echo "BUILD_VERSION=$version" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+        "BUILD_VERSION=$version" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+
+    - name: Resolve .NET SDK versions
+      shell: pwsh
+      run: |
+        $raw = @'${{ inputs.dotnet-version }}'@
+        $versions = $raw -split '[,\s]+' | Where-Object { $_ }
+        if (-not $versions) {
+          throw 'No dotnet versions provided. Specify at least one value in dotnet-version input.'
+        }
+        $formatted = $versions -join "`n"
+        Write-Host 'Installing the following .NET SDK versions:'
+        $versions | ForEach-Object { Write-Host " - $_" }
+        $marker = '__DOTNET_VERSIONS__'
+        Add-Content -Path $Env:GITHUB_ENV -Value "DOTNET_VERSIONS<<$marker"
+        Add-Content -Path $Env:GITHUB_ENV -Value $formatted
+        Add-Content -Path $Env:GITHUB_ENV -Value $marker
       
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
-        dotnet-version: ${{ inputs.dotnet-version }}
+        dotnet-version: ${{ env.DOTNET_VERSIONS }}
+        include-prerelease: true
 
     - name: Setup Package Cache
       uses: actions/cache@v4
