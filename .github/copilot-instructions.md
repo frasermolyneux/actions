@@ -33,4 +33,4 @@
 ## Linting, Packaging & Misc
 - `bicep-lint-code` loops over every `.bicep` file, restores modules, builds templates, and runs `Microsoft/ps-rule@main` producing `reports/ps-rule-results.xml`; keep outputs in the `reports` folder for consistency.
 - `publish-nuget-packages` pulls an artifact and executes `dotnet nuget push **\*.nupkg`; paths use Windows globbing because the publish workflow often runs on Windows runners.
-- When introducing new composite actions, follow the existing naming scheme (`kebab-case` folder + action name) and ensure `actions/checkout@v5` is only added when repository files are required.
+- When introducing new composite actions, follow the existing naming scheme (`kebab-case` folder + action name) and ensure `actions/checkout@v6` is only added when repository files are required.
