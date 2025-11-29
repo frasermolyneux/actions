@@ -8,6 +8,18 @@ inputs:
     description: "The NuGet API key"
     required: true
     type: string
+  artifact-run-id:
+    description: "Optional workflow run id to download artifacts from"
+    required: false
+    default: ""
+  github-token:
+    description: "Token required when downloading artifacts from another workflow run"
+    required: false
+    default: ""
+  artifact-output-path:
+    description: "Directory to download and publish artifact contents"
+    required: false
+    default: "."
 
 runs:
   using: "composite"
@@ -15,11 +27,31 @@ runs:
   steps:
     - uses: actions/checkout@v6
 
-    - name: Download artifact from build job
+    - name: Download artifact from build job (current run)
+      if: inputs.artifact-run-id == ''
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.artifact-output-path }}
+
+    - name: Download artifact from specified run
+      if: inputs.artifact-run-id != ''
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.artifact-output-path }}
+        run-id: ${{ inputs.artifact-run-id }}
+        github-token: ${{ inputs.github-token }}
 
     - name: Publish to NuGet.org
       shell: bash
-      run: dotnet nuget push **\*.nupkg --source 'https://api.nuget.org/v3/index.json' --api-key ${{ inputs.NUGET_API_KEY }}
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.artifact-output-path }}"
+        dotnet nuget push "**/*.nupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate
+
+        if find . -type f -name '*.snupkg' | grep -q .; then
+          dotnet nuget push "**/*.snupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate
+        else
+          echo 'No symbol packages detected; skipping symbol publish.'
+        fi

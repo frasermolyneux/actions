@@ -135,7 +135,10 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
-        dotnet build --configuration Release --no-restore
+        dotnet build --configuration Release --no-restore \
+          /p:ContinuousIntegrationBuild=true \
+          /p:IncludeSymbols=true \
+          /p:SymbolPackageFormat=snupkg
 
     - name: Test
       shell: bash
@@ -162,4 +165,6 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: nuget-packages
-        path: '**/bin/Release/**/*.nupkg'
+        path: |
+          **/bin/Release/**/*.nupkg
+          **/bin/Release/**/*.snupkg
