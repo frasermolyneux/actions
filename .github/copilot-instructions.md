@@ -12,9 +12,9 @@
 - Cache packages with `actions/cache@v4` using `hashFiles('**/packages.lock.json')`; avoid altering this unless lock files move.
 
 ## .NET Build & Test Actions
-- `dotnet-ci` builds all projects under `src`, generates a semantic version using `majorMinorVersion` + `run_number` + `run_attempt`, and appends `-preview` when not on `main`.
+- `dotnet-ci` installs Nerdbank.GitVersioning, runs `nbgv cloud`, and relies on the repository `version.json` to stamp assembly/package versions before restoring, building, and testing `src`.
 - `dotnet-web-ci` publishes a single project to `$RUNNER_TEMP/dotnet-publish/<project>` before uploading artifacts; maintain that temp path when adding steps so downstream deploy actions keep working.
-- `dotnet-func-ci` derives the publish folder from the target framework substring of `dotnet-version` (e.g., "9.0.x" -> `net9.0`); reuse the `ARTIFACT_PATH` logic for new frameworks.
+- `dotnet-func-ci` resolves the same Nerdbank metadata as `dotnet-ci` and uploads the release build output from `src/<project>/bin/Release` as the deployment artifact.
 - All dotnet actions run unit tests with `--filter FullyQualifiedName!~IntegrationTests`; use `run-api-integration-tests` when you actually want to execute the IntegrationTests subset with API credentials.
 
 ## Deployment Actions
