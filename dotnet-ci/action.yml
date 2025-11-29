@@ -21,15 +21,13 @@ runs:
       shell: pwsh
       run: |
         $ref = "${{ github.ref }}"
+        $version = "${{ inputs.majorMinorVersion }}"
         if ($ref -like 'refs/tags/v*') {
           $tag = ($ref.Split('/')[-1]).TrimStart('v')
           $version = $tag
         }
-        else {
-          $version = "${{ inputs.majorMinorVersion }}.${{ github.run_number }}.${{ github.run_attempt }}"
-          if (-not $version.EndsWith('-preview')) {
-            $version = "$version-preview"
-          }
+        elseif (-not $version.EndsWith('-preview')) {
+          $version = "$version-preview"
         }
         Write-Host "Using build version: $version"
         "BUILD_VERSION=$version" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
@@ -39,8 +37,8 @@ runs:
       shell: pwsh
       run: |
         $raw = @'
-        ${{ inputs.dotnet-version }}
-        '@
+      ${{ inputs.dotnet-version }}
+      '@
         $entries = $raw -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
         if (-not $entries) {
           throw 'No dotnet versions provided. Specify at least one value in dotnet-version input.'
