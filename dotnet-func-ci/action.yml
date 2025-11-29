@@ -40,7 +40,9 @@ runs:
     - name: Resolve .NET SDK versions
       shell: pwsh
       run: |
-        $raw = @'${{ inputs.dotnet-version }}'@
+        $raw = @'
+      ${{ inputs.dotnet-version }}
+      '@
         $versions = $raw -split '[,\s]+' | Where-Object { $_ }
         if (-not $versions) {
           throw 'No dotnet versions provided. Specify at least one value in dotnet-version input.'
