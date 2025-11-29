@@ -1,0 +1,90 @@
+name: actions-versioning
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  tag-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nerdbank.GitVersioning
+        run: |
+          dotnet tool install --global nbgv
+          echo "PATH=$PATH:$HOME/.dotnet/tools" >> $GITHUB_ENV
+
+      - name: Detect changed actions
+        id: filter
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTIONS=(
+            bicep-lint-code
+            deploy-app-service
+            deploy-function-app
+            deploy-logic-app
+            deploy-sql-database
+            dotnet-ci
+            dotnet-func-ci
+            dotnet-web-ci
+            logic-app-ci
+            publish-nuget-packages
+            run-api-integration-tests
+            terraform-apply
+            terraform-destroy
+            terraform-destroy-resources
+            terraform-import
+            terraform-plan
+            terraform-plan-and-apply
+            terraform-plan-readonly
+            terraform-state-rm
+          )
+
+          BEFORE="${{ github.event.before }}"
+          if [[ "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+            BEFORE=$(git rev-list --max-parents=0 HEAD)
+          fi
+
+          CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
+          SELECTED=()
+          for ACTION in "${ACTIONS[@]}"; do
+            if echo "$CHANGED" | grep -q "^${ACTION}/"; then
+              SELECTED+=("$ACTION")
+            fi
+          done
+
+          printf 'actions=%s\n' "${SELECTED[*]}" >> "$GITHUB_OUTPUT"
+          if [[ ${#SELECTED[@]} -eq 0 ]]; then
+            echo "No action folders changed"
+          else
+            echo "Changed actions: ${SELECTED[*]}"
+          fi
+
+      - name: Tag updated actions
+        if: steps.filter.outputs.actions != ''
+        shell: bash
+        env:
+          CHANGED_ACTIONS: ${{ steps.filter.outputs.actions }}
+        run: |
+          set -euo pipefail
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          for ACTION in $CHANGED_ACTIONS; do
+            VERSION=$(nbgv get-version -p "$ACTION" -f json | jq -r '.SemVer2')
+            TAG="actions/${ACTION}/v${VERSION}"
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              echo "Tag $TAG already exists. Skipping."
+              continue
+            fi
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "Published $TAG"
+          done
