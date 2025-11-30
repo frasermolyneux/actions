@@ -27,39 +27,7 @@ runs:
         fetch-depth: 0
 
     - name: Resolve Nerdbank.GitVersioning metadata
-      shell: pwsh
-      run: |
-        $toolPath = Join-Path $PWD '.nbgv-tool'
-        if (Test-Path $toolPath) {
-          Remove-Item -Path $toolPath -Recurse -Force
-        }
-        dotnet tool install --tool-path $toolPath nbgv
-        $nbgvExe = if ($IsWindows) { Join-Path $toolPath 'nbgv.exe' } else { Join-Path $toolPath 'nbgv' }
-        $Env:PATH = "$toolPath${[System.IO.Path]::PathSeparator}$Env:PATH"
-        Add-Content -Path $Env:GITHUB_PATH -Value $toolPath
-
-        try {
-          & $nbgvExe cloud
-          $versionInfo = & $nbgvExe get-version -f json | ConvertFrom-Json
-        }
-        catch {
-          throw 'Failed to read Nerdbank.GitVersioning metadata. Ensure version.json exists in the repository.'
-        }
-
-        if (-not $versionInfo) {
-          throw 'Nerdbank.GitVersioning did not return version information.'
-        }
-
-        Write-Host "SemVer: $($versionInfo.SemVer2)"
-        Write-Host "NuGet version: $($versionInfo.NuGetPackageVersion)"
-        Write-Host "Assembly version: $($versionInfo.AssemblyVersion)"
-        Write-Host "File version: $($versionInfo.AssemblyFileVersion)"
-
-        "BUILD_VERSION=$($versionInfo.NuGetPackageVersion)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-        "SEMVER=$($versionInfo.SemVer2)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-        "ASSEMBLY_VERSION=$($versionInfo.AssemblyVersion)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-        "FILE_VERSION=$($versionInfo.AssemblyFileVersion)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
-        "PUBLIC_RELEASE=$($versionInfo.PublicRelease)" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
+      uses: ./nbgv-metadata
 
     - name: Resolve .NET SDK versions
       id: dotnet_versions
