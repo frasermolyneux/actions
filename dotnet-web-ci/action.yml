@@ -35,7 +35,7 @@ runs:
         fetch-depth: 0
 
     - name: Resolve Nerdbank.GitVersioning metadata
-      uses: ./nbgv-metadata
+      uses: frasermolyneux/actions/nbgv-metadata@nbgv-metadata/v1
       with:
         perform-checkout: 'false'
 
@@ -57,7 +57,7 @@ runs:
         Add-Content -Path $Env:GITHUB_ENV -Value $marker
 
     - name: Setup .NET SDKs
-      uses: ./dotnet-sdk-setup
+      uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
