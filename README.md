@@ -1,59 +1,70 @@
 # GitHub Actions
+> Reusable composite workflows covering .NET builds, Terraform automation, and supporting GitHub hygiene.
 
-## Overview
+<!-- Badges (duplicate the line below for every workflow) -->
+[![Actions Versioning](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml)
+[![Dependabot Auto-Merge](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml)
 
-This repository contains GitHub Actions for my personal projects.
+## 📌 Overview
+Opinionated composite actions keep .NET packaging, Terraform provisioning, and supporting automation consistent across personal projects. Versioning rules and Nerdbank.GitVersioning alignment live in [docs/action-versioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/action-versioning.md) and [docs/nerdbank-gitversioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/nerdbank-gitversioning.md) for quick reference.
 
----
+## ⚙️ Workflow Status
+| Workflow                | Status                                                                                                                   | Purpose                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| `actions-versioning`    | ![Actions Versioning](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml/badge.svg)      | Tags any action folder touched in a push with refreshed semantic versions. |
+| `Dependabot Auto-Merge` | ![Dependabot Auto-Merge](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml/badge.svg) | Automatically merges Dependabot PRs after metadata inspection.             |
 
-## Action versioning
+## 🧱 Technology & Frameworks
+- `.NET SDK 9.0.x` for the dotnet CI/web/function composites.
+- `Terraform CLI 1.9.x+` via `hashicorp/setup-terraform@v3` for plan/apply/destroy flows.
+- `PowerShell 7.x` and `Bash 5.x` shells on `ubuntu-latest` runners to orchestrate pipelines.
 
-- Each composite action folder owns a dedicated `version.json` so Nerdbank.GitVersioning can calculate versions that only advance when files inside that folder change.
-- Pushing to `main` automatically runs the `actions-versioning` workflow, which installs `nbgv`, recomputes versions for the folders touched in the push, and emits three tag shapes for each updated action:
-	- Patch tags: `<folder>/v<semver>` (for example `dotnet-ci/v1.0.15`).
-	- Rolling major tags: `<folder>/v<major>` (for example `dotnet-ci/v1`) that always point at the newest `v1.*.*` release.
-	- Rolling minor tags: `<folder>/v<major.minor>` (for example `dotnet-ci/v1.2`) that always point at the newest `v1.2.*` release.
-- Consumers should reference whichever tag scope matches their tolerance for updates when invoking the actions (see examples below).
-- To bump a major or minor version, edit the corresponding folder's `version.json` before merging to `main`; patch versions are derived automatically from commit height.
+## 📚 Documentation Index
+- [docs/action-versioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/action-versioning.md) – Tagging strategy and guidance for selecting version pins.
+- [docs/nerdbank-gitversioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/nerdbank-gitversioning.md) – How composite actions satisfy Nerdbank.GitVersioning requirements.
 
-### Choosing a version tag
+## 🚀 Getting Started
+**Highlights**
+- Folder-scoped semantic versioning keeps action updates predictable.
+- Drop-in .NET CI composites cover restore, build, test, and artifact publishing.
+- Terraform plan/apply/destroy composites enforce Azure OIDC flows out of the box.
 
+**Sample Usage (optional)**
 ```yaml
 jobs:
-	build:
+	build-and-plan:
+		runs-on: ubuntu-latest
 		steps:
 			- uses: actions/checkout@v4
-			- name: Run dotnet CI
-				uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1.0.15   # Pin to an exact patch release
-
-			- name: Run dotnet CI (minor rolling)
-				uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1.2      # Always latest patch within v1.2
-
-			- name: Run dotnet CI (major rolling)
-				uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1        # Always latest patch within v1.*
+			- name: Run .NET CI
+				uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1
+				with:
+					src-folder: src
+			- name: Terraform plan (dev)
+				uses: frasermolyneux/actions/terraform-plan@terraform-plan/v1
+				with:
+					terraform-folder: terraform
+					terraform-var-file: tfvars/dev.tfvars
+					AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+					AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+					AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 ```
 
-| Tag shape         | Example             | Update cadence                                   |
-| ----------------- | ------------------- | ------------------------------------------------ |
-| `<folder>/vX.Y.Z` | `dotnet-ci/v1.0.15` | Never moves; change only when you edit workflow. |
-| `<folder>/vX.Y`   | `dotnet-ci/v1.2`    | Moves whenever a new `v1.2.*` patch publishes.   |
-| `<folder>/vX`     | `dotnet-ci/v1`      | Moves whenever any `v1.*.*` patch publishes.     |
+## 🛠️ Developer Quick Start
+```shell
+git clone https://github.com/frasermolyneux/actions.git
+cd actions
+# Inspect all composite definitions
+pwsh -NoProfile -Command "Get-ChildItem -Recurse -Filter action.yml | Select-Object FullName"
+# Optionally rehearse the tagging workflow locally (requires act)
+act push -W .github/workflows/actions-versioning.yml
+```
 
----
-
-## Nerdbank.GitVersioning alignment
-
-- Every .NET composite (`dotnet-ci`, `dotnet-web-ci`, `dotnet-func-ci`) now performs its own `actions/checkout@v6` with `fetch-depth: 0` to satisfy the [Nerdbank.GitVersioning cloud-build requirements](https://dotnet.github.io/Nerdbank.GitVersioning/docs/cloudbuild.html). If your workflow already checked out the repo (for example to pull submodules into a custom path), pass `perform-checkout: 'false'` and ensure your previous checkout used `fetch-depth: 0` as well.
-- Nerdbank.GitVersioning is installed per run using `dotnet tool install --tool-path <workspace> nbgv`, exactly as the documentation describes, before executing `nbgv cloud` and `nbgv get-version`. This guarantees that `nbgv` can compute correct semantic versions and update the cloud build number.
-
----
-
-## Contributing
-
+## 🤝 Contributing
 Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.
 
----
-
-## Security
-
+## 🔐 Security
 Please read the [security](SECURITY.md) guidance; I am always open to security feedback through email or opening an issue.
+
+## 📄 License
+Distributed under the [GNU General Public License v3.0](https://github.com/frasermolyneux/.github-prompts/blob/main/LICENSE).
