@@ -16,6 +16,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Install Nerdbank.GitVersioning
         run: |
@@ -79,13 +80,7 @@ jobs:
           export PATH="$PATH:$HOME/.dotnet/tools"
           for ACTION in $CHANGED_ACTIONS; do
             VERSION_INFO=$(nbgv get-version -p "$ACTION" -f json)
-            VERSION=$(echo "$VERSION_INFO" | jq -r '.SemVer2')
             MAJOR_MINOR=$(echo "$VERSION_INFO" | jq -r '.MajorMinorVersion')
-
-            if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
-              echo "Failed to resolve semantic version for $ACTION"
-              exit 1
-            fi
 
             if [[ -z "$MAJOR_MINOR" || "$MAJOR_MINOR" == "null" ]]; then
               echo "Failed to resolve major/minor version for $ACTION"
@@ -98,18 +93,50 @@ jobs:
               exit 1
             fi
 
-            PATCH_TAG="${ACTION}/v${VERSION}"
-            MAJOR_TAG="${ACTION}/v${MAJOR}"
-            MINOR_TAG="${ACTION}/v${MAJOR_MINOR}"
+            PATCH_TAG_PREFIX="${ACTION}/v${MAJOR_MINOR}."
+            CURRENT_PATCH_TAG=
+            while IFS= read -r TAG; do
+              if [[ "$TAG" == ${PATCH_TAG_PREFIX}* ]]; then
+                PATCH="${TAG#${PATCH_TAG_PREFIX}}"
+                if [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+                  CURRENT_PATCH_TAG="$TAG"
+                  break
+                fi
+              fi
+            done < <(git tag --points-at "${GITHUB_SHA}")
 
-            if git rev-parse "$PATCH_TAG" >/dev/null 2>&1; then
-              echo "Tag $PATCH_TAG already exists. Skipping."
-              continue
+            if [[ -n "$CURRENT_PATCH_TAG" ]]; then
+              VERSION="${CURRENT_PATCH_TAG#${ACTION}/v}"
+              PATCH_TAG="$CURRENT_PATCH_TAG"
+              echo "Commit already has $PATCH_TAG. Refreshing rolling tags."
+            else
+              LAST_PATCH=
+              while IFS= read -r TAG; do
+                PATCH="${TAG#${PATCH_TAG_PREFIX}}"
+                if [[ "$PATCH" =~ ^[0-9]+$ ]]; then
+                  if [[ -z "$LAST_PATCH" ]]; then
+                    LAST_PATCH="$PATCH"
+                  elif (( PATCH > LAST_PATCH )); then
+                    LAST_PATCH="$PATCH"
+                  fi
+                fi
+              done < <(git tag -l "${PATCH_TAG_PREFIX}*")
+
+              if [[ -n "$LAST_PATCH" ]]; then
+                NEXT_PATCH=$((LAST_PATCH + 1))
+              else
+                NEXT_PATCH=0
+              fi
+
+              VERSION="${MAJOR_MINOR}.${NEXT_PATCH}"
+              PATCH_TAG="${ACTION}/v${VERSION}"
+              git tag "$PATCH_TAG"
+              git push origin "$PATCH_TAG"
+              echo "Published $PATCH_TAG"
             fi
 
-            git tag "$PATCH_TAG"
-            git push origin "$PATCH_TAG"
-            echo "Published $PATCH_TAG"
+            MAJOR_TAG="${ACTION}/v${MAJOR}"
+            MINOR_TAG="${ACTION}/v${MAJOR_MINOR}"
 
             git tag -f "$MAJOR_TAG"
             git push --force origin "$MAJOR_TAG"
