@@ -38,6 +38,7 @@ jobs:
             dotnet-func-ci
             dotnet-web-ci
             logic-app-ci
+            nbgv-metadata
             publish-nuget-packages
             run-api-integration-tests
             terraform-apply
