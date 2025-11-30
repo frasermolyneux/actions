@@ -98,9 +98,9 @@ jobs:
               exit 1
             fi
 
-            PATCH_TAG="actions/${ACTION}/v${VERSION}"
-            MAJOR_TAG="actions/${ACTION}/v${MAJOR}"
-            MINOR_TAG="actions/${ACTION}/v${MAJOR_MINOR}"
+            PATCH_TAG="${ACTION}/v${VERSION}"
+            MAJOR_TAG="${ACTION}/v${MAJOR}"
+            MINOR_TAG="${ACTION}/v${MAJOR_MINOR}"
 
             if git rev-parse "$PATCH_TAG" >/dev/null 2>&1; then
               echo "Tag $PATCH_TAG already exists. Skipping."
