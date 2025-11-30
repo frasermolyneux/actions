@@ -1,23 +1,17 @@
 # GitHub Actions
 > Reusable composite workflows covering .NET builds, Terraform automation, and supporting GitHub hygiene.
 
-<!-- Badges (duplicate the line below for every workflow) -->
+`GitHub Actions workflows (2)`
 [![Actions Versioning](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml)
 [![Dependabot Auto-Merge](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml)
 
 ## 📌 Overview
-Opinionated composite actions keep .NET packaging, Terraform provisioning, and supporting automation consistent across personal projects. Versioning rules and Nerdbank.GitVersioning alignment live in [docs/action-versioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/action-versioning.md) and [docs/nerdbank-gitversioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/nerdbank-gitversioning.md) for quick reference.
-
-## ⚙️ Workflow Status
-| Workflow                | Status                                                                                                                   | Purpose                                                                    |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| `actions-versioning`    | ![Actions Versioning](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml/badge.svg)      | Tags any action folder touched in a push with refreshed semantic versions. |
-| `Dependabot Auto-Merge` | ![Dependabot Auto-Merge](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml/badge.svg) | Automatically merges Dependabot PRs after metadata inspection.             |
+Opinionated composite actions keep .NET packaging, Terraform provisioning, and automation hygiene consistent across personal projects. Docs capture the tagging strategy plus Nerdbank.GitVersioning alignment so every action folder can be versioned predictably.
 
 ## 🧱 Technology & Frameworks
-- `.NET SDK 9.0.x` for the dotnet CI/web/function composites.
-- `Terraform CLI 1.9.x+` via `hashicorp/setup-terraform@v3` for plan/apply/destroy flows.
-- `PowerShell 7.x` and `Bash 5.x` shells on `ubuntu-latest` runners to orchestrate pipelines.
+- `.NET SDK 9.0.x` – Restores, builds, and tests .NET solutions inside CI composites.
+- `Terraform CLI 1.9.x+` – Plan/apply/destroy actions with Azure OIDC wiring.
+- `PowerShell 7.x & Bash 5.x` – Default shells for script-heavy orchestration on `ubuntu-latest` runners.
 
 ## 📚 Documentation Index
 - [docs/action-versioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/action-versioning.md) – Tagging strategy and guidance for selecting version pins.
@@ -32,22 +26,22 @@ Opinionated composite actions keep .NET packaging, Terraform provisioning, and s
 **Sample Usage (optional)**
 ```yaml
 jobs:
-	build-and-plan:
-		runs-on: ubuntu-latest
-		steps:
-			- uses: actions/checkout@v4
-			- name: Run .NET CI
-				uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1
-				with:
-					src-folder: src
-			- name: Terraform plan (dev)
-				uses: frasermolyneux/actions/terraform-plan@terraform-plan/v1
-				with:
-					terraform-folder: terraform
-					terraform-var-file: tfvars/dev.tfvars
-					AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-					AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-					AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  build-and-plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run .NET CI
+        uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1
+        with:
+          src-folder: src
+      - name: Terraform plan (dev)
+        uses: frasermolyneux/actions/terraform-plan@terraform-plan/v1
+        with:
+          terraform-folder: terraform
+          terraform-var-file: tfvars/dev.tfvars
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 ```
 
 ## 🛠️ Developer Quick Start
@@ -61,10 +55,10 @@ act push -W .github/workflows/actions-versioning.yml
 ```
 
 ## 🤝 Contributing
-Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.
+Please read the [contributing](https://github.com/frasermolyneux/actions/blob/main/CONTRIBUTING.md) guidance; this is a learning and development project.
 
 ## 🔐 Security
-Please read the [security](SECURITY.md) guidance; I am always open to security feedback through email or opening an issue.
+Please read the [security](https://github.com/frasermolyneux/actions/blob/main/SECURITY.md) guidance; I am always open to security feedback through email or opening an issue.
 
 ## 📄 License
-Distributed under the [GNU General Public License v3.0](https://github.com/frasermolyneux/.github-prompts/blob/main/LICENSE).
+Distributed under the [GNU General Public License v3.0](https://github.com/frasermolyneux/actions/blob/main/LICENSE).
