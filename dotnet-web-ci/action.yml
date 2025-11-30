@@ -115,7 +115,7 @@ runs:
     - name: Resolve publish frameworks
       shell: pwsh
       run: |
-        $raw = @'${{ inputs.publish-frameworks }}'@
+        $raw = "${{ inputs.publish-frameworks }}"
         $frameworks = $raw -split '[,\s]+' | Where-Object { $_ }
         if (-not $frameworks) {
           Write-Host 'No explicit publish frameworks supplied.'
