@@ -27,12 +27,20 @@ inputs:
   AZURE_TENANT_ID:
     description: "The test account tenant id"
     required: true
+  perform-checkout:
+    description: "Set to false if the repository has already been checked out with fetch-depth 0"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
 
   steps:
-    - uses: actions/checkout@v6
+    - name: Checkout repository
+      if: inputs.perform-checkout == 'true'
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v5

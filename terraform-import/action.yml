@@ -68,12 +68,20 @@ inputs:
     description: "The cloud provider ID of the existing resource (e.g. full Azure resource ID)"
     required: true
     type: string
+  perform-checkout:
+    description: "Set to false if the repository has already been checked out with fetch-depth 0"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
 
   steps:
-    - uses: actions/checkout@v6
+    - name: Checkout repository
+      if: inputs.perform-checkout == 'true'
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
 
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3

@@ -28,6 +28,8 @@ runs:
 
     - name: Resolve Nerdbank.GitVersioning metadata
       uses: ./nbgv-metadata
+      with:
+        perform-checkout: 'false'
 
     - name: Setup .NET SDKs
       uses: ./dotnet-sdk-setup
