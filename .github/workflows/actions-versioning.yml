@@ -78,13 +78,44 @@ jobs:
           set -euo pipefail
           export PATH="$PATH:$HOME/.dotnet/tools"
           for ACTION in $CHANGED_ACTIONS; do
-            VERSION=$(nbgv get-version -p "$ACTION" -f json | jq -r '.SemVer2')
-            TAG="actions/${ACTION}/v${VERSION}"
-            if git rev-parse "$TAG" >/dev/null 2>&1; then
-              echo "Tag $TAG already exists. Skipping."
+            VERSION_INFO=$(nbgv get-version -p "$ACTION" -f json)
+            VERSION=$(echo "$VERSION_INFO" | jq -r '.SemVer2')
+            MAJOR_MINOR=$(echo "$VERSION_INFO" | jq -r '.MajorMinorVersion')
+
+            if [[ -z "$VERSION" || "$VERSION" == "null" ]]; then
+              echo "Failed to resolve semantic version for $ACTION"
+              exit 1
+            fi
+
+            if [[ -z "$MAJOR_MINOR" || "$MAJOR_MINOR" == "null" ]]; then
+              echo "Failed to resolve major/minor version for $ACTION"
+              exit 1
+            fi
+
+            MAJOR="${MAJOR_MINOR%%.*}"
+            if [[ -z "$MAJOR" ]]; then
+              echo "Failed to resolve major version for $ACTION"
+              exit 1
+            fi
+
+            PATCH_TAG="actions/${ACTION}/v${VERSION}"
+            MAJOR_TAG="actions/${ACTION}/v${MAJOR}"
+            MINOR_TAG="actions/${ACTION}/v${MAJOR_MINOR}"
+
+            if git rev-parse "$PATCH_TAG" >/dev/null 2>&1; then
+              echo "Tag $PATCH_TAG already exists. Skipping."
               continue
             fi
-            git tag "$TAG"
-            git push origin "$TAG"
-            echo "Published $TAG"
+
+            git tag "$PATCH_TAG"
+            git push origin "$PATCH_TAG"
+            echo "Published $PATCH_TAG"
+
+            git tag -f "$MAJOR_TAG"
+            git push --force origin "$MAJOR_TAG"
+            echo "Updated rolling tag $MAJOR_TAG"
+
+            git tag -f "$MINOR_TAG"
+            git push --force origin "$MINOR_TAG"
+            echo "Updated rolling tag $MINOR_TAG"
           done
