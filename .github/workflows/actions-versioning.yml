@@ -37,6 +37,7 @@ jobs:
             dotnet-ci
             dotnet-func-ci
             dotnet-web-ci
+            dotnet-sdk-setup
             logic-app-ci
             nbgv-metadata
             publish-nuget-packages

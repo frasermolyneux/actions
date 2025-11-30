@@ -29,61 +29,10 @@ runs:
     - name: Resolve Nerdbank.GitVersioning metadata
       uses: ./nbgv-metadata
 
-    - name: Resolve .NET SDK versions
-      id: dotnet_versions
-      shell: pwsh
-      run: |
-        $raw = "${{ inputs.dotnet-version }}"
-        $entries = $raw -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
-        if (-not $entries) {
-          throw 'No dotnet versions provided. Specify at least one value in dotnet-version input.'
-        }
-
-        $stable = @()
-        $preview = @()
-        foreach ($entry in $entries) {
-          if ($entry -match '^(?<base>.+?)-preview.*$') {
-            $preview += $matches['base']
-          }
-          else {
-            $stable += $entry
-          }
-        }
-
-        if (-not $stable -and -not $preview) {
-          throw 'Unable to resolve any dotnet versions from provided input.'
-        }
-
-        if ($stable) {
-          Write-Host 'Stable .NET SDK versions:'
-          $stable | ForEach-Object { Write-Host " - $_" }
-          $marker = 'EOF'
-          Add-Content -Path $Env:GITHUB_OUTPUT -Value "stable_versions<<$marker"
-          Add-Content -Path $Env:GITHUB_OUTPUT -Value ($stable -join "`n")
-          Add-Content -Path $Env:GITHUB_OUTPUT -Value $marker
-        }
-
-        if ($preview) {
-          Write-Host 'Preview .NET SDK versions:'
-          $preview | ForEach-Object { Write-Host " - $_ (preview quality)" }
-          $marker = 'EOF'
-          Add-Content -Path $Env:GITHUB_OUTPUT -Value "preview_versions<<$marker"
-          Add-Content -Path $Env:GITHUB_OUTPUT -Value ($preview -join "`n")
-          Add-Content -Path $Env:GITHUB_OUTPUT -Value $marker
-        }
-      
-    - name: Setup .NET (stable)
-      if: steps.dotnet_versions.outputs.stable_versions != ''
-      uses: actions/setup-dotnet@v5
+    - name: Setup .NET SDKs
+      uses: ./dotnet-sdk-setup
       with:
-        dotnet-version: ${{ steps.dotnet_versions.outputs.stable_versions }}
-
-    - name: Setup .NET (preview)
-      if: steps.dotnet_versions.outputs.preview_versions != ''
-      uses: actions/setup-dotnet@v5
-      with:
-        dotnet-version: ${{ steps.dotnet_versions.outputs.preview_versions }}
-        dotnet-quality: 'preview'
+        dotnet-version: ${{ inputs.dotnet-version }}
 
     - name: Setup Package Cache
       uses: actions/cache@v4
