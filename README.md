@@ -1,7 +1,7 @@
 # GitHub Actions
 > Reusable composite workflows covering .NET builds, Terraform automation, and supporting GitHub hygiene.
 
-`GitHub Actions workflows (2)`
+## ⚙️ Workflows
 [![Actions Versioning](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml)
 [![Dependabot Auto-Merge](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml)
 
@@ -9,9 +9,9 @@
 Opinionated composite actions keep .NET packaging, Terraform provisioning, and automation hygiene consistent across personal projects. Docs capture the tagging strategy plus Nerdbank.GitVersioning alignment so every action folder can be versioned predictably.
 
 ## 🧱 Technology & Frameworks
-- `.NET SDK 9.0.x` – Restores, builds, and tests .NET solutions inside CI composites.
-- `Terraform CLI 1.9.x+` – Plan/apply/destroy actions with Azure OIDC wiring.
-- `PowerShell 7.x & Bash 5.x` – Default shells for script-heavy orchestration on `ubuntu-latest` runners.
+- .NET SDK 9.0.x – Restores, builds, and tests .NET solutions inside CI composites
+- Terraform CLI 1.9.x+ – Plan/apply/destroy actions with Azure OIDC wiring
+- PowerShell 7.x & Bash 5.x – Default shells for script-heavy orchestration on `ubuntu-latest` runners
 
 ## 📚 Documentation Index
 - [docs/action-versioning.md](https://github.com/frasermolyneux/actions/blob/main/docs/action-versioning.md) – Tagging strategy and guidance for selecting version pins.
@@ -48,9 +48,7 @@ jobs:
 ```shell
 git clone https://github.com/frasermolyneux/actions.git
 cd actions
-# Inspect all composite definitions
 pwsh -NoProfile -Command "Get-ChildItem -Recurse -Filter action.yml | Select-Object FullName"
-# Optionally rehearse the tagging workflow locally (requires act)
 act push -W .github/workflows/actions-versioning.yml
 ```
 
