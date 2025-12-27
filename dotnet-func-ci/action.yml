@@ -27,7 +27,7 @@ runs:
         fetch-depth: 0
 
     - name: Resolve Nerdbank.GitVersioning metadata
-      uses: ./nbgv-metadata
+      uses: frasermolyneux/actions/nbgv-metadata@nbgv-metadata/v1
       with:
         perform-checkout: 'false'
 

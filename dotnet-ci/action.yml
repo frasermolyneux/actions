@@ -28,7 +28,6 @@ runs:
       with:
         perform-checkout: 'false'
 
-
     - name: Setup .NET SDKs
       uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
       with:
