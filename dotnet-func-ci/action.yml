@@ -32,7 +32,7 @@ runs:
         perform-checkout: 'false'
 
     - name: Setup .NET SDKs
-      uses: ./dotnet-sdk-setup
+      uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
