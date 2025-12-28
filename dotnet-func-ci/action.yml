@@ -16,6 +16,10 @@ inputs:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
     default: "true"
+  use-framework-output-root:
+    description: "Set to true to upload the first target framework folder (e.g. net10.0) instead of the parent bin/Release folder"
+    required: false
+    default: "false"
   
 runs:
   using: "composite"
@@ -68,8 +72,33 @@ runs:
     - name: Set project artifact path
       shell: pwsh
       run: |
-        $artifactPath = "src/${{ inputs.dotnet-project }}/bin/Release"
-        Write-Host "Using artifact path: $artifactPath"
+        $basePath = Join-Path "src" "${{ inputs.dotnet-project }}"
+        $releasePath = Join-Path $basePath "bin/Release"
+        $useFrameworkRoot = "${{ inputs.use-framework-output-root }}" -eq "true"
+
+        if ($useFrameworkRoot) {
+          if (-not (Test-Path $releasePath)) {
+            throw "Release output folder not found: $releasePath. Ensure the project built successfully."
+          }
+
+          $frameworkDirs = Get-ChildItem -Path $releasePath -Directory | Where-Object { $_.Name -like 'net*' }
+
+          if ($frameworkDirs.Count -eq 0) {
+            throw "No target framework folder found under $releasePath."
+          }
+
+          if ($frameworkDirs.Count -gt 1) {
+            throw "Multiple target framework folders found under $releasePath. Disable use-framework-output-root or limit to a single target framework."
+          }
+
+          $artifactPath = $frameworkDirs[0].FullName
+          Write-Host "Using framework-specific artifact path: $artifactPath"
+        }
+        else {
+          $artifactPath = $releasePath
+          Write-Host "Using artifact path: $artifactPath"
+        }
+
         "ARTIFACT_PATH=$artifactPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: Upload artifact ${{ inputs.dotnet-project }}
