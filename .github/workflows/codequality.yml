@@ -1,0 +1,144 @@
+name: reusable-code-quality
+
+on:
+  workflow_call:
+    inputs:
+      sonar-project-key:
+        description: SonarCloud project key (e.g., frasermolyneux_portal-event-ingest).
+        required: true
+        type: string
+      sonar-organization:
+        description: SonarCloud organization key.
+        required: false
+        default: frasermolyneux
+        type: string
+      sonar-host-url:
+        description: SonarCloud host URL.
+        required: false
+        default: https://sonarcloud.io
+        type: string
+      build-target:
+        description: Selects the composite build action to run (dotnet-ci or dotnet-func-ci).
+        required: false
+        default: dotnet-ci
+        type: string
+      dotnet-project:
+        description: Required when build-target is dotnet-func-ci; the Function project name.
+        required: false
+        type: string
+      dotnet-version:
+        description: .NET SDK version(s) to install.
+        required: false
+        default: 9.0.x
+        type: string
+      src-folder:
+        description: Folder that contains the .NET solution/projects.
+        required: false
+        default: src
+        type: string
+      use-framework-output-root:
+        description: For dotnet-func-ci, upload the first target framework folder instead of bin/Release.
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      SONAR_TOKEN:
+        description: SonarCloud token with analysis rights.
+        required: true
+
+jobs:
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    env:
+      SONAR_CACHE_DIR: ~/.sonar/cache
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: 17
+          distribution: zulu
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.SONAR_CACHE_DIR }}
+          key: ${{ runner.os }}-sonar-cache
+
+      - name: Cache SonarCloud scanner
+        id: cache-sonar-scanner
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sonar-scanner
+          key: ${{ runner.os }}-sonar-scanner
+
+      - name: Install SonarCloud scanner
+        if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p "${{ runner.temp }}/sonar-scanner"
+          dotnet tool update dotnet-sonarscanner --tool-path "${{ runner.temp }}/sonar-scanner"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+
+      - name: Validate Function inputs
+        if: inputs.build-target == 'dotnet-func-ci'
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.dotnet-project }}" ]; then
+            echo "dotnet-project is required when build-target is dotnet-func-ci" >&2
+            exit 1
+          fi
+
+      - name: Begin SonarCloud analysis
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          cd "${{ inputs.src-folder }}"
+          "${{ runner.temp }}/sonar-scanner/dotnet-sonarscanner" begin \
+            /k:"${{ inputs.sonar-project-key }}" \
+            /o:"${{ inputs.sonar-organization }}" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.host.url="${{ inputs.sonar-host-url }}"
+
+      - name: Build and test (.NET)
+        if: inputs.build-target == 'dotnet-ci'
+        uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+          src-folder: ${{ inputs.src-folder }}
+          perform-checkout: 'false'
+
+      - name: Build and test (Function)
+        if: inputs.build-target == 'dotnet-func-ci'
+        uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v1
+        with:
+          dotnet-project: ${{ inputs.dotnet-project }}
+          dotnet-version: ${{ inputs.dotnet-version }}
+          src-folder: ${{ inputs.src-folder }}
+          perform-checkout: 'false'
+          use-framework-output-root: ${{ inputs.use-framework-output-root }}
+
+      - name: End SonarCloud analysis
+        if: ${{ always() }}
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          cd "${{ inputs.src-folder }}"
+          "${{ runner.temp }}/sonar-scanner/dotnet-sonarscanner" end /d:sonar.token="$SONAR_TOKEN"
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:csharp
