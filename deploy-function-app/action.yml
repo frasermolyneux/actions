@@ -40,34 +40,9 @@ runs:
         name: ${{ inputs.function-app-artifact-name }}
         path: artifacts/${{ inputs.function-app-artifact-name }}
 
-    - name: Prepare deployment package
-      shell: pwsh
-      run: |
-        $artifactRoot = Join-Path "artifacts" "${{ inputs.function-app-artifact-name }}"
-        if (-not (Test-Path $artifactRoot)) {
-          Write-Error "Artifact path not found: $artifactRoot"
-          exit 1
-        }
-
-        $existingZip = Get-ChildItem -Path $artifactRoot -Filter *.zip -File -Recurse | Select-Object -First 1
-        if ($existingZip) {
-          $zipPath = $existingZip.FullName
-        }
-        else {
-          $zipPath = Join-Path $env:RUNNER_TEMP "functionapp.zip"
-          if (Test-Path $zipPath) {
-            Remove-Item $zipPath -Force
-          }
-          Compress-Archive -Path (Join-Path $artifactRoot '*') -DestinationPath $zipPath
-        }
-
-        "FUNCTIONAPP_ZIP_PATH=$zipPath" | Out-File -FilePath $env:GITHUB_ENV -Append
-
     - name: Deploy to Azure Function App
-      shell: bash
-      run: |
-        set -euo pipefail
-        az functionapp deployment source config-zip \
-          --resource-group "${{ inputs.function-app-resource-group }}" \
-          --name "${{ inputs.function-app-name }}" \
-          --src "$FUNCTIONAPP_ZIP_PATH"
+      id: deploy-to-webapp
+      uses: azure/functions-action@v1
+      with:
+        app-name: ${{ inputs.function-app-name }}
+        package: artifacts/${{ inputs.function-app-artifact-name }}
