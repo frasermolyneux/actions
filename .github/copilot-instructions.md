@@ -8,7 +8,7 @@
 ## Execution Conventions
 - Default shell choice is intentional: PowerShell (`pwsh`) covers versioning/backends/JSON assembly while Bash executes cross-platform CLI work; keep the same mix when inserting steps.
 - Azure access always flows through OIDC inputs (`AZURE_CLIENT_ID|TENANT_ID|SUBSCRIPTION_ID`); terraform actions immediately surface them as `ARM_*` plus `ARM_USE_OIDC=true`, so do not re-run `az login` unless absolutely required.
-- Artifact exchange always uses inputs for artifact names and explicit `actions/download-artifact@v4` / `actions/upload-artifact@v4` calls—no hard-coded paths from upstream jobs.
+- Artifact exchange always uses inputs for artifact names and explicit `actions/download-artifact@v4` / `actions/upload-artifact@v6` calls—no hard-coded paths from upstream jobs.
 - Package caching is standardized on `actions/cache@v4` with `hashFiles('**/packages.lock.json')`; if you change lockfile locations, update the hash expression everywhere in that folder.
 
 ## .NET Build/Test Patterns

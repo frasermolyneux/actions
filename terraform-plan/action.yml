@@ -156,7 +156,7 @@ runs:
         ARM_USE_OIDC: true
 
     - name: Upload Terraform Plan Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.plan-artifact-name }}
         path: ${{ inputs.terraform-folder }}/${{ inputs.plan-file-name }}

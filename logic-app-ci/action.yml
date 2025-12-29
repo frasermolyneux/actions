@@ -23,7 +23,7 @@ runs:
         fetch-depth: 0
 
     - name: Upload artifact ${{ inputs.logic-project }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.logic-project }}
         path: "src/${{ inputs.logic-project }}"

@@ -102,7 +102,7 @@ runs:
         "ARTIFACT_PATH=$artifactPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: Upload artifact ${{ inputs.dotnet-project }}
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.dotnet-project }}
         path: ${{ env.ARTIFACT_PATH }}
@@ -110,7 +110,7 @@ runs:
         include-hidden-files: true
 
     - name: Upload NuGet Packages
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: nuget-packages
         path: |
