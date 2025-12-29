@@ -24,7 +24,17 @@ Reference the workflow directly from consuming repositories:
 ```yaml
 name: Code Quality
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
 
 jobs:
   quality:
@@ -42,7 +52,17 @@ jobs:
 ```yaml
 name: Code Quality
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
 
 jobs:
   quality:
@@ -62,7 +82,17 @@ jobs:
 ```yaml
 name: Code Quality
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
 
 jobs:
   quality:
