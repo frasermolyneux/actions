@@ -18,13 +18,23 @@ on:
         default: https://sonarcloud.io
         type: string
       build-target:
-        description: Selects the composite build action to run (dotnet-ci or dotnet-func-ci).
+        description: Selects the composite build action to run (dotnet-ci, dotnet-web-ci, or dotnet-func-ci).
         required: false
         default: dotnet-ci
         type: string
       dotnet-project:
-        description: Required when build-target is dotnet-func-ci; the Function project name.
+        description: Required when build-target is dotnet-func-ci or dotnet-web-ci; the project name.
         required: false
+        type: string
+      publish-frameworks:
+        description: Optional list of target frameworks to publish (only for dotnet-web-ci).
+        required: false
+        default: ""
+        type: string
+      nuget-artifact-name:
+        description: Artifact name for NuGet packages (dotnet-web-ci only).
+        required: false
+        default: nuget-packages
         type: string
       dotnet-version:
         description: .NET SDK version(s) to install.
@@ -52,6 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SONAR_CACHE_DIR: ~/.sonar/cache
+      SONAR_SCANNER_DIR: $RUNNER_TEMP/sonar-scanner
 
     steps:
       - name: Checkout
@@ -75,27 +86,27 @@ jobs:
         id: cache-sonar-scanner
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/sonar-scanner
+          path: ${{ env.SONAR_SCANNER_DIR }}
           key: ${{ runner.os }}-sonar-scanner
 
       - name: Install SonarCloud scanner
         if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
         shell: bash
         run: |
-          mkdir -p "${{ runner.temp }}/sonar-scanner"
-          dotnet tool update dotnet-sonarscanner --tool-path "${{ runner.temp }}/sonar-scanner"
+          mkdir -p "${{ env.SONAR_SCANNER_DIR }}"
+          dotnet tool update dotnet-sonarscanner --tool-path "${{ env.SONAR_SCANNER_DIR }}"
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: csharp
 
-      - name: Validate Function inputs
-        if: inputs.build-target == 'dotnet-func-ci'
+      - name: Validate project inputs
+        if: inputs.build-target == 'dotnet-func-ci' || inputs.build-target == 'dotnet-web-ci'
         shell: bash
         run: |
           if [ -z "${{ inputs.dotnet-project }}" ]; then
-            echo "dotnet-project is required when build-target is dotnet-func-ci" >&2
+            echo "dotnet-project is required when build-target is dotnet-func-ci or dotnet-web-ci" >&2
             exit 1
           fi
 
@@ -105,7 +116,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cd "${{ inputs.src-folder }}"
-          "${{ runner.temp }}/sonar-scanner/dotnet-sonarscanner" begin \
+          "${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner" begin \
             /k:"${{ inputs.sonar-project-key }}" \
             /o:"${{ inputs.sonar-organization }}" \
             /d:sonar.token="$SONAR_TOKEN" \
@@ -117,6 +128,17 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           src-folder: ${{ inputs.src-folder }}
+          perform-checkout: 'false'
+
+      - name: Build and publish (Web)
+        if: inputs.build-target == 'dotnet-web-ci'
+        uses: frasermolyneux/actions/dotnet-web-ci@dotnet-web-ci/v1
+        with:
+          dotnet-project: ${{ inputs.dotnet-project }}
+          dotnet-version: ${{ inputs.dotnet-version }}
+          publish-frameworks: ${{ inputs.publish-frameworks }}
+          src-folder: ${{ inputs.src-folder }}
+          nugetArtifactName: ${{ inputs.nuget-artifact-name }}
           perform-checkout: 'false'
 
       - name: Build and test (Function)
@@ -136,7 +158,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           cd "${{ inputs.src-folder }}"
-          "${{ runner.temp }}/sonar-scanner/dotnet-sonarscanner" end /d:sonar.token="$SONAR_TOKEN"
+          "${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner" end /d:sonar.token="$SONAR_TOKEN"
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v4
