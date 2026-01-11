@@ -1,4 +1,5 @@
 name: "publish-nuget-packages"
+description: "Publish NuGet packages and symbols, skipping symbol push when nupkg uploads are duplicates"
 
 inputs:
   artifact-name:
@@ -56,10 +57,22 @@ runs:
       run: |
         set -euo pipefail
         cd "${{ inputs.artifact-output-path }}"
-        dotnet nuget push "**/*.nupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate
 
-        if find . -type f -name '*.snupkg' | grep -q .; then
-          dotnet nuget push "**/*.snupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate
+        NUGET_LOG=/tmp/nuget-push.log
+        dotnet nuget push "**/*.nupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate | tee "$NUGET_LOG"
+
+        if grep -q "Successfully published" "$NUGET_LOG"; then
+          PUBLISH_SYMBOLS=true
+          echo "nupkg publish succeeded; proceeding to symbols"
         else
-          echo 'No symbol packages detected; skipping symbol publish.'
+          PUBLISH_SYMBOLS=false
+          echo "nupkg publish skipped (likely duplicates); skipping symbol publish"
+        fi
+
+        if [[ "$PUBLISH_SYMBOLS" == "true" ]]; then
+          if find . -type f -name '*.snupkg' | grep -q .; then
+            dotnet nuget push "**/*.snupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate
+          else
+            echo 'No symbol packages detected; skipping symbol publish.'
+          fi
         fi
