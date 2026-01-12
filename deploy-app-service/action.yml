@@ -1,4 +1,5 @@
 name: "deploy-app-service"
+description: "Deploys a web artifact to an Azure App Service using Azure Web Apps Deploy action"
 
 inputs:
   web-artifact-name:
@@ -45,4 +46,4 @@ runs:
       with:
         app-name: ${{ inputs.web-app-name }}
         resource-group-name: ${{ inputs.resource-group-name }}
-        package: '.'
+        package: './${{ inputs.web-artifact-name }}'
