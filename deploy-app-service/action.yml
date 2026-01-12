@@ -39,6 +39,7 @@ runs:
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.web-artifact-name }}
+        path: ${{ inputs.web-artifact-name }}
 
     - name: Deploy to Azure Web App
       id: deploy-to-webapp
