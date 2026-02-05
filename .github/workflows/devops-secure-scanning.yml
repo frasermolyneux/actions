@@ -1,0 +1,77 @@
+name: reusable-devops-secure-scanning
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner label to use for the scan job.
+        required: false
+        default: ubuntu-latest
+        type: string
+      config:
+        description: Optional path to an MSDO configuration file (*.gdnconfig).
+        required: false
+        default: ""
+        type: string
+      policy:
+        description: Optional MSDO policy name (GitHub, microsoft, none).
+        required: false
+        default: ""
+        type: string
+      categories:
+        description: Optional comma-separated analyzer categories (e.g., IaC,secrets).
+        required: false
+        default: ""
+        type: string
+      languages:
+        description: Optional comma-separated languages to analyze.
+        required: false
+        default: ""
+        type: string
+      tools:
+        description: Optional comma-separated analyzers to run.
+        required: false
+        default: ""
+        type: string
+      sarif-artifact-name:
+        description: Artifact name for the uploaded SARIF file.
+        required: false
+        default: alerts
+        type: string
+
+jobs:
+  devops-secure-scanning:
+    name: DevOps Secure Scanning
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Microsoft Security DevOps Analysis
+        id: msdo
+        uses: microsoft/security-devops-action@v1.12.0
+        with:
+          config: ${{ inputs.config }}
+          policy: ${{ inputs.policy }}
+          categories: ${{ inputs.categories }}
+          languages: ${{ inputs.languages }}
+          tools: ${{ inputs.tools }}
+
+      - name: Upload alerts to Security tab
+        if: ${{ always() }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: ${{ steps.msdo.outputs.sarifFile }}
+
+      - name: Upload alerts file as a workflow artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.sarif-artifact-name }}
+          path: ${{ steps.msdo.outputs.sarifFile }}
