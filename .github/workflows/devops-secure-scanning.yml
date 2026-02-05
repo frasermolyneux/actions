@@ -39,6 +39,8 @@ on:
         default: alerts
         type: string
 
+permissions: read-all
+
 jobs:
   devops-secure-scanning:
     name: DevOps Secure Scanning

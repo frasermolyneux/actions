@@ -56,6 +56,8 @@ on:
         description: SonarCloud token with analysis rights.
         required: true
 
+permissions: read-all
+
 jobs:
   code-quality:
     name: Code Quality

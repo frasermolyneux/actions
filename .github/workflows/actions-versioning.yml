@@ -6,6 +6,8 @@ on:
       - main
 
 
+permissions: read-all
+
 jobs:
   tag-actions:
     permissions:
