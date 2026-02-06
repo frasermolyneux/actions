@@ -73,7 +73,7 @@ jobs:
 
       - name: Upload alerts file as a workflow artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.sarif-artifact-name }}
           path: ${{ steps.msdo.outputs.sarifFile }}
