@@ -47,6 +47,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     permissions:
       contents: read
+      actions: read
       security-events: write
 
     steps:
