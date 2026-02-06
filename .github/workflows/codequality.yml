@@ -56,7 +56,10 @@ on:
         description: SonarCloud token with analysis rights.
         required: true
 
-permissions: read-all
+permissions:
+  contents: read
+  actions: read
+  security-events: write
 
 jobs:
   code-quality:
