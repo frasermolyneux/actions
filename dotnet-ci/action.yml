@@ -1,4 +1,5 @@
 name: "dotnet-ci"
+description: "Builds, tests, and optionally uploads NuGet packages for .NET solutions"
 
 inputs:
   dotnet-version:
@@ -13,6 +14,10 @@ inputs:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
     default: "true"
+  skip-artifact-upload:
+    description: "Set to true to skip uploading NuGet package artifacts"
+    required: false
+    default: "false"
   
 runs:
   using: "composite"
@@ -63,6 +68,7 @@ runs:
         dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
 
     - name: Upload NuGet Packages
+      if: inputs.skip-artifact-upload != 'true'
       uses: actions/upload-artifact@v6
       with:
         name: nuget-packages
