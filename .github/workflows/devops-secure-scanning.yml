@@ -39,13 +39,15 @@ on:
         default: alerts
         type: string
 
-permissions:
-  contents: read
-  actions: read
-  security-events: write
+permissions: {}
 
 jobs:
   devops-secure-scanning:
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      security-events: write
     name: DevOps Secure Scanning
     runs-on: ${{ inputs.runner }}
 

@@ -56,13 +56,14 @@ on:
         description: SonarCloud token with analysis rights.
         required: true
 
-permissions:
-  contents: read
-  actions: read
-  security-events: write
+permissions: {}
 
 jobs:
   code-quality:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     name: Code Quality
     runs-on: ubuntu-latest
     env:
