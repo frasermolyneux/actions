@@ -51,10 +51,20 @@ on:
         required: false
         default: false
         type: boolean
+      skip-sonar:
+        description: Skip SonarCloud analysis (only run CodeQL).
+        required: false
+        default: false
+        type: boolean
+      skip-codeql:
+        description: Skip CodeQL analysis (only run SonarCloud).
+        required: false
+        default: false
+        type: boolean
     secrets:
       SONAR_TOKEN:
         description: SonarCloud token with analysis rights.
-        required: true
+        required: false
 
 permissions: {}
 
@@ -77,18 +87,21 @@ jobs:
           fetch-depth: 0
 
       - name: Set up JDK 17
+        if: ${{ inputs.skip-sonar != true }}
         uses: actions/setup-java@v5
         with:
           java-version: 17
           distribution: zulu
 
       - name: Cache SonarCloud packages
+        if: ${{ inputs.skip-sonar != true }}
         uses: actions/cache@v5
         with:
           path: ${{ env.SONAR_CACHE_DIR }}
           key: ${{ runner.os }}-sonar-cache
 
       - name: Cache SonarCloud scanner
+        if: ${{ inputs.skip-sonar != true }}
         id: cache-sonar-scanner
         uses: actions/cache@v5
         with:
@@ -96,13 +109,14 @@ jobs:
           key: ${{ runner.os }}-sonar-scanner
 
       - name: Install SonarCloud scanner
-        if: steps.cache-sonar-scanner.outputs.cache-hit != 'true'
+        if: ${{ inputs.skip-sonar != true && steps.cache-sonar-scanner.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
           mkdir -p "${{ env.SONAR_SCANNER_DIR }}"
           dotnet tool update dotnet-sonarscanner --tool-path "${{ env.SONAR_SCANNER_DIR }}"
 
       - name: Initialize CodeQL
+        if: ${{ inputs.skip-codeql != true }}
         uses: github/codeql-action/init@v4
         with:
           languages: csharp
@@ -117,6 +131,7 @@ jobs:
           fi
 
       - name: Begin SonarCloud analysis
+        if: ${{ inputs.skip-sonar != true }}
         shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -158,7 +173,7 @@ jobs:
           use-framework-output-root: ${{ inputs.use-framework-output-root }}
 
       - name: End SonarCloud analysis
-        if: ${{ always() }}
+        if: ${{ inputs.skip-sonar != true && always() }}
         shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -167,6 +182,7 @@ jobs:
           "${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner" end /d:sonar.token="$SONAR_TOKEN"
 
       - name: Perform CodeQL analysis
+        if: ${{ inputs.skip-codeql != true }}
         uses: github/codeql-action/analyze@v4
         with:
           category: /language:csharp
