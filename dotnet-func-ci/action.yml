@@ -1,4 +1,5 @@
 name: "dotnet-func-ci"
+description: "Builds, tests, publishes, and optionally uploads artifacts and NuGet packages for Azure Functions projects"
 
 inputs:
   dotnet-project:
@@ -20,6 +21,14 @@ inputs:
     description: "Set to true to upload the first target framework folder (e.g. net10.0) instead of the parent bin/Release folder"
     required: false
     default: "true"
+  skip-artifact-upload:
+    description: "Set to true to skip uploading the published function application artifact"
+    required: false
+    default: "false"
+  skip-nuget-artifact-upload:
+    description: "Set to true to skip uploading NuGet package artifacts"
+    required: false
+    default: "false"
   
 runs:
   using: "composite"
@@ -102,6 +111,7 @@ runs:
         "ARTIFACT_PATH=$artifactPath" | Out-File -FilePath $Env:GITHUB_ENV -Encoding utf8 -Append
 
     - name: Upload artifact ${{ inputs.dotnet-project }}
+      if: inputs.skip-artifact-upload != 'true'
       uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.dotnet-project }}
@@ -110,6 +120,7 @@ runs:
         include-hidden-files: true
 
     - name: Upload NuGet Packages
+      if: inputs.skip-nuget-artifact-upload != 'true'
       uses: actions/upload-artifact@v6
       with:
         name: nuget-packages

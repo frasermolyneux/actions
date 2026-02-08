@@ -1,4 +1,5 @@
 name: "dotnet-web-ci"
+description: "Builds, tests, publishes, and optionally uploads artifacts and NuGet packages for ASP.NET Core web projects"
 
 inputs:
   dotnet-project:
@@ -24,6 +25,14 @@ inputs:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
     default: "true"
+  skip-artifact-upload:
+    description: "Set to true to skip uploading the published web application artifact"
+    required: false
+    default: "false"
+  skip-nuget-artifact-upload:
+    description: "Set to true to skip uploading NuGet package artifacts"
+    required: false
+    default: "false"
   
 runs:
   using: "composite"
@@ -113,6 +122,7 @@ runs:
         fi
 
     - name: Upload artifact ${{ inputs.dotnet-project }}
+      if: inputs.skip-artifact-upload != 'true'
       uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.dotnet-project }}
@@ -121,6 +131,7 @@ runs:
         include-hidden-files: true
 
     - name: Upload NuGet Packages
+      if: inputs.skip-nuget-artifact-upload != 'true'
       uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.nugetArtifactName }}
