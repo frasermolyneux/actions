@@ -74,6 +74,26 @@ inputs:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
     default: "true"
+  enable-pr-comment:
+    description: "Post Terraform validation/plan results to the pull request using terraform-pr-commenter"
+    required: false
+    default: "true"
+    type: string
+  pr-comment-workspace:
+    description: "Optional TF_WORKSPACE to disambiguate PR comments in matrix runs"
+    required: false
+    default: ""
+    type: string
+  pr-comment-expand-summary-details:
+    description: "Whether to expand summary details in the PR comment (EXPAND_SUMMARY_DETAILS)"
+    required: false
+    default: "true"
+    type: string
+  pr-comment-highlight-changes:
+    description: "Whether to highlight plan changes in the PR comment (HIGHLIGHT_CHANGES)"
+    required: false
+    default: "true"
+    type: string
 
 runs:
   using: "composite"
@@ -88,7 +108,7 @@ runs:
     - name: Setup Terraform
       uses: hashicorp/setup-terraform@v3
       with:
-        terraform_wrapper: false
+        terraform_wrapper: true
 
     - name: Terraform Init
       shell: pwsh
@@ -136,14 +156,21 @@ runs:
         ARM_USE_OIDC: true
 
     - name: Terraform Validate
+      id: validate
+      continue-on-error: true
       shell: bash
       run: |
+        set -euo pipefail
         cd ${{ inputs.terraform-folder }}
         terraform validate
 
     - name: Terraform Plan
+      id: plan
+      if: steps.validate.outputs.exitcode == '0'
+      continue-on-error: true
       shell: bash
       run: |
+        set -euo pipefail
         cd ${{ inputs.terraform-folder }}
         terraform plan -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" ${{ inputs.terraform-additional-args }}
         # Show the plan (human readable)
@@ -155,9 +182,44 @@ runs:
         ARM_USE_AZUREAD: true
         ARM_USE_OIDC: true
 
+    - name: Post Terraform Validate comment
+      if: inputs.enable-pr-comment == 'true' && github.event_name == 'pull_request' && always() && (steps.validate.outcome == 'success' || steps.validate.outcome == 'failure')
+      uses: robburger/terraform-pr-commenter@v1.5.0
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
+        EXPAND_SUMMARY_DETAILS: ${{ inputs.pr-comment-expand-summary-details }}
+        HIGHLIGHT_CHANGES: ${{ inputs.pr-comment-highlight-changes }}
+      with:
+        commenter_type: validate
+        commenter_input: ${{ format('{0}{1}', steps.validate.outputs.stdout, steps.validate.outputs.stderr) }}
+        commenter_exitcode: ${{ steps.validate.outputs.exitcode }}
+
+    - name: Post Terraform Plan comment
+      if: inputs.enable-pr-comment == 'true' && github.event_name == 'pull_request' && always() && (steps.plan.outcome == 'success' || steps.plan.outcome == 'failure')
+      uses: robburger/terraform-pr-commenter@v1.5.0
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
+        EXPAND_SUMMARY_DETAILS: ${{ inputs.pr-comment-expand-summary-details }}
+        HIGHLIGHT_CHANGES: ${{ inputs.pr-comment-highlight-changes }}
+      with:
+        commenter_type: plan
+        commenter_input: ${{ format('{0}{1}', steps.plan.outputs.stdout, steps.plan.outputs.stderr) }}
+        commenter_exitcode: ${{ steps.plan.outputs.exitcode }}
+
     - name: Upload Terraform Plan Artifact
+      if: steps.plan.outputs.exitcode == '0'
       uses: actions/upload-artifact@v6
       with:
         name: ${{ inputs.plan-artifact-name }}
         path: ${{ inputs.terraform-folder }}/${{ inputs.plan-file-name }}
         if-no-files-found: error
+
+    - name: Fail if validate or plan failed
+      if: steps.validate.outputs.exitcode != '0' || steps.plan.outputs.exitcode != '0'
+      shell: bash
+      run: |
+        echo "Terraform validate exit code: ${{ steps.validate.outputs.exitcode }}"
+        echo "Terraform plan exit code: ${{ steps.plan.outputs.exitcode }}"
+        exit 1
