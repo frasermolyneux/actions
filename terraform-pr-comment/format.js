@@ -120,12 +120,23 @@ function buildCollapsibleOutput(title, output, lang) {
 }
 
 /**
+ * Derive environment name from a var-file path.
+ * e.g. "tfvars/dev.tfvars" → "dev", "tfvars/prd.tfvars" → "prd"
+ */
+function deriveEnvironment(varFile) {
+  if (!varFile) return '';
+  const basename = varFile.replace(/\\/g, '/').split('/').pop() || '';
+  return basename.replace(/\.tfvars$/i, '');
+}
+
+/**
  * Build a full PR comment body for a plan-type action.
  *
  * @param {object} opts
  * @param {string} opts.marker - HTML comment marker for upsert
  * @param {string} opts.title - Comment heading (e.g. "Terraform Plan")
  * @param {string} opts.workspace - Optional workspace suffix
+ * @param {string} [opts.environment] - Environment name (derived from var-file)
  * @param {object} [opts.validate] - { stdout, stderr, exitcode, outcome }
  * @param {object} [opts.plan] - { stdout, stderr, exitcode, outcome }
  * @param {object} [opts.apply] - { stdout, stderr, exitcode, outcome }
@@ -134,6 +145,10 @@ function buildComment(opts) {
   const ws = opts.workspace ? ` (${opts.workspace})` : '';
   let body = `${opts.marker}\n`;
   body += `### ${opts.title}${ws}\n\n`;
+
+  if (opts.environment) {
+    body += `> 🌍 **Environment:** \`${opts.environment}\`\n\n`;
+  }
 
   // Validate section
   if (opts.validate && (opts.validate.outcome === 'success' || opts.validate.outcome === 'failure')) {
@@ -190,7 +205,9 @@ function buildComment(opts) {
 }
 
 /**
- * Post or update a PR comment.
+ * Post a new PR comment after marking any previous comments with the same
+ * marker as superseded. Old comments are collapsed so the latest result is
+ * always the most visible.
  */
 async function postComment(github, context, marker, body) {
   const { data: comments } = await github.rest.issues.listComments({
@@ -200,22 +217,27 @@ async function postComment(github, context, marker, body) {
     per_page: 100,
   });
 
-  const existing = comments.find(c => c.body && c.body.includes(marker));
-  if (existing) {
+  // Mark all previous comments with this marker as superseded
+  const existing = comments.filter(c => c.body && c.body.includes(marker));
+  for (const old of existing) {
+    // Skip if already superseded
+    if (old.body.includes('⛔ **Superseded**')) continue;
+    const supersededBody = `${marker}\n<details><summary>⛔ <strong>Superseded</strong> — A newer run has replaced this result.</summary>\n\n${old.body.replace(marker, '').trim()}\n\n</details>\n`;
     await github.rest.issues.updateComment({
       owner: context.repo.owner,
       repo: context.repo.repo,
-      comment_id: existing.id,
-      body,
-    });
-  } else {
-    await github.rest.issues.createComment({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
-      issue_number: context.issue.number,
-      body,
+      comment_id: old.id,
+      body: supersededBody,
     });
   }
+
+  // Always create a new comment with the latest results
+  await github.rest.issues.createComment({
+    owner: context.repo.owner,
+    repo: context.repo.repo,
+    issue_number: context.issue.number,
+    body,
+  });
 }
 
-module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, buildSummaryTable, buildResourceTable, buildCollapsibleOutput, buildComment, postComment };
+module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, buildSummaryTable, buildResourceTable, buildCollapsibleOutput, buildComment, postComment, deriveEnvironment };

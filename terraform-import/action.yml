@@ -210,16 +210,21 @@ runs:
         PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
         PLAN_OUTCOME: ${{ steps.plan.outcome }}
         TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
+        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
       with:
         script: |
           const fmt = require('${{ github.action_path }}/../terraform-pr-comment/format.js');
           const workspace = process.env.TF_WORKSPACE || '';
-          const marker = `<!-- terraform-pr-comment: import${workspace ? ` (${workspace})` : ''} -->`;
+          const environment = fmt.deriveEnvironment(process.env.TF_VAR_FILE);
+          const envSuffix = environment ? ` ${environment}` : '';
+          const wsSuffix = workspace ? ` (${workspace})` : '';
+          const marker = `<!-- terraform-pr-comment: import${envSuffix}${wsSuffix} -->`;
 
           const body = fmt.buildComment({
             marker,
             title: '📦 Terraform Import',
             workspace,
+            environment,
             validate: {
               stdout: process.env.VALIDATE_STDOUT,
               stderr: process.env.VALIDATE_STDERR,

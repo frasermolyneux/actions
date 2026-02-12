@@ -196,16 +196,21 @@ runs:
         PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
         PLAN_OUTCOME: ${{ steps.plan.outcome }}
         TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
+        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
       with:
         script: |
           const fmt = require('${{ github.action_path }}/../terraform-pr-comment/format.js');
           const workspace = process.env.TF_WORKSPACE || '';
-          const marker = `<!-- terraform-pr-comment: plan-readonly${workspace ? ` (${workspace})` : ''} -->`;
+          const environment = fmt.deriveEnvironment(process.env.TF_VAR_FILE);
+          const envSuffix = environment ? ` ${environment}` : '';
+          const wsSuffix = workspace ? ` (${workspace})` : '';
+          const marker = `<!-- terraform-pr-comment: plan-readonly${envSuffix}${wsSuffix} -->`;
 
           const body = fmt.buildComment({
             marker,
             title: '🏗️ Terraform Plan (Read-Only)',
             workspace,
+            environment,
             validate: {
               stdout: process.env.VALIDATE_STDOUT,
               stderr: process.env.VALIDATE_STDERR,
