@@ -4,7 +4,8 @@
 version: 2
 updates:
   - package-ecosystem: "github-actions"
-    assignees: ["frasermolyneux"]
     directory: "/"
     schedule:
       interval: "daily"
+    assignees:
+      - "frasermolyneux"
