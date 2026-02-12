@@ -1,4 +1,5 @@
 name: "terraform-plan-readonly"
+description: "Runs terraform init, validate, and plan with Azure OIDC authentication for read-only verification, uploading the plan artifact and optionally posting results to the PR"
 
 inputs:
   terraform-folder:
@@ -182,31 +183,78 @@ runs:
         ARM_USE_AZUREAD: true
         ARM_USE_OIDC: true
 
-    - name: Post Terraform Validate comment
-      if: inputs.enable-pr-comment == 'true' && github.event_name == 'pull_request' && always() && (steps.validate.outcome == 'success' || steps.validate.outcome == 'failure')
-      uses: robburger/terraform-pr-commenter@v1.5.0
+    - name: Post Terraform PR comment
+      if: inputs.enable-pr-comment == 'true' && github.event_name == 'pull_request' && always() && (steps.validate.outcome == 'success' || steps.validate.outcome == 'failure' || steps.plan.outcome == 'success' || steps.plan.outcome == 'failure')
+      uses: actions/github-script@v7
       env:
-        GITHUB_TOKEN: ${{ github.token }}
+        VALIDATE_STDOUT: ${{ steps.validate.outputs.stdout }}
+        VALIDATE_STDERR: ${{ steps.validate.outputs.stderr }}
+        VALIDATE_EXITCODE: ${{ steps.validate.outputs.exitcode }}
+        VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
+        PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
+        PLAN_STDERR: ${{ steps.plan.outputs.stderr }}
+        PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
+        PLAN_OUTCOME: ${{ steps.plan.outcome }}
         TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
-        EXPAND_SUMMARY_DETAILS: ${{ inputs.pr-comment-expand-summary-details }}
-        HIGHLIGHT_CHANGES: ${{ inputs.pr-comment-highlight-changes }}
       with:
-        commenter_type: validate
-        commenter_input: ${{ format('{0}{1}', steps.validate.outputs.stdout, steps.validate.outputs.stderr) }}
-        commenter_exitcode: ${{ steps.validate.outputs.exitcode }}
+        script: |
+          const workspace = process.env.TF_WORKSPACE ? ` (${process.env.TF_WORKSPACE})` : '';
+          const marker = `<!-- terraform-pr-comment: plan${workspace} -->`;
 
-    - name: Post Terraform Plan comment
-      if: inputs.enable-pr-comment == 'true' && github.event_name == 'pull_request' && always() && (steps.plan.outcome == 'success' || steps.plan.outcome == 'failure')
-      uses: robburger/terraform-pr-commenter@v1.5.0
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
-        TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
-        EXPAND_SUMMARY_DETAILS: ${{ inputs.pr-comment-expand-summary-details }}
-        HIGHLIGHT_CHANGES: ${{ inputs.pr-comment-highlight-changes }}
-      with:
-        commenter_type: plan
-        commenter_input: ${{ format('{0}{1}', steps.plan.outputs.stdout, steps.plan.outputs.stderr) }}
-        commenter_exitcode: ${{ steps.plan.outputs.exitcode }}
+          let body = marker + '\n';
+          body += `### Terraform Results${workspace}\n\n`;
+
+          // Validate section
+          const validateOutcome = process.env.VALIDATE_OUTCOME;
+          if (validateOutcome === 'success' || validateOutcome === 'failure') {
+            const validateIcon = process.env.VALIDATE_EXITCODE === '0' ? '✅' : '❌';
+            const validateOutput = (process.env.VALIDATE_STDOUT || '') + (process.env.VALIDATE_STDERR || '');
+            body += `#### ${validateIcon} Validate\n\n`;
+            if (validateOutput.trim()) {
+              body += `<details><summary>Output</summary>\n\n\`\`\`\n${validateOutput.trim()}\n\`\`\`\n\n</details>\n\n`;
+            }
+          }
+
+          // Plan section
+          const planOutcome = process.env.PLAN_OUTCOME;
+          if (planOutcome === 'success' || planOutcome === 'failure') {
+            const planIcon = process.env.PLAN_EXITCODE === '0' ? '✅' : '❌';
+            const planOutput = (process.env.PLAN_STDOUT || '') + (process.env.PLAN_STDERR || '');
+            body += `#### ${planIcon} Plan\n\n`;
+            if (planOutput.trim()) {
+              let trimmed = planOutput.trim();
+              if (trimmed.length > 60000) {
+                trimmed = trimmed.substring(trimmed.length - 60000);
+                trimmed = '... (truncated)\n' + trimmed;
+              }
+              body += `<details><summary>Output</summary>\n\n\`\`\`hcl\n${trimmed}\n\`\`\`\n\n</details>\n\n`;
+            }
+          }
+
+          // Find and update existing comment or create new one
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            per_page: 100,
+          });
+
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: existing.id,
+              body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+          }
 
     - name: Upload Terraform Plan Artifact
       if: steps.plan.outputs.exitcode == '0'

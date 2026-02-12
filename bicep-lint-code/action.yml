@@ -1,4 +1,5 @@
 name: "bicep-lint-code"
+description: "Lints Bicep templates by running bicep build and checking for errors"
 
 inputs:
   bicepDirectory:

@@ -1,4 +1,5 @@
 name: "deploy-logic-app"
+description: "Deploys a web artifact to an Azure Logic App using Azure Web Apps Deploy action"
 
 inputs:
   logic-app-artifact-name:

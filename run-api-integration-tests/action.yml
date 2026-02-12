@@ -1,4 +1,5 @@
 name: "run-api-integration-tests"
+description: "Runs .NET API integration tests with Azure OIDC authentication"
 
 inputs:
   dotnet-version:

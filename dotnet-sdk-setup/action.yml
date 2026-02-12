@@ -1,4 +1,5 @@
 name: "dotnet-sdk-setup"
+description: "Installs one or more .NET SDK versions including support for stable and preview releases"
 
 inputs:
   dotnet-version:

@@ -1,4 +1,5 @@
 name: "logic-app-ci"
+description: "Builds and packages an Azure Logic App project for deployment"
 
 inputs:
   logic-project:

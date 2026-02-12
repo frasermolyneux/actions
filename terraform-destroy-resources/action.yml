@@ -1,4 +1,5 @@
 name: "terraform-destroy-resources"
+description: "Destroys specific Terraform resources by target with Azure OIDC authentication"
 
 inputs:
   terraform-folder:

@@ -1,4 +1,5 @@
 name: "deploy-function-app"
+description: "Deploys a web artifact to an Azure Function App using Azure Web Apps Deploy action"
 
 inputs:
   function-app-artifact-name:
