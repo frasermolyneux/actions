@@ -1,6 +1,8 @@
 # GitHub Actions
 [![Actions Versioning](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml)
+[![Code Quality](https://github.com/frasermolyneux/actions/actions/workflows/code-quality.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/code-quality.yml)
 [![Codequality](https://github.com/frasermolyneux/actions/actions/workflows/codequality.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/codequality.yml)
+[![Copilot Setup Steps](https://github.com/frasermolyneux/actions/actions/workflows/copilot-setup-steps.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/copilot-setup-steps.yml)
 [![Dependabot Auto-Merge](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml)
 [![Devops Secure Scanning](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml)
 
