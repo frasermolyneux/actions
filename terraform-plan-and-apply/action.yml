@@ -184,50 +184,23 @@ runs:
         TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
       with:
         script: |
-          const workspace = process.env.TF_WORKSPACE ? ` (${process.env.TF_WORKSPACE})` : '';
-          const marker = `<!-- terraform-pr-comment: plan-and-apply${workspace} -->`;
+          const fmt = require('${{ github.action_path }}/../terraform-pr-comment/format.js');
+          const workspace = process.env.TF_WORKSPACE || '';
+          const marker = `<!-- terraform-pr-comment: plan-and-apply${workspace ? ` (${workspace})` : ''} -->`;
 
-          let body = marker + '\n';
-          body += `### Terraform Plan Results${workspace}\n\n`;
-
-          const planOutcome = process.env.PLAN_OUTCOME;
-          if (planOutcome === 'success' || planOutcome === 'failure') {
-            const planIcon = process.env.PLAN_EXITCODE === '0' ? '✅' : '❌';
-            const planOutput = (process.env.PLAN_STDOUT || '') + (process.env.PLAN_STDERR || '');
-            body += `#### ${planIcon} Plan\n\n`;
-            if (planOutput.trim()) {
-              let trimmed = planOutput.trim();
-              if (trimmed.length > 60000) {
-                trimmed = trimmed.substring(trimmed.length - 60000);
-                trimmed = '... (truncated)\n' + trimmed;
-              }
-              body += `<details><summary>Output</summary>\n\n\`\`\`hcl\n${trimmed}\n\`\`\`\n\n</details>\n\n`;
-            }
-          }
-
-          const { data: comments } = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-            per_page: 100,
+          const body = fmt.buildComment({
+            marker,
+            title: '🏗️ Terraform Plan & Apply',
+            workspace,
+            plan: {
+              stdout: process.env.PLAN_STDOUT,
+              stderr: process.env.PLAN_STDERR,
+              exitcode: process.env.PLAN_EXITCODE,
+              outcome: process.env.PLAN_OUTCOME,
+            },
           });
 
-          const existing = comments.find(c => c.body && c.body.includes(marker));
-          if (existing) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: existing.id,
-              body,
-            });
-          } else {
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
-            });
-          }
+          await fmt.postComment(github, context, marker, body);
 
     - name: Terraform Apply
       if: steps.plan.outputs.exitcode == '0'
