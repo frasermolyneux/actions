@@ -106,20 +106,6 @@ function buildResourceTable(resources) {
 }
 
 /**
- * Build a collapsible section with raw output.
- */
-function buildCollapsibleOutput(title, output, lang) {
-  if (!output || !output.trim()) return '';
-  let trimmed = output.trim();
-  if (trimmed.length > 55000) {
-    trimmed = trimmed.substring(trimmed.length - 55000);
-    trimmed = '... (truncated)\n' + trimmed;
-  }
-  const cleaned = stripAnsi(trimmed);
-  return `<details><summary>${title}</summary>\n\n\`\`\`${lang || ''}\n${cleaned}\n\`\`\`\n\n</details>\n\n`;
-}
-
-/**
  * Parse deprecation warnings from terraform output (stdout + stderr).
  * Terraform emits warnings like:
  *   Warning: Deprecated Resource
@@ -218,7 +204,7 @@ function buildComment(opts) {
     body += `**${icon} Validate** — ${opts.validate.exitcode === '0' ? 'Passed' : 'Failed'}\n\n`;
     const valOutput = [(opts.validate.stdout || ''), (opts.validate.stderr || '')].filter(s => s).join('\n');
     if (opts.validate.exitcode !== '0' && valOutput.trim()) {
-      body += buildCollapsibleOutput('Validation Output', valOutput, '');
+      body += '> ❌ Validation failed. Check the workflow logs for details.\n\n';
     }
   }
 
@@ -247,10 +233,8 @@ function buildComment(opts) {
       body += buildSummaryTable(summary);
       body += buildResourceTable(resources);
     } else {
-      body += `**${icon} Plan** — Failed\n\n`;
+      body += `**${icon} Plan** — Failed. Check the workflow logs for details.\n\n`;
     }
-
-    body += buildCollapsibleOutput('Full Plan Output', planOutput, 'hcl');
 
     // Deprecation warnings (parsed from both stdout and stderr)
     const deprecations = parseDeprecations(planOutput);
@@ -272,9 +256,8 @@ function buildComment(opts) {
   if (opts.apply && (opts.apply.outcome === 'success' || opts.apply.outcome === 'failure')) {
     const icon = opts.apply.exitcode === '0' ? '✅' : '❌';
     body += `**${icon} Apply** — ${opts.apply.exitcode === '0' ? 'Succeeded' : 'Failed'}\n\n`;
-    const applyOutput = [(opts.apply.stdout || ''), (opts.apply.stderr || '')].filter(s => s).join('\n');
-    if (applyOutput.trim()) {
-      body += buildCollapsibleOutput('Apply Output', applyOutput, '');
+    if (opts.apply.exitcode !== '0') {
+      body += '> ❌ Apply failed. Check the workflow logs for details.\n\n';
     }
   }
 
@@ -317,4 +300,4 @@ async function postComment(github, context, marker, body) {
   });
 }
 
-module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, parseDeprecations, buildSummaryTable, buildResourceTable, buildCollapsibleOutput, buildDeprecationSection, buildComment, postComment, deriveEnvironment };
+module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, parseDeprecations, buildSummaryTable, buildResourceTable, buildDeprecationSection, buildComment, postComment, deriveEnvironment };
