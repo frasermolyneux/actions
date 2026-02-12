@@ -120,6 +120,68 @@ function buildCollapsibleOutput(title, output, lang) {
 }
 
 /**
+ * Parse deprecation warnings from terraform output (stdout + stderr).
+ * Terraform emits warnings like:
+ *   Warning: Deprecated Resource
+ *     on main.tf line 5, in resource "azurerm_xxx" "example":
+ *   The azurerm_xxx resource is deprecated...
+ *
+ *   Warning: Argument is deprecated
+ *     with azurerm_resource_group.rg,
+ *     on main.tf line 2:
+ *   Use "new_arg" instead.
+ *
+ * Returns an array of { title, detail } objects.
+ */
+function parseDeprecations(output) {
+  if (!output) return [];
+  const cleaned = stripAnsi(output);
+  const deprecations = [];
+
+  // Split on "Warning:" boundaries, keeping multi-line blocks together.
+  // Terraform warnings are separated by blank lines and start with "Warning:".
+  const blocks = cleaned.split(/\n(?=Warning:)/g);
+  for (const block of blocks) {
+    const match = block.match(/^Warning:\s*(.+)/);
+    if (!match) continue;
+    const title = match[1].trim();
+    // Only capture deprecation-related warnings based on the warning title
+    const titleLower = title.toLowerCase();
+    if (!titleLower.includes('deprecated') && !titleLower.includes('deprecation')) continue;
+
+    // Extract the detail lines (everything after the first line)
+    const lines = block.split('\n').slice(1);
+    const detail = lines
+      .map(l => l.trim())
+      .filter(l => l.length > 0)
+      .join(' ');
+
+    deprecations.push({ title, detail });
+  }
+
+  return deprecations;
+}
+
+/**
+ * Build a deprecation warnings section for the PR comment.
+ */
+function buildDeprecationSection(deprecations) {
+  if (!deprecations || deprecations.length === 0) return '';
+
+  let section = `> 🚧 **${deprecations.length} Deprecation Warning${deprecations.length !== 1 ? 's' : ''}** — These should be addressed before the next major provider upgrade.\n\n`;
+  section += `<details><summary>⚠️ Deprecation Details</summary>\n\n`;
+  section += '| Warning | Details |\n';
+  section += '|:--|:--|\n';
+  for (const d of deprecations) {
+    const escapedDetail = d.detail.replace(/\|/g, '\\|');
+    const escapedTitle = d.title.replace(/\|/g, '\\|');
+    section += `| ${escapedTitle} | ${escapedDetail || '—'} |\n`;
+  }
+  section += '\n</details>\n\n';
+  return section;
+}
+
+/**
  * Derive environment name from a var-file path.
  * e.g. "tfvars/dev.tfvars" → "dev", "tfvars/prd.tfvars" → "prd"
  */
@@ -154,7 +216,7 @@ function buildComment(opts) {
   if (opts.validate && (opts.validate.outcome === 'success' || opts.validate.outcome === 'failure')) {
     const icon = opts.validate.exitcode === '0' ? '✅' : '❌';
     body += `**${icon} Validate** — ${opts.validate.exitcode === '0' ? 'Passed' : 'Failed'}\n\n`;
-    const valOutput = (opts.validate.stdout || '') + (opts.validate.stderr || '');
+    const valOutput = [(opts.validate.stdout || ''), (opts.validate.stderr || '')].filter(s => s).join('\n');
     if (opts.validate.exitcode !== '0' && valOutput.trim()) {
       body += buildCollapsibleOutput('Validation Output', valOutput, '');
     }
@@ -163,7 +225,7 @@ function buildComment(opts) {
   // Plan section
   if (opts.plan && (opts.plan.outcome === 'success' || opts.plan.outcome === 'failure')) {
     const icon = opts.plan.exitcode === '0' ? '✅' : '❌';
-    const planOutput = (opts.plan.stdout || '') + (opts.plan.stderr || '');
+    const planOutput = [(opts.plan.stdout || ''), (opts.plan.stderr || '')].filter(s => s).join('\n');
 
     if (opts.plan.exitcode === '0') {
       const summary = parsePlanSummary(planOutput);
@@ -189,13 +251,28 @@ function buildComment(opts) {
     }
 
     body += buildCollapsibleOutput('Full Plan Output', planOutput, 'hcl');
+
+    // Deprecation warnings (parsed from both stdout and stderr)
+    const deprecations = parseDeprecations(planOutput);
+    if (deprecations.length > 0) {
+      body += buildDeprecationSection(deprecations);
+    }
+  }
+
+  // Also check validate output for deprecation warnings
+  if (opts.validate && (opts.validate.outcome === 'success' || opts.validate.outcome === 'failure')) {
+    const valOutput = [(opts.validate.stdout || ''), (opts.validate.stderr || '')].filter(s => s).join('\n');
+    const valDeprecations = parseDeprecations(valOutput);
+    if (valDeprecations.length > 0 && !(opts.plan && (opts.plan.outcome === 'success' || opts.plan.outcome === 'failure'))) {
+      body += buildDeprecationSection(valDeprecations);
+    }
   }
 
   // Apply section (for plan-and-apply)
   if (opts.apply && (opts.apply.outcome === 'success' || opts.apply.outcome === 'failure')) {
     const icon = opts.apply.exitcode === '0' ? '✅' : '❌';
     body += `**${icon} Apply** — ${opts.apply.exitcode === '0' ? 'Succeeded' : 'Failed'}\n\n`;
-    const applyOutput = (opts.apply.stdout || '') + (opts.apply.stderr || '');
+    const applyOutput = [(opts.apply.stdout || ''), (opts.apply.stderr || '')].filter(s => s).join('\n');
     if (applyOutput.trim()) {
       body += buildCollapsibleOutput('Apply Output', applyOutput, '');
     }
@@ -240,4 +317,4 @@ async function postComment(github, context, marker, body) {
   });
 }
 
-module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, buildSummaryTable, buildResourceTable, buildCollapsibleOutput, buildComment, postComment, deriveEnvironment };
+module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, parseDeprecations, buildSummaryTable, buildResourceTable, buildCollapsibleOutput, buildDeprecationSection, buildComment, postComment, deriveEnvironment };
