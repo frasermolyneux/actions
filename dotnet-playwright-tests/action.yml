@@ -1,0 +1,77 @@
+name: "dotnet-playwright-tests"
+description: "Installs Playwright Chromium and runs .NET integration tests filtered by FullyQualifiedName~IntegrationTests"
+
+inputs:
+  test-project:
+    description: "The integration test project containing Playwright tests (e.g. MX.GeoLocation.Web.IntegrationTests)"
+    required: true
+  src-folder:
+    description: "The folder containing the .NET projects"
+    required: false
+    default: "src"
+  dotnet-version:
+    description: "The version(s) of .NET to use (only needed when perform-build is true)"
+    required: false
+    default: "9.0.x"
+  target-framework:
+    description: "Target framework moniker for locating the Playwright install script"
+    required: false
+    default: "net9.0"
+  perform-checkout:
+    description: "Set to false if the repository has already been checked out"
+    required: false
+    default: "false"
+  perform-build:
+    description: "Set to true to restore and build the solution before testing (use when running in a separate job)"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Checkout repository
+      if: inputs.perform-checkout == 'true'
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET SDKs
+      if: inputs.perform-build == 'true'
+      uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Setup Package Cache
+      if: inputs.perform-build == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-
+
+    - name: Restore Dependencies
+      if: inputs.perform-build == 'true'
+      shell: bash
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet restore
+
+    - name: Build
+      if: inputs.perform-build == 'true'
+      shell: bash
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet build --configuration Release --no-restore
+
+    - name: Install Playwright browsers
+      shell: bash
+      run: |
+        pwsh ${{ inputs.src-folder }}/${{ inputs.test-project }}/bin/Release/${{ inputs.target-framework }}/playwright.ps1 install --with-deps chromium
+
+    - name: Run Playwright integration tests
+      shell: bash
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName~IntegrationTests
