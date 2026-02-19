@@ -36,7 +36,7 @@ runs:
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Download artifact from build job
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: ${{ inputs.function-app-artifact-name }}
         path: artifacts/${{ inputs.function-app-artifact-name }}

@@ -38,14 +38,14 @@ runs:
 
     - name: Download artifact from build job (current run)
       if: inputs.artifact-run-id == ''
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.artifact-output-path }}
 
     - name: Download artifact from specified run
       if: inputs.artifact-run-id != ''
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v6
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.artifact-output-path }}
