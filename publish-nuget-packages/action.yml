@@ -54,12 +54,14 @@ runs:
 
     - name: Publish to NuGet.org
       shell: bash
+      env:
+        NUGET_API_KEY: ${{ inputs.NUGET_API_KEY }}
       run: |
         set -euo pipefail
         cd "${{ inputs.artifact-output-path }}"
 
         NUGET_LOG=/tmp/nuget-push.log
-        dotnet nuget push "**/*.nupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate | tee "$NUGET_LOG"
+        dotnet nuget push "**/*.nupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "$NUGET_API_KEY" --skip-duplicate | tee "$NUGET_LOG"
 
         if grep -q "Successfully published" "$NUGET_LOG"; then
           PUBLISH_SYMBOLS=true
@@ -71,7 +73,7 @@ runs:
 
         if [[ "$PUBLISH_SYMBOLS" == "true" ]]; then
           if find . -type f -name '*.snupkg' | grep -q .; then
-            dotnet nuget push "**/*.snupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "${{ inputs.NUGET_API_KEY }}" --skip-duplicate
+            dotnet nuget push "**/*.snupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "$NUGET_API_KEY" --skip-duplicate
           else
             echo 'No symbol packages detected; skipping symbol publish.'
           fi
