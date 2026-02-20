@@ -72,7 +72,7 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
-        dotnet test --no-build --verbosity normal --filter FullyQualifiedName~IntegrationTests
+        dotnet test --no-build --verbosity normal --filter FullyQualifiedName~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
       env:
         api_base_url: ${{ inputs.api-base-url }}
         api_key: ${{ inputs.api-key }}
@@ -80,3 +80,11 @@ runs:
         AZURE_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         AZURE_CLIENT_SECRET: ${{ inputs.AZURE_CLIENT_SECRET }}
         AZURE_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: test-results
+        path: ${{ inputs.src-folder }}/TestResults/**/*.trx
+        retention-days: 7

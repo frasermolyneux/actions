@@ -74,7 +74,15 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
-        dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests
+        dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v6
+      with:
+        name: test-results
+        path: ${{ inputs.src-folder }}/TestResults/**/*.trx
+        retention-days: 7
 
     - name: Upload NuGet Packages
       if: inputs.skip-nuget-artifact-upload != 'true'
