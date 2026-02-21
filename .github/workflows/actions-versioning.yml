@@ -53,6 +53,7 @@ jobs:
             terraform-plan
             terraform-plan-and-apply
             terraform-plan-readonly
+            terraform-state-check
             terraform-state-rm
           )
 

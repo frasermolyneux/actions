@@ -1,0 +1,147 @@
+name: "terraform-state-check"
+description: "Initialises Terraform and checks whether the remote state contains any resources. Outputs a boolean flag that callers can use to force a plan-and-apply when an environment has been destroyed."
+
+inputs:
+  terraform-folder:
+    description: "The folder containing the Terraform projects"
+    required: true
+    default: "terraform"
+    type: string
+  terraform-var-file:
+    description: "The var-file used during init (required by backends that embed variable defaults)"
+    required: true
+    default: "tfvars/dev.tfvars"
+    type: string
+  terraform-backend-file:
+    description: "The backend-file to be used for Terraform init"
+    required: false
+    type: string
+  backend-subscription-id:
+    description: "The backend subscription_id if the terraform-backend-file is not being used"
+    required: false
+    type: string
+  backend-resource-group-name:
+    description: "The backend resource_group_name if the terraform-backend-file is not being used"
+    required: false
+    type: string
+  backend-storage-account-name:
+    description: "The backend storage_account_name if the terraform-backend-file is not being used"
+    required: false
+    type: string
+  backend-container-name:
+    description: "The backend container_name if the terraform-backend-file is not being used"
+    required: false
+    default: ""
+    type: string
+  backend-key:
+    description: "The backend key if the terraform-backend-file is not being used"
+    required: false
+    default: ""
+    type: string
+  backend-tags:
+    description: "The backend tags to be applied to the storage account"
+    required: false
+    type: string
+    default: ""
+  AZURE_CLIENT_ID:
+    description: "The azure client/application ID configured for federated access"
+    required: true
+    type: string
+  AZURE_TENANT_ID:
+    description: "The target Azure tenant"
+    required: true
+    type: string
+  AZURE_SUBSCRIPTION_ID:
+    description: "The target Azure subscription"
+    required: true
+    type: string
+  perform-checkout:
+    description: "Set to false if the repository has already been checked out with fetch-depth 0"
+    required: false
+    default: "true"
+
+outputs:
+  has_resources:
+    description: "true if the Terraform state contains at least one resource, false otherwise"
+    value: ${{ steps.check.outputs.has_resources }}
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: Checkout repository
+      if: inputs.perform-checkout == 'true'
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_wrapper: true
+
+    - name: Terraform Init
+      shell: pwsh
+      run: |
+        cd ${{ inputs.terraform-folder }}
+
+        $params = @("init")
+
+        if ("${{ inputs.terraform-backend-file }}" -ne "") {
+          $params += "-backend-config=${{ inputs.terraform-backend-file }}"
+        }
+
+        if ("${{ inputs.backend-subscription-id }}" -ne "") {
+          $params += "-backend-config=subscription_id=${{ inputs.backend-subscription-id }}"
+        }
+
+        if ("${{ inputs.backend-resource-group-name }}" -ne "") {
+          $params += "-backend-config=resource_group_name=${{ inputs.backend-resource-group-name }}"
+        }
+
+        if ("${{ inputs.backend-storage-account-name }}" -ne "") {
+          $params += "-backend-config=storage_account_name=${{ inputs.backend-storage-account-name }}"
+        }
+
+        if ("${{ inputs.backend-container-name }}" -ne "") {
+          $params += "-backend-config=container_name=${{ inputs.backend-container-name }}"
+        }
+
+        if ("${{ inputs.backend-key }}" -ne "") {
+          $params += "-backend-config=key=${{ inputs.backend-key }}"
+        }
+
+        if ("${{ inputs.backend-tags }}" -ne "") {
+          $params += "-backend-config=tags=${{ inputs.backend-tags }}"
+        }
+
+        $params += "-var-file=${{ inputs.terraform-var-file }}"
+
+        terraform $params
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
+
+    - name: Check state for resources
+      id: check
+      shell: bash
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        RESOURCES="$(terraform state list 2>/dev/null || true)"
+        if [ -z "$RESOURCES" ]; then
+          echo "No resources found in Terraform state"
+          echo "has_resources=false" >> "$GITHUB_OUTPUT"
+        else
+          COUNT=$(echo "$RESOURCES" | wc -l)
+          echo "Found $COUNT resource(s) in Terraform state"
+          echo "has_resources=true" >> "$GITHUB_OUTPUT"
+        fi
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
