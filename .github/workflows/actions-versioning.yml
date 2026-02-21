@@ -38,6 +38,7 @@ jobs:
             deploy-sql-database
             dotnet-ci
             dotnet-func-ci
+            dotnet-playwright-tests
             dotnet-web-ci
             dotnet-sdk-setup
             logic-app-ci
@@ -48,6 +49,7 @@ jobs:
             terraform-destroy
             terraform-destroy-resources
             terraform-import
+            terraform-output
             terraform-plan
             terraform-plan-and-apply
             terraform-plan-readonly
