@@ -1,0 +1,145 @@
+name: "detect-changes"
+description: "Detects which file paths changed using native git diff and outputs boolean flags per filter. Schedule and workflow_dispatch events force all outputs to true."
+
+inputs:
+  filters:
+    description: "Newline-separated name:glob pairs (e.g. src:src/** or terraform:terraform/**). Multiple globs per name can be comma-separated."
+    required: true
+  perform-checkout:
+    description: "Set to false if the repository has already been checked out with fetch-depth 0"
+    required: false
+    default: "true"
+
+outputs:
+  force_all:
+    description: "true when the event is schedule or workflow_dispatch (all filter outputs are also forced to true)"
+    value: ${{ steps.detect.outputs.force_all }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repository
+      if: inputs.perform-checkout == 'true'
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+    - name: Detect changes
+      id: detect
+      shell: bash
+      env:
+        INPUT_FILTERS: ${{ inputs.filters }}
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_BEFORE: ${{ github.event.before }}
+        GITHUB_SHA_REF: ${{ github.sha }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        set -euo pipefail
+
+        # Parse filter names from input
+        declare -A FILTER_GLOBS
+        FILTER_NAMES=()
+        while IFS= read -r line; do
+          line="$(echo "$line" | xargs)"
+          [[ -z "$line" ]] && continue
+          name="${line%%:*}"
+          globs="${line#*:}"
+          FILTER_NAMES+=("$name")
+          FILTER_GLOBS["$name"]="$globs"
+        done <<< "$INPUT_FILTERS"
+
+        # For schedule/workflow_dispatch, force all outputs to true
+        if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
+          echo "Event is $EVENT_NAME — forcing all outputs to true"
+          echo "force_all=true" >> "$GITHUB_OUTPUT"
+          for name in "${FILTER_NAMES[@]}"; do
+            echo "${name}=true" >> "$GITHUB_OUTPUT"
+            echo "  $name=true (forced)"
+          done
+          exit 0
+        fi
+
+        echo "force_all=false" >> "$GITHUB_OUTPUT"
+
+        # Determine diff range
+        if [[ "$EVENT_NAME" == "pull_request" || "$EVENT_NAME" == "pull_request_target" ]]; then
+          BASE="$PR_BASE_SHA"
+          HEAD="$PR_HEAD_SHA"
+          echo "PR event: diffing $BASE...$HEAD"
+        elif [[ "$EVENT_NAME" == "push" ]]; then
+          BASE="$EVENT_BEFORE"
+          HEAD="$GITHUB_SHA_REF"
+          # Handle initial commit (all zeros)
+          if [[ "$BASE" == "0000000000000000000000000000000000000000" ]]; then
+            BASE="$(git rev-list --max-parents=0 HEAD)"
+          fi
+          echo "Push event: diffing $BASE...$HEAD"
+        else
+          echo "Unrecognised event '$EVENT_NAME' — forcing all outputs to true"
+          echo "force_all=true" >> "$GITHUB_OUTPUT"
+          for name in "${FILTER_NAMES[@]}"; do
+            echo "${name}=true" >> "$GITHUB_OUTPUT"
+          done
+          exit 0
+        fi
+
+        # Get changed files
+        CHANGED_FILES="$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || true)"
+
+        if [[ -z "$CHANGED_FILES" ]]; then
+          echo "No changed files detected"
+          for name in "${FILTER_NAMES[@]}"; do
+            echo "${name}=false" >> "$GITHUB_OUTPUT"
+            echo "  $name=false (no changes)"
+          done
+          exit 0
+        fi
+
+        echo "Changed files:"
+        echo "$CHANGED_FILES" | head -50
+        TOTAL=$(echo "$CHANGED_FILES" | wc -l)
+        if (( TOTAL > 50 )); then
+          echo "  ... and $((TOTAL - 50)) more"
+        fi
+
+        # Match each filter against changed files
+        match_glob() {
+          local file="$1"
+          local pattern="$2"
+
+          # Convert glob to regex:
+          #   ** -> matches anything including /
+          #   *  -> matches anything except /
+          #   ?  -> matches single char except /
+          local regex="$pattern"
+          regex="${regex//./\\.}"
+          regex="${regex//\*\*/__DOUBLESTAR__}"
+          regex="${regex//\*/$'[^/]*'}"
+          regex="${regex//__DOUBLESTAR__/.*}"
+          regex="${regex//\?/$'[^/]'}"
+          regex="^${regex}$"
+
+          if echo "$file" | grep -qE "$regex"; then
+            return 0
+          fi
+          return 1
+        }
+
+        for name in "${FILTER_NAMES[@]}"; do
+          matched="false"
+          IFS=',' read -ra GLOBS <<< "${FILTER_GLOBS[$name]}"
+          for glob in "${GLOBS[@]}"; do
+            glob="$(echo "$glob" | xargs)"
+            [[ -z "$glob" ]] && continue
+            while IFS= read -r file; do
+              [[ -z "$file" ]] && continue
+              if match_glob "$file" "$glob"; then
+                matched="true"
+                break 2
+              fi
+            done <<< "$CHANGED_FILES"
+          done
+          echo "${name}=${matched}" >> "$GITHUB_OUTPUT"
+          echo "  $name=$matched"
+        done

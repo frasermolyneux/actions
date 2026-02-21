@@ -32,6 +32,7 @@ jobs:
           ACTIONS=(
             bicep-lint-code
             deploy-app-service
+            detect-changes
             deploy-function-app
             deploy-logic-app
             deploy-sql-database
