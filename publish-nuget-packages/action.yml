@@ -5,10 +5,6 @@ inputs:
   artifact-name:
     description: "The name of the artifact that contains the packages"
     required: true
-  NUGET_API_KEY: 
-    description: "The NuGet API key"
-    required: true
-    type: string
   artifact-run-id:
     description: "Optional workflow run id to download artifacts from"
     required: false
@@ -54,8 +50,6 @@ runs:
 
     - name: Publish to NuGet.org
       shell: bash
-      env:
-        NUGET_API_KEY: ${{ inputs.NUGET_API_KEY }}
       run: |
         set -euo pipefail
         cd "${{ inputs.artifact-output-path }}"
