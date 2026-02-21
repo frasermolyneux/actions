@@ -80,7 +80,7 @@ runs:
       if: always()
       uses: actions/upload-artifact@v6
       with:
-        name: test-results
+        name: test-results-${{ inputs.src-folder }}
         path: ${{ inputs.src-folder }}/TestResults/**/*.trx
         retention-days: 7
 
