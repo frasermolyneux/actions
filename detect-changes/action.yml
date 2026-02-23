@@ -14,6 +14,18 @@ outputs:
   force_all:
     description: "true when the event is schedule or workflow_dispatch (all filter outputs are also forced to true)"
     value: ${{ steps.detect.outputs.force_all }}
+  src:
+    description: "true when files matching the src filter have changed"
+    value: ${{ steps.detect.outputs.src }}
+  terraform:
+    description: "true when files matching the terraform filter have changed"
+    value: ${{ steps.detect.outputs.terraform }}
+  database:
+    description: "true when files matching the database filter have changed"
+    value: ${{ steps.detect.outputs.database }}
+  modules:
+    description: "true when files matching the modules filter have changed"
+    value: ${{ steps.detect.outputs.modules }}
 
 runs:
   using: "composite"
