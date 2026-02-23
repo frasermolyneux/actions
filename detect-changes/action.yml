@@ -109,8 +109,8 @@ runs:
         fi
 
         echo "Changed files:"
-        echo "$CHANGED_FILES" | head -50
-        TOTAL=$(echo "$CHANGED_FILES" | wc -l)
+        head -50 <<< "$CHANGED_FILES"
+        TOTAL=$(wc -l <<< "$CHANGED_FILES")
         if (( TOTAL > 50 )); then
           echo "  ... and $((TOTAL - 50)) more"
         fi
