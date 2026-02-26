@@ -56,10 +56,46 @@ runs:
       shell: bash
       run: dotnet tool install -g microsoft.sqlpackage
 
-    - uses: azure/sql-action@v2.3
+    - name: Deploy DACPAC (attempt 1)
+      id: deploy-attempt-1
+      continue-on-error: true
+      uses: azure/sql-action@v2.3
       with:  
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
         build-arguments: '-c Release'
-        arguments: '${{ inputs.sql-args }}'        
+        arguments: '${{ inputs.sql-args }}'
+
+    - name: Wait before retry (attempt 1)
+      if: steps.deploy-attempt-1.outcome == 'failure'
+      shell: bash
+      run: echo "Deployment attempt 1 failed. Waiting 30s before retry..." && sleep 30
+
+    - name: Deploy DACPAC (attempt 2)
+      id: deploy-attempt-2
+      if: steps.deploy-attempt-1.outcome == 'failure'
+      continue-on-error: true
+      uses: azure/sql-action@v2.3
+      with:  
+        connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
+        path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
+        action: 'publish'
+        build-arguments: '-c Release'
+        arguments: '${{ inputs.sql-args }}'
+
+    - name: Wait before retry (attempt 2)
+      if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
+      shell: bash
+      run: echo "Deployment attempt 2 failed. Waiting 30s before retry..." && sleep 30
+
+    - name: Deploy DACPAC (attempt 3)
+      id: deploy-attempt-3
+      if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
+      uses: azure/sql-action@v2.3
+      with:  
+        connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
+        path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
+        action: 'publish'
+        build-arguments: '-c Release'
+        arguments: '${{ inputs.sql-args }}'

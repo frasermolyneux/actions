@@ -41,8 +41,38 @@ runs:
         name: ${{ inputs.web-artifact-name }}
         path: ${{ inputs.web-artifact-name }}
 
-    - name: Deploy to Azure Web App
-      id: deploy-to-webapp
+    - name: Deploy to Azure Web App (attempt 1)
+      id: deploy-attempt-1
+      continue-on-error: true
+      uses: azure/webapps-deploy@v3.0.1
+      with:
+        app-name: ${{ inputs.web-app-name }}
+        resource-group-name: ${{ inputs.resource-group-name }}
+        package: './${{ inputs.web-artifact-name }}'
+
+    - name: Wait before retry (attempt 1)
+      if: steps.deploy-attempt-1.outcome == 'failure'
+      shell: bash
+      run: echo "Deployment attempt 1 failed. Waiting 30s before retry..." && sleep 30
+
+    - name: Deploy to Azure Web App (attempt 2)
+      id: deploy-attempt-2
+      if: steps.deploy-attempt-1.outcome == 'failure'
+      continue-on-error: true
+      uses: azure/webapps-deploy@v3.0.1
+      with:
+        app-name: ${{ inputs.web-app-name }}
+        resource-group-name: ${{ inputs.resource-group-name }}
+        package: './${{ inputs.web-artifact-name }}'
+
+    - name: Wait before retry (attempt 2)
+      if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
+      shell: bash
+      run: echo "Deployment attempt 2 failed. Waiting 30s before retry..." && sleep 30
+
+    - name: Deploy to Azure Web App (attempt 3)
+      id: deploy-attempt-3
+      if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
       uses: azure/webapps-deploy@v3.0.1
       with:
         app-name: ${{ inputs.web-app-name }}

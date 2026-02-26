@@ -41,8 +41,36 @@ runs:
         name: ${{ inputs.function-app-artifact-name }}
         path: artifacts/${{ inputs.function-app-artifact-name }}
 
-    - name: Deploy to Azure Function App
-      id: deploy-to-webapp
+    - name: Deploy to Azure Function App (attempt 1)
+      id: deploy-attempt-1
+      continue-on-error: true
+      uses: azure/functions-action@v1
+      with:
+        app-name: ${{ inputs.function-app-name }}
+        package: artifacts/${{ inputs.function-app-artifact-name }}
+
+    - name: Wait before retry (attempt 1)
+      if: steps.deploy-attempt-1.outcome == 'failure'
+      shell: bash
+      run: echo "Deployment attempt 1 failed. Waiting 30s before retry..." && sleep 30
+
+    - name: Deploy to Azure Function App (attempt 2)
+      id: deploy-attempt-2
+      if: steps.deploy-attempt-1.outcome == 'failure'
+      continue-on-error: true
+      uses: azure/functions-action@v1
+      with:
+        app-name: ${{ inputs.function-app-name }}
+        package: artifacts/${{ inputs.function-app-artifact-name }}
+
+    - name: Wait before retry (attempt 2)
+      if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
+      shell: bash
+      run: echo "Deployment attempt 2 failed. Waiting 30s before retry..." && sleep 30
+
+    - name: Deploy to Azure Function App (attempt 3)
+      id: deploy-attempt-3
+      if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
       uses: azure/functions-action@v1
       with:
         app-name: ${{ inputs.function-app-name }}
