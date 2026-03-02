@@ -29,6 +29,10 @@ inputs:
     description: "Set to true to skip uploading NuGet package artifacts"
     required: false
     default: "false"
+  dotnet-workloads:
+    description: "Optional space-separated list of .NET workloads to install (e.g. 'aspire')"
+    required: false
+    default: ""
 
 outputs:
   build_version:
@@ -57,6 +61,15 @@ runs:
       uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Install .NET Workloads
+      if: inputs.dotnet-workloads != ''
+      shell: bash
+      run: |
+        for workload in ${{ inputs.dotnet-workloads }}; do
+          echo "Installing workload: $workload"
+          dotnet workload install "$workload"
+        done
 
     - name: Setup Package Cache
       uses: actions/cache@v4
