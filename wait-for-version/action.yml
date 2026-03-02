@@ -34,10 +34,22 @@ runs:
           CURRENT_VERSION=$(echo "$RESPONSE" | jq -r '.buildVersion // empty' 2>/dev/null || true)
           if [ "$CURRENT_VERSION" = "$EXPECTED_VERSION" ]; then
             echo "Version '$EXPECTED_VERSION' confirmed (attempt $i)"
+            echo "### ✅ Deployment verified" >> $GITHUB_STEP_SUMMARY
+            echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| **Expected version** | \`$EXPECTED_VERSION\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Info URL** | $INFO_URL |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Confirmed after** | $i attempt(s) |" >> $GITHUB_STEP_SUMMARY
             exit 0
           fi
           echo "Attempt $i/$MAX_ATTEMPTS: got version '$CURRENT_VERSION' - waiting ${DELAY}s..."
           sleep $DELAY
         done
+        echo "### ❌ Deployment verification failed" >> $GITHUB_STEP_SUMMARY
+        echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| **Expected version** | \`$EXPECTED_VERSION\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Last seen version** | \`$CURRENT_VERSION\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Info URL** | $INFO_URL |" >> $GITHUB_STEP_SUMMARY
         echo "::error::Expected version '$EXPECTED_VERSION' was not reported in time (last seen: '$CURRENT_VERSION')"
         exit 1
