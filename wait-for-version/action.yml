@@ -1,0 +1,43 @@
+name: "wait-for-version"
+description: "Polls an /info endpoint until it reports the expected build version"
+
+inputs:
+  info-url:
+    description: "Full URL to the /info endpoint (e.g. https://myapp.azurewebsites.net/info)"
+    required: true
+  expected-version:
+    description: "The build version to wait for (matched against the .buildVersion JSON field)"
+    required: true
+  max-attempts:
+    description: "Maximum number of polling attempts"
+    required: false
+    default: "30"
+  delay-seconds:
+    description: "Seconds to wait between polling attempts"
+    required: false
+    default: "10"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Wait for version ${{ inputs.expected-version }}
+      shell: bash
+      run: |
+        EXPECTED_VERSION="${{ inputs.expected-version }}"
+        INFO_URL="${{ inputs.info-url }}"
+        MAX_ATTEMPTS=${{ inputs.max-attempts }}
+        DELAY=${{ inputs.delay-seconds }}
+
+        echo "Waiting for $INFO_URL to report version '$EXPECTED_VERSION' (max ${MAX_ATTEMPTS} attempts, ${DELAY}s interval)..."
+        for i in $(seq 1 $MAX_ATTEMPTS); do
+          RESPONSE=$(curl -s "$INFO_URL" || true)
+          CURRENT_VERSION=$(echo "$RESPONSE" | jq -r '.buildVersion // empty' 2>/dev/null || true)
+          if [ "$CURRENT_VERSION" = "$EXPECTED_VERSION" ]; then
+            echo "Version '$EXPECTED_VERSION' confirmed (attempt $i)"
+            exit 0
+          fi
+          echo "Attempt $i/$MAX_ATTEMPTS: got version '$CURRENT_VERSION' - waiting ${DELAY}s..."
+          sleep $DELAY
+        done
+        echo "::error::Expected version '$EXPECTED_VERSION' was not reported in time (last seen: '$CURRENT_VERSION')"
+        exit 1

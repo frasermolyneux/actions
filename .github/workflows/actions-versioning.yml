@@ -55,6 +55,7 @@ jobs:
             terraform-plan-readonly
             terraform-state-check
             terraform-state-rm
+            wait-for-version
           )
 
           BEFORE="${{ github.event.before }}"
