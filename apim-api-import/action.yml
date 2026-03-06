@@ -1,0 +1,100 @@
+name: "apim-api-import"
+description: "Imports an OpenAPI specification into Azure API Management, then registers the API under a product"
+
+inputs:
+  api-id:
+    description: "APIM API identifier (e.g. repository-api-v1)"
+    required: true
+  api-display-name:
+    description: "Human-readable display name shown in the APIM portal"
+    required: true
+  api-path:
+    description: "URL path segment in APIM (e.g. repository)"
+    required: true
+  api-version:
+    description: "API version label used for segment versioning (e.g. v1, v1.1)"
+    required: true
+  api-version-set-id:
+    description: "APIM version set resource ID (from Terraform output)"
+    required: true
+  specification-url:
+    description: "Full URL to the OpenAPI specification JSON endpoint"
+    required: true
+  service-url:
+    description: "Backend service URL that APIM will proxy requests to"
+    required: true
+  apim-name:
+    description: "Azure API Management instance name"
+    required: true
+  apim-resource-group:
+    description: "Resource group containing the APIM instance"
+    required: true
+  product-id:
+    description: "APIM product ID to register the API under"
+    required: true
+  subscription-required:
+    description: "Whether an APIM subscription key is required to call the API"
+    required: false
+    default: "false"
+  specification-format:
+    description: "Format of the OpenAPI specification"
+    required: false
+    default: "OpenApiJson"
+  info-url:
+    description: "Full URL to the /info endpoint for build version verification"
+    required: true
+  expected-version:
+    description: "Build version to verify before importing the API specification"
+    required: true
+  AZURE_CLIENT_ID:
+    description: "The azure client/application ID configured for federated access"
+    required: true
+  AZURE_TENANT_ID:
+    description: "The target Azure tenant"
+    required: true
+  AZURE_SUBSCRIPTION_ID:
+    description: "The target Azure subscription"
+    required: true
+
+runs:
+  using: "composite"
+
+  steps:
+    - name: 'Az CLI Login'
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Wait for version ${{ inputs.expected-version }}
+      uses: frasermolyneux/actions/wait-for-version@wait-for-version/v1.0
+      with:
+        info-url: ${{ inputs.info-url }}
+        expected-version: ${{ inputs.expected-version }}
+
+    - name: Import OpenAPI spec for ${{ inputs.api-id }}
+      shell: bash
+      run: |
+        az apim api import \
+          --resource-group "${{ inputs.apim-resource-group }}" \
+          --service-name "${{ inputs.apim-name }}" \
+          --api-id "${{ inputs.api-id }}" \
+          --display-name "${{ inputs.api-display-name }}" \
+          --path "${{ inputs.api-path }}" \
+          --api-version "${{ inputs.api-version }}" \
+          --api-version-set-id "${{ inputs.api-version-set-id }}" \
+          --protocols https \
+          --specification-format "${{ inputs.specification-format }}" \
+          --specification-url "${{ inputs.specification-url }}" \
+          --service-url "${{ inputs.service-url }}" \
+          --subscription-required "${{ inputs.subscription-required }}"
+
+    - name: Add ${{ inputs.api-id }} to product
+      shell: bash
+      run: |
+        az apim product api add \
+          --resource-group "${{ inputs.apim-resource-group }}" \
+          --service-name "${{ inputs.apim-name }}" \
+          --product-id "${{ inputs.product-id }}" \
+          --api-id "${{ inputs.api-id }}" || true

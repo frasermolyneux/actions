@@ -30,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           ACTIONS=(
+            apim-api-import
             bicep-lint-code
             deploy-app-service
             detect-changes
