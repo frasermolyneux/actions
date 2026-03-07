@@ -41,6 +41,35 @@ runs:
         name: ${{ inputs.function-app-artifact-name }}
         path: artifacts/${{ inputs.function-app-artifact-name }}
 
+    - name: Check SCM endpoint health
+      shell: bash
+      run: |
+        SCM_URL="https://${{ inputs.function-app-name }}.scm.azurewebsites.net/"
+        MAX_RETRIES=5
+        WAIT_SECONDS=30
+
+        for i in $(seq 1 $MAX_RETRIES); do
+          echo "Checking SCM endpoint health (attempt $i/$MAX_RETRIES)..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$SCM_URL" || echo "000")
+          echo "SCM endpoint returned HTTP $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" != "503" ] && [ "$HTTP_STATUS" != "000" ]; then
+            echo "SCM endpoint is healthy (HTTP $HTTP_STATUS). Proceeding with deployment."
+            exit 0
+          fi
+
+          echo "SCM endpoint is unavailable (HTTP $HTTP_STATUS). Restarting function app..."
+          az functionapp restart --name "${{ inputs.function-app-name }}" --resource-group "${{ inputs.function-app-resource-group }}"
+
+          if [ "$i" -lt "$MAX_RETRIES" ]; then
+            echo "Waiting ${WAIT_SECONDS}s for SCM to recover..."
+            sleep $WAIT_SECONDS
+          fi
+        done
+
+        echo "::error::SCM endpoint remained unavailable after $MAX_RETRIES restart attempts. Failing deployment."
+        exit 1
+
     - name: Deploy to Azure Function App (attempt 1)
       id: deploy-attempt-1
       continue-on-error: true
