@@ -64,6 +64,12 @@ outputs:
   has_resources:
     description: "true if the Terraform state contains at least one resource, false otherwise"
     value: ${{ steps.check.outputs.has_resources }}
+  has_outputs:
+    description: "true if the Terraform state contains at least one output value, false otherwise"
+    value: ${{ steps.check-outputs.outputs.has_outputs }}
+  state_tainted:
+    description: "true if the Terraform state is missing resources or outputs (requires apply to fix), false when intact"
+    value: ${{ steps.check-outputs.outputs.state_tainted }}
 
 runs:
   using: "composite"
@@ -138,6 +144,36 @@ runs:
           COUNT=$(echo "$RESOURCES" | wc -l)
           echo "Found $COUNT resource(s) in Terraform state"
           echo "has_resources=true" >> "$GITHUB_OUTPUT"
+        fi
+      env:
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
+
+    - name: Check state for outputs
+      id: check-outputs
+      shell: bash
+      run: |
+        cd ${{ inputs.terraform-folder }}
+        OUTPUT_JSON=$(terraform output -json 2>/dev/null || echo '{}')
+        OUTPUT_COUNT=$(echo "$OUTPUT_JSON" | jq 'length')
+        if [ "$OUTPUT_COUNT" -eq 0 ]; then
+          echo "No outputs found in Terraform state"
+          echo "has_outputs=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "Found $OUTPUT_COUNT output(s) in Terraform state"
+          echo "has_outputs=true" >> "$GITHUB_OUTPUT"
+        fi
+
+        # Composite: environment is ready only when both resources and outputs exist
+        if [ "${{ steps.check.outputs.has_resources }}" == "true" ] && [ "$OUTPUT_COUNT" -gt 0 ]; then
+          echo "Environment state is intact (has resources and outputs)"
+          echo "state_tainted=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "Environment state is tainted (missing resources or outputs, apply required)"
+          echo "state_tainted=true" >> "$GITHUB_OUTPUT"
         fi
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
