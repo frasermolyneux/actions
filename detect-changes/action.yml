@@ -26,6 +26,9 @@ outputs:
   modules:
     description: "true when files matching the modules filter have changed"
     value: ${{ steps.detect.outputs.modules }}
+  playwright:
+    description: "true when files matching the playwright filter have changed"
+    value: ${{ steps.detect.outputs.playwright }}
 
 runs:
   using: "composite"
