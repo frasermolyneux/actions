@@ -81,13 +81,13 @@ runs:
         fetch-depth: 0
 
     - name: Download Terraform Plan Artifact
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v7
       with:
         name: ${{ inputs.plan-artifact-name }}
         path: ${{ inputs.terraform-folder }}
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      uses: hashicorp/setup-terraform@v4
       with:
         terraform_wrapper: false
 
