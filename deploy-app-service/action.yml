@@ -41,25 +41,37 @@ runs:
         name: ${{ inputs.web-artifact-name }}
         path: ${{ inputs.web-artifact-name }}
 
-    - name: Check SCM endpoint health
+    - name: Check SCM deployment API health
       shell: bash
       run: |
-        SCM_URL="https://${{ inputs.web-app-name }}.scm.azurewebsites.net/"
+        WEB_APP_NAME="${{ inputs.web-app-name }}"
+        RESOURCE_GROUP="${{ inputs.resource-group-name }}"
+        SCM_URL="https://${WEB_APP_NAME}.scm.azurewebsites.net/api/deployments"
         MAX_RETRIES=5
         WAIT_SECONDS=30
 
-        for i in $(seq 1 $MAX_RETRIES); do
-          echo "Checking SCM endpoint health (attempt $i/$MAX_RETRIES)..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$SCM_URL" || echo "000")
-          echo "SCM endpoint returned HTTP $HTTP_STATUS"
+        # Get publishing credentials for authenticated SCM health check
+        echo "Retrieving publishing credentials for authenticated SCM health check..."
+        PUBLISH_USER=$(az webapp deployment list-publishing-credentials \
+          --name "$WEB_APP_NAME" --resource-group "$RESOURCE_GROUP" \
+          --query "publishingUserName" -o tsv)
+        PUBLISH_PASS=$(az webapp deployment list-publishing-credentials \
+          --name "$WEB_APP_NAME" --resource-group "$RESOURCE_GROUP" \
+          --query "publishingPassword" -o tsv)
 
-          if [ "$HTTP_STATUS" != "503" ] && [ "$HTTP_STATUS" != "000" ]; then
-            echo "SCM endpoint is healthy (HTTP $HTTP_STATUS). Proceeding with deployment."
+        for i in $(seq 1 $MAX_RETRIES); do
+          echo "Checking SCM deployment API health (attempt $i/$MAX_RETRIES)..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
+            -u "$PUBLISH_USER:$PUBLISH_PASS" "$SCM_URL" || echo "000")
+          echo "SCM deployment API returned HTTP $HTTP_STATUS"
+
+          if (( HTTP_STATUS >= 200 && HTTP_STATUS < 400 )); then
+            echo "SCM deployment API is healthy (HTTP $HTTP_STATUS). Proceeding with deployment."
             exit 0
           fi
 
-          echo "SCM endpoint is unavailable (HTTP $HTTP_STATUS). Restarting web app..."
-          az webapp restart --name "${{ inputs.web-app-name }}" --resource-group "${{ inputs.resource-group-name }}"
+          echo "SCM deployment API is unavailable (HTTP $HTTP_STATUS). Restarting web app..."
+          az webapp restart --name "$WEB_APP_NAME" --resource-group "$RESOURCE_GROUP"
 
           if [ "$i" -lt "$MAX_RETRIES" ]; then
             echo "Waiting ${WAIT_SECONDS}s for SCM to recover..."
@@ -67,7 +79,7 @@ runs:
           fi
         done
 
-        echo "::error::SCM endpoint remained unavailable after $MAX_RETRIES restart attempts. Failing deployment."
+        echo "::error::SCM deployment API remained unavailable after $MAX_RETRIES restart attempts. Failing deployment."
         exit 1
 
     - name: Deploy to Azure Web App (attempt 1)
@@ -79,10 +91,14 @@ runs:
         resource-group-name: ${{ inputs.resource-group-name }}
         package: './${{ inputs.web-artifact-name }}'
 
-    - name: Wait before retry (attempt 1)
+    - name: Restart app service after failed deployment (attempt 1)
       if: steps.deploy-attempt-1.outcome == 'failure'
       shell: bash
-      run: echo "Deployment attempt 1 failed. Waiting 30s before retry..." && sleep 30
+      run: |
+        echo "Deployment attempt 1 failed. Restarting app service to recover from potential 503..."
+        az webapp restart --name "${{ inputs.web-app-name }}" --resource-group "${{ inputs.resource-group-name }}"
+        echo "Waiting 60s for app service to fully restart..."
+        sleep 60
 
     - name: Deploy to Azure Web App (attempt 2)
       id: deploy-attempt-2
@@ -94,10 +110,14 @@ runs:
         resource-group-name: ${{ inputs.resource-group-name }}
         package: './${{ inputs.web-artifact-name }}'
 
-    - name: Wait before retry (attempt 2)
+    - name: Restart app service after failed deployment (attempt 2)
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
       shell: bash
-      run: echo "Deployment attempt 2 failed. Waiting 30s before retry..." && sleep 30
+      run: |
+        echo "Deployment attempt 2 failed. Restarting app service to recover from potential 503..."
+        az webapp restart --name "${{ inputs.web-app-name }}" --resource-group "${{ inputs.resource-group-name }}"
+        echo "Waiting 60s for app service to fully restart..."
+        sleep 60
 
     - name: Deploy to Azure Web App (attempt 3)
       id: deploy-attempt-3
