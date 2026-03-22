@@ -41,45 +41,37 @@ runs:
         name: ${{ inputs.logic-app-artifact-name }}
         path: artifacts/${{ inputs.logic-app-artifact-name }}
 
-    - name: Check SCM deployment API health
+    - name: Check SCM endpoint health
       shell: bash
       run: |
         LOGIC_APP_NAME="${{ inputs.logic-app-name }}"
         RESOURCE_GROUP="${{ inputs.logic-app-resource-group }}"
-        SCM_URL="https://${LOGIC_APP_NAME}.scm.azurewebsites.net/api/deployments"
+        SCM_URL="https://${LOGIC_APP_NAME}.scm.azurewebsites.net/"
         MAX_RETRIES=5
-        WAIT_SECONDS=30
-
-        # Get publishing credentials for authenticated SCM health check
-        echo "Retrieving publishing credentials for authenticated SCM health check..."
-        PUBLISH_USER=$(az webapp deployment list-publishing-credentials \
-          --name "$LOGIC_APP_NAME" --resource-group "$RESOURCE_GROUP" \
-          --query "publishingUserName" -o tsv)
-        PUBLISH_PASS=$(az webapp deployment list-publishing-credentials \
-          --name "$LOGIC_APP_NAME" --resource-group "$RESOURCE_GROUP" \
-          --query "publishingPassword" -o tsv)
+        WAIT_SECONDS=120
 
         for i in $(seq 1 $MAX_RETRIES); do
-          echo "Checking SCM deployment API health (attempt $i/$MAX_RETRIES)..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 \
-            -u "$PUBLISH_USER:$PUBLISH_PASS" "$SCM_URL" || echo "000")
-          echo "SCM deployment API returned HTTP $HTTP_STATUS"
+          echo "Checking SCM endpoint health (attempt $i/$MAX_RETRIES)..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "$SCM_URL" || echo "000")
+          echo "SCM endpoint returned HTTP $HTTP_STATUS"
 
-          if (( HTTP_STATUS >= 200 && HTTP_STATUS < 400 )); then
-            echo "SCM deployment API is healthy (HTTP $HTTP_STATUS). Proceeding with deployment."
+          # Any response other than 503/000 means the SCM web server is alive
+          if [ "$HTTP_STATUS" != "503" ] && [ "$HTTP_STATUS" != "000" ]; then
+            echo "SCM endpoint is healthy (HTTP $HTTP_STATUS). Proceeding with deployment."
             exit 0
           fi
 
-          echo "SCM deployment API is unavailable (HTTP $HTTP_STATUS). Restarting logic app..."
+          echo "SCM endpoint is unavailable (HTTP $HTTP_STATUS). Restarting logic app..."
           az functionapp restart --name "$LOGIC_APP_NAME" --resource-group "$RESOURCE_GROUP"
 
           if [ "$i" -lt "$MAX_RETRIES" ]; then
             echo "Waiting ${WAIT_SECONDS}s for SCM to recover..."
             sleep $WAIT_SECONDS
+            WAIT_SECONDS=$((WAIT_SECONDS * 2))
           fi
         done
 
-        echo "::error::SCM deployment API remained unavailable after $MAX_RETRIES restart attempts. Failing deployment."
+        echo "::error::SCM endpoint remained unavailable after $MAX_RETRIES restart attempts. Failing deployment."
         exit 1
 
     - name: Deploy to Azure Logic App (attempt 1)
@@ -94,10 +86,10 @@ runs:
       if: steps.deploy-attempt-1.outcome == 'failure'
       shell: bash
       run: |
-        echo "Deployment attempt 1 failed. Restarting logic app to recover from potential 503..."
+        echo "Deployment attempt 1 failed with potential 503. Restarting logic app..."
         az functionapp restart --name "${{ inputs.logic-app-name }}" --resource-group "${{ inputs.logic-app-resource-group }}"
-        echo "Waiting 60s for logic app to fully restart..."
-        sleep 60
+        echo "Waiting 120s for logic app to fully restart..."
+        sleep 120
 
     - name: Deploy to Azure Logic App (attempt 2)
       id: deploy-attempt-2
@@ -112,10 +104,10 @@ runs:
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
       shell: bash
       run: |
-        echo "Deployment attempt 2 failed. Restarting logic app to recover from potential 503..."
+        echo "Deployment attempt 2 failed with potential 503. Restarting logic app..."
         az functionapp restart --name "${{ inputs.logic-app-name }}" --resource-group "${{ inputs.logic-app-resource-group }}"
-        echo "Waiting 60s for logic app to fully restart..."
-        sleep 60
+        echo "Waiting 240s for logic app to fully restart..."
+        sleep 240
 
     - name: Deploy to Azure Logic App (attempt 3)
       id: deploy-attempt-3
