@@ -97,8 +97,9 @@ runs:
           if sqlpackage \
             /Action:Export \
             /TargetFile:"${BACPAC_PATH}" \
-            /SourceConnectionString:"Server=tcp:${{ inputs.sql-server-fqdn }};Database=${{ inputs.sql-database-name }};" \
-            /SourceAccessToken:"${SQL_TOKEN}"; then
+            /SourceServerName:"${{ inputs.sql-server-fqdn }}" \
+            /SourceDatabaseName:"${{ inputs.sql-database-name }}" \
+            /AccessToken:"${SQL_TOKEN}"; then
             echo "Export succeeded on attempt ${attempt}"
             break
           else
