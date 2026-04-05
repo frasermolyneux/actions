@@ -1,5 +1,5 @@
 name: "deploy-sql-database"
-description: "Deploys a DACPAC to an Azure SQL Database using the sql-action"
+description: "Deploys a DACPAC to an Azure SQL Database using the sql-action, with optional pre-deploy export for destructive changes"
 
 inputs:
   sql-args:
@@ -35,6 +35,18 @@ inputs:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
     default: "true"
+  allow-data-loss:
+    description: "Allow SQL schema changes that may cause data loss. When true, a pre-deploy database export is performed before deploying."
+    required: false
+    default: "false"
+  backup-storage-account-name:
+    description: "Storage account name for pre-deploy BACPAC export. Required when allow-data-loss is true."
+    required: false
+    default: ""
+  backup-container-name:
+    description: "Blob container name for pre-deploy BACPAC exports."
+    required: false
+    default: "sql-backups"
   
 runs:
   using: "composite"
@@ -56,6 +68,91 @@ runs:
       shell: bash
       run: dotnet tool install -g microsoft.sqlpackage
 
+    - name: Validate allow-data-loss inputs
+      if: inputs.allow-data-loss == 'true'
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.backup-storage-account-name }}" ]; then
+          echo "::error::allow-data-loss is true but backup-storage-account-name is not set. A pre-deploy export target is required."
+          exit 1
+        fi
+
+    - name: Pre-deploy database export
+      id: pre-deploy-export
+      if: inputs.allow-data-loss == 'true'
+      shell: bash
+      run: |
+        TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
+        BACPAC_FILENAME="${{ inputs.sql-database-name }}-${TIMESTAMP}.bacpac"
+        BACPAC_PATH="/tmp/${BACPAC_FILENAME}"
+
+        echo "bacpac_path=${BACPAC_PATH}" >> $GITHUB_OUTPUT
+        echo "bacpac_filename=${BACPAC_FILENAME}" >> $GITHUB_OUTPUT
+
+        echo "Acquiring SQL access token..."
+        SQL_TOKEN=$(az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
+
+        echo "Exporting database to ${BACPAC_FILENAME}..."
+        for attempt in 1 2; do
+          if sqlpackage \
+            /Action:Export \
+            /TargetFile:"${BACPAC_PATH}" \
+            /SourceConnectionString:"Server=tcp:${{ inputs.sql-server-fqdn }};Database=${{ inputs.sql-database-name }};" \
+            /SourceAccessToken:"${SQL_TOKEN}"; then
+            echo "Export succeeded on attempt ${attempt}"
+            break
+          else
+            if [ "$attempt" -eq 2 ]; then
+              echo "::error::Pre-deploy export failed after 2 attempts"
+              exit 1
+            fi
+            echo "Export attempt ${attempt} failed. Waiting 15s before retry..."
+            sleep 15
+          fi
+        done
+
+        echo "Export complete: $(ls -lh ${BACPAC_PATH})"
+
+    - name: Upload pre-deploy export to blob storage
+      if: inputs.allow-data-loss == 'true' && steps.pre-deploy-export.outcome == 'success'
+      shell: bash
+      run: |
+        BACPAC_PATH="${{ steps.pre-deploy-export.outputs.bacpac_path }}"
+        BACPAC_FILENAME="${{ steps.pre-deploy-export.outputs.bacpac_filename }}"
+
+        echo "Uploading ${BACPAC_FILENAME} to ${{ inputs.backup-storage-account-name }}/${{ inputs.backup-container-name }}..."
+        for attempt in 1 2; do
+          if az storage blob upload \
+            --account-name "${{ inputs.backup-storage-account-name }}" \
+            --container-name "${{ inputs.backup-container-name }}" \
+            --name "${BACPAC_FILENAME}" \
+            --file "${BACPAC_PATH}" \
+            --auth-mode login \
+            --overwrite; then
+            echo "Upload succeeded on attempt ${attempt}"
+            break
+          else
+            if [ "$attempt" -eq 2 ]; then
+              echo "::error::BACPAC upload failed after 2 attempts"
+              exit 1
+            fi
+            echo "Upload attempt ${attempt} failed. Waiting 15s before retry..."
+            sleep 15
+          fi
+        done
+
+        echo "Pre-deploy export uploaded: ${{ inputs.backup-storage-account-name }}/${{ inputs.backup-container-name }}/${BACPAC_FILENAME}"
+
+    - name: Cleanup local export file
+      if: always() && inputs.allow-data-loss == 'true' && steps.pre-deploy-export.outcome == 'success'
+      shell: bash
+      run: |
+        BACPAC_PATH="${{ steps.pre-deploy-export.outputs.bacpac_path }}"
+        if [ -f "${BACPAC_PATH}" ]; then
+          rm -f "${BACPAC_PATH}"
+          echo "Cleaned up local export file"
+        fi
+
     - name: Deploy DACPAC (attempt 1)
       id: deploy-attempt-1
       continue-on-error: true
@@ -65,7 +162,7 @@ runs:
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
         build-arguments: '-c Release'
-        arguments: '${{ inputs.sql-args }}'
+        arguments: '${{ inputs.sql-args }}${{ inputs.allow-data-loss == ''true'' && '' /p:BlockOnPossibleDataLoss=false'' || '''' }}'
 
     - name: Wait before retry (attempt 1)
       if: steps.deploy-attempt-1.outcome == 'failure'
@@ -82,7 +179,7 @@ runs:
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
         build-arguments: '-c Release'
-        arguments: '${{ inputs.sql-args }}'
+        arguments: '${{ inputs.sql-args }}${{ inputs.allow-data-loss == ''true'' && '' /p:BlockOnPossibleDataLoss=false'' || '''' }}'
 
     - name: Wait before retry (attempt 2)
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
@@ -98,4 +195,4 @@ runs:
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
         build-arguments: '-c Release'
-        arguments: '${{ inputs.sql-args }}'
+        arguments: '${{ inputs.sql-args }}${{ inputs.allow-data-loss == ''true'' && '' /p:BlockOnPossibleDataLoss=false'' || '''' }}'
