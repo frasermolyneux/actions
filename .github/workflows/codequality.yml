@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       sonar-project-key:
-        description: SonarCloud project key (e.g., frasermolyneux_portal-event-ingest).
+        description: SonarCloud project key (e.g., frasermolyneux_portal-server-events).
         required: true
         type: string
       sonar-organization:

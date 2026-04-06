@@ -3,7 +3,7 @@
 Use this reusable workflow to run SonarCloud analysis, CodeQL, and the standard .NET build/test composites without duplicating boilerplate across repositories. It supports regular .NET solutions (`dotnet-ci`), ASP.NET/web apps (`dotnet-web-ci`), and Azure Functions (`dotnet-func-ci`).
 
 ## Inputs
-- `sonar-project-key` (required): SonarCloud project key, e.g., `frasermolyneux_portal-event-ingest`.
+- `sonar-project-key` (required): SonarCloud project key, e.g., `frasermolyneux_portal-server-events`.
 - `sonar-organization` (default `frasermolyneux`): SonarCloud organization key.
 - `sonar-host-url` (default `https://sonarcloud.io`): Sonar endpoint.
 - `build-target` (default `dotnet-ci`): `dotnet-ci`, `dotnet-web-ci`, or `dotnet-func-ci` composite to run.
@@ -98,9 +98,9 @@ jobs:
   quality:
     uses: frasermolyneux/actions/.github/workflows/codequality.yml@main
     with:
-      sonar-project-key: frasermolyneux_portal-event-ingest
+      sonar-project-key: frasermolyneux_portal-server-events
       build-target: dotnet-func-ci
-      dotnet-project: XtremeIdiots.Portal.Events.Ingest.App.V1
+      dotnet-project: XtremeIdiots.Portal.ServerEvents.App
       dotnet-version: 9.0.x
       src-folder: src
     secrets:
