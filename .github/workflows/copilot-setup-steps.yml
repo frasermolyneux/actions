@@ -23,11 +23,8 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
       - name: Shared Copilot setup
-        uses: ./copilot-setup
+        uses: frasermolyneux/actions/copilot-setup@copilot-setup/v1
         with:
-          checkout-repo: 'false'
+          checkout-repo: 'true'
           checkout-shared-copilot: 'true'
