@@ -12,7 +12,7 @@
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.
 
 ## Overview
-Reusable composite GitHub Actions keep .NET builds, Terraform automation, and deployment flows consistent across personal projects. Each action folder owns a version.json so Nerdbank.GitVersioning can stamp independent tags, refreshed by the actions-versioning workflow on main. Composites cover .NET solution, web, and Azure Functions CI, SDK setup and NBGV metadata, Terraform plan/apply/destroy with Azure OIDC, and deployment helpers for App Service, Functions, Logic Apps, and SQL.
+Reusable composite GitHub Actions keep .NET builds, Terraform automation, deployment flows, and Copilot session bootstrap consistent across personal projects. Each action folder owns a version.json so Nerdbank.GitVersioning can stamp independent tags, refreshed by the actions-versioning workflow on main. Composites cover .NET solution, web, and Azure Functions CI, SDK setup and NBGV metadata, Terraform plan/apply/destroy with Azure OIDC, Copilot pre-session setup, and deployment helpers for App Service, Functions, Logic Apps, and SQL.
 
 ## Contributing
 Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.
