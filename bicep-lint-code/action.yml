@@ -50,7 +50,7 @@ runs:
         }
 
     - name: Analyze Azure template files
-      uses: Microsoft/ps-rule@main
+      uses: Microsoft/ps-rule@v2.9.0
       with:
         outputFormat: NUnit3
         outputPath: reports/ps-rule-results.xml
