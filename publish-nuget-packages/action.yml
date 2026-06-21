@@ -28,20 +28,20 @@ runs:
   steps:
     - name: Checkout repository
       if: inputs.perform-checkout == 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         fetch-depth: 0
 
     - name: Download artifact from build job (current run)
       if: inputs.artifact-run-id == ''
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.artifact-output-path }}
 
     - name: Download artifact from specified run
       if: inputs.artifact-run-id != ''
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: ${{ inputs.artifact-name }}
         path: ${{ inputs.artifact-output-path }}

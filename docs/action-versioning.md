@@ -14,7 +14,7 @@ Each composite action in this repository owns a dedicated `version.json` so Nerd
 jobs:
   build:
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - name: Run dotnet CI
         uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1.0.15   # Pin to an exact patch release
 

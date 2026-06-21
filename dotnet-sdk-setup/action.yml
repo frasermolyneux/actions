@@ -69,13 +69,13 @@ runs:
 
     - name: Setup .NET (stable)
       if: steps.resolve.outputs.stable_versions != ''
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         dotnet-version: ${{ steps.resolve.outputs.stable_versions }}
 
     - name: Setup .NET (preview)
       if: steps.resolve.outputs.preview_versions != ''
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         dotnet-version: ${{ steps.resolve.outputs.preview_versions }}
         dotnet-quality: 'preview'

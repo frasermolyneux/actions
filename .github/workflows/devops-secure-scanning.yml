@@ -53,13 +53,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
 
       - name: Run Microsoft Security DevOps Analysis
         id: msdo
-        uses: microsoft/security-devops-action@v1.12.0
+        uses: microsoft/security-devops-action@08976cb623803b1b36d7112d4ff9f59eae704de0
         with:
           config: ${{ inputs.config }}
           policy: ${{ inputs.policy }}
@@ -69,13 +69,13 @@ jobs:
 
       - name: Upload alerts to Security tab
         if: ${{ always() }}
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
           sarif_file: ${{ steps.msdo.outputs.sarifFile }}
 
       - name: Upload alerts file as a workflow artifact
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: ${{ inputs.sarif-artifact-name }}
           path: ${{ steps.msdo.outputs.sarifFile }}

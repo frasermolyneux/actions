@@ -29,14 +29,14 @@ runs:
 
   steps:
     - name: 'Az CLI Login'
-      uses: azure/login@v3
+      uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43
       with:
         client-id: ${{ inputs.AZURE_CLIENT_ID }}
         tenant-id: ${{ inputs.AZURE_TENANT_ID }}
         subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Download artifact from build job
-      uses: actions/download-artifact@v7
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: ${{ inputs.web-artifact-name }}
         path: ${{ inputs.web-artifact-name }}
@@ -77,7 +77,7 @@ runs:
     - name: Deploy to Azure Web App (attempt 1)
       id: deploy-attempt-1
       continue-on-error: true
-      uses: azure/webapps-deploy@v3.0.1
+      uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383
       with:
         app-name: ${{ inputs.web-app-name }}
         resource-group-name: ${{ inputs.resource-group-name }}
@@ -96,7 +96,7 @@ runs:
       id: deploy-attempt-2
       if: steps.deploy-attempt-1.outcome == 'failure'
       continue-on-error: true
-      uses: azure/webapps-deploy@v3.0.1
+      uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383
       with:
         app-name: ${{ inputs.web-app-name }}
         resource-group-name: ${{ inputs.resource-group-name }}
@@ -114,7 +114,7 @@ runs:
     - name: Deploy to Azure Web App (attempt 3)
       id: deploy-attempt-3
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
-      uses: azure/webapps-deploy@v3.0.1
+      uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383
       with:
         app-name: ${{ inputs.web-app-name }}
         resource-group-name: ${{ inputs.resource-group-name }}

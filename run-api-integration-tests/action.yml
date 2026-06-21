@@ -39,17 +39,17 @@ runs:
   steps:
     - name: Checkout repository
       if: inputs.perform-checkout == 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         fetch-depth: 0
 
     - name: Setup .NET
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
     - name: Setup Package Cache
-      uses: actions/cache@v5
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
       with:
         path: ~/.nuget/packages
         key: ${{ runner.os }}-nuget-${{ github.repository_id }}-${{ hashFiles('**/packages.lock.json', '**/*.csproj', '**/*.sln', '**/*.slnx', '**/Directory.Packages.props', '**/nuget.config', '**/NuGet.config', '**/global.json') }}
@@ -84,7 +84,7 @@ runs:
 
     - name: Upload Test Results
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: test-results
         path: ${{ inputs.src-folder }}/TestResults/**/*.trx

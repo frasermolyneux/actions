@@ -53,12 +53,12 @@ runs:
   steps:
     - name: Checkout repository
       if: inputs.perform-checkout == 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         fetch-depth: 0
 
     - name: 'Az CLI Login'
-      uses: azure/login@v3
+      uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43
       with:
         client-id: ${{ inputs.AZURE_CLIENT_ID }}
         tenant-id: ${{ inputs.AZURE_TENANT_ID }}
@@ -157,7 +157,7 @@ runs:
     - name: Deploy DACPAC (attempt 1)
       id: deploy-attempt-1
       continue-on-error: true
-      uses: azure/sql-action@v2.3
+      uses: azure/sql-action@dae62750f3e645283b7755717b44a2029c0735fb
       with:  
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
@@ -174,7 +174,7 @@ runs:
       id: deploy-attempt-2
       if: steps.deploy-attempt-1.outcome == 'failure'
       continue-on-error: true
-      uses: azure/sql-action@v2.3
+      uses: azure/sql-action@dae62750f3e645283b7755717b44a2029c0735fb
       with:  
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
@@ -190,7 +190,7 @@ runs:
     - name: Deploy DACPAC (attempt 3)
       id: deploy-attempt-3
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
-      uses: azure/sql-action@v2.3
+      uses: azure/sql-action@dae62750f3e645283b7755717b44a2029c0735fb
       with:  
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'

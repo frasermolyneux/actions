@@ -76,12 +76,12 @@ runs:
   steps:
     - name: Checkout repository
       if: inputs.perform-checkout == 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         fetch-depth: 0
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v4
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
       with:
         terraform_wrapper: false
 

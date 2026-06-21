@@ -63,31 +63,31 @@ runs:
 
     - name: Checkout code
       if: inputs.checkout-repo == 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         fetch-depth: ${{ inputs.checkout-fetch-depth }}
 
     - name: Checkout shared Copilot configuration
       if: inputs.checkout-shared-copilot == 'true'
-      uses: actions/checkout@v6
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         repository: ${{ inputs.shared-copilot-repository }}
         path: ${{ inputs.shared-copilot-path }}
 
     - name: Setup .NET
       if: inputs.setup-dotnet == 'true'
-      uses: actions/setup-dotnet@v5
+      uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
     - name: Setup Node.js
       if: inputs.setup-node == 'true'
-      uses: actions/setup-node@v6
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
       with:
         node-version: ${{ inputs.node-version }}
 
     - name: Setup Python
       if: inputs.setup-python == 'true'
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
       with:
         python-version: ${{ inputs.python-version }}

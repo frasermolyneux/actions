@@ -82,20 +82,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           fetch-depth: 0
 
       - name: Set up JDK 17
         if: ${{ inputs.skip-sonar != true }}
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287
         with:
           java-version: 17
           distribution: zulu
 
       - name: Cache SonarCloud packages
         if: ${{ inputs.skip-sonar != true }}
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ${{ env.SONAR_CACHE_DIR }}
           key: ${{ runner.os }}-sonar-cache
@@ -103,7 +103,7 @@ jobs:
       - name: Cache SonarCloud scanner
         if: ${{ inputs.skip-sonar != true }}
         id: cache-sonar-scanner
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
         with:
           path: ${{ env.SONAR_SCANNER_DIR }}
           key: ${{ runner.os }}-sonar-scanner
@@ -117,7 +117,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/init@v4
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
           languages: csharp
 
@@ -183,6 +183,6 @@ jobs:
 
       - name: Perform CodeQL analysis
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/analyze@v4
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
           category: /language:csharp
