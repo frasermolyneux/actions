@@ -23,6 +23,22 @@ inputs:
     description: "The target Azure subscription"
     required: true
     type: string
+  info-url:
+    description: "Optional endpoint that returns build metadata containing buildVersion"
+    required: false
+    default: ""
+  expected-version:
+    description: "Optional expected build version to verify after deployment"
+    required: false
+    default: ""
+  verify-max-attempts:
+    description: "Maximum polling attempts when verifying version"
+    required: false
+    default: "30"
+  verify-delay-seconds:
+    description: "Delay (seconds) between polling attempts when verifying version"
+    required: false
+    default: "10"
 
 runs:
   using: "composite"
@@ -40,6 +56,13 @@ runs:
       with:
         name: ${{ inputs.web-artifact-name }}
         path: ${{ inputs.web-artifact-name }}
+
+    - name: Validate version verification inputs
+      if: ${{ (inputs.info-url != '' && inputs.expected-version == '') || (inputs.info-url == '' && inputs.expected-version != '') }}
+      shell: bash
+      run: |
+        echo "::error::Both 'info-url' and 'expected-version' must be provided together."
+        exit 1
 
     - name: Check SCM endpoint health
       shell: bash
@@ -119,3 +142,72 @@ runs:
         app-name: ${{ inputs.web-app-name }}
         resource-group-name: ${{ inputs.resource-group-name }}
         package: './${{ inputs.web-artifact-name }}'
+
+    - name: Verify deployed version (attempt 1)
+      id: verify-version-attempt-1
+      if: ${{ inputs.info-url != '' && inputs.expected-version != '' }}
+      continue-on-error: true
+      shell: bash
+      run: |
+        EXPECTED_VERSION="${{ inputs.expected-version }}"
+        INFO_URL="${{ inputs.info-url }}"
+        MAX_ATTEMPTS="${{ inputs.verify-max-attempts }}"
+        DELAY="${{ inputs.verify-delay-seconds }}"
+
+        echo "Waiting for $INFO_URL to report version '$EXPECTED_VERSION' (max ${MAX_ATTEMPTS} attempts, ${DELAY}s interval)..."
+        for i in $(seq 1 $MAX_ATTEMPTS); do
+          RESPONSE=$(curl -s --connect-timeout 5 --max-time 15 "$INFO_URL" || true)
+          CURRENT_VERSION=$(echo "$RESPONSE" | jq -r '.buildVersion // empty' 2>/dev/null || true)
+          if [ "$CURRENT_VERSION" = "$EXPECTED_VERSION" ]; then
+            echo "Version '$EXPECTED_VERSION' confirmed (attempt $i)"
+            exit 0
+          fi
+
+          echo "Attempt $i/$MAX_ATTEMPTS: got version '$CURRENT_VERSION' - waiting ${DELAY}s..."
+          sleep "$DELAY"
+        done
+
+        echo "::error::Expected version '$EXPECTED_VERSION' was not reported in time (last seen: '$CURRENT_VERSION')"
+        exit 1
+
+    - name: Restart app service after failed version verification
+      if: ${{ steps.verify-version-attempt-1.outcome == 'failure' }}
+      shell: bash
+      run: |
+        echo "Version verification failed after deployment. Restarting app service before redeploy..."
+        az webapp restart --name "${{ inputs.web-app-name }}" --resource-group "${{ inputs.resource-group-name }}"
+        echo "Waiting 60s for restart to settle..."
+        sleep 60
+
+    - name: Redeploy after failed version verification
+      if: ${{ steps.verify-version-attempt-1.outcome == 'failure' }}
+      uses: azure/webapps-deploy@02a81bead70021f5284939794bcec79c271ab383
+      with:
+        app-name: ${{ inputs.web-app-name }}
+        resource-group-name: ${{ inputs.resource-group-name }}
+        package: './${{ inputs.web-artifact-name }}'
+
+    - name: Verify deployed version (attempt 2)
+      if: ${{ steps.verify-version-attempt-1.outcome == 'failure' }}
+      shell: bash
+      run: |
+        EXPECTED_VERSION="${{ inputs.expected-version }}"
+        INFO_URL="${{ inputs.info-url }}"
+        MAX_ATTEMPTS="${{ inputs.verify-max-attempts }}"
+        DELAY="${{ inputs.verify-delay-seconds }}"
+
+        echo "Retrying version verification for $INFO_URL expecting '$EXPECTED_VERSION'..."
+        for i in $(seq 1 $MAX_ATTEMPTS); do
+          RESPONSE=$(curl -s --connect-timeout 5 --max-time 15 "$INFO_URL" || true)
+          CURRENT_VERSION=$(echo "$RESPONSE" | jq -r '.buildVersion // empty' 2>/dev/null || true)
+          if [ "$CURRENT_VERSION" = "$EXPECTED_VERSION" ]; then
+            echo "Version '$EXPECTED_VERSION' confirmed after redeploy (attempt $i)"
+            exit 0
+          fi
+
+          echo "Attempt $i/$MAX_ATTEMPTS: got version '$CURRENT_VERSION' - waiting ${DELAY}s..."
+          sleep "$DELAY"
+        done
+
+        echo "::error::Expected version '$EXPECTED_VERSION' was not reported in time after redeploy (last seen: '$CURRENT_VERSION')"
+        exit 1
