@@ -35,6 +35,7 @@ jobs:
             copilot-setup
             deploy-app-service
             detect-changes
+            dependabot-policy
             deploy-function-app
             deploy-logic-app
             deploy-sql-database
