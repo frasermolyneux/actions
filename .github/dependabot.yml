@@ -9,6 +9,6 @@ updates:
       time: "08:00"
       timezone: "Etc/UTC"
     groups:
-      github-actions:
+      all-updates:
         patterns:
           - "*"
