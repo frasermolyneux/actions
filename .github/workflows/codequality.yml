@@ -99,7 +99,7 @@ jobs:
 
       - name: Cache SonarCloud packages
         if: ${{ inputs.skip-sonar != true }}
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8
         with:
           path: ${{ env.SONAR_CACHE_DIR }}
           key: ${{ runner.os }}-sonar-cache
@@ -107,7 +107,7 @@ jobs:
       - name: Cache SonarCloud scanner
         if: ${{ inputs.skip-sonar != true }}
         id: cache-sonar-scanner
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+        uses: actions/cache@2c8a9bd7457de244a408f35966fab2fb45fda9c8
         with:
           path: ${{ env.SONAR_SCANNER_DIR }}
           key: ${{ runner.os }}-sonar-scanner
