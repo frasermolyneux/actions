@@ -21,6 +21,7 @@ jobs:
 
       - name: Install Nerdbank.GitVersioning
         run: |
+          dotnet tool uninstall --global nbgv || true
           dotnet tool install --global nbgv --version 3.9.50
           echo "PATH=$PATH:$HOME/.dotnet/tools" >> $GITHUB_ENV
 
