@@ -17,6 +17,21 @@ outputs:
   auto_merge_allowed:
     description: "true when Dependabot update type is policy-allowed for auto-merge"
     value: ${{ steps.evaluate.outputs.auto_merge_allowed }}
+  policy_reason:
+    description: "Human-readable reason describing the policy decision"
+    value: ${{ steps.evaluate.outputs.policy_reason }}
+  policy_code:
+    description: "Machine-readable policy decision code"
+    value: ${{ steps.evaluate.outputs.policy_code }}
+  update_type:
+    description: "Dependabot update type from metadata"
+    value: ${{ steps.evaluate.outputs.update_type }}
+  dependency_names:
+    description: "Comma-separated dependency names from metadata"
+    value: ${{ steps.evaluate.outputs.dependency_names }}
+  major_label_applied:
+    description: "true when the major-update label was applied by policy"
+    value: ${{ steps.evaluate.outputs.major_label_applied }}
 
 runs:
   using: "composite"
@@ -32,6 +47,7 @@ runs:
       id: evaluate
       uses: actions/github-script@v7
       env:
+        DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
         UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         MAJOR_UPDATE_LABEL: ${{ inputs.major-update-label }}
       with:
@@ -39,6 +55,7 @@ runs:
         script: |
           const prAuthor = context.payload.pull_request?.user?.login || '';
           const isDependabot = prAuthor === 'dependabot[bot]';
+          const dependencyNames = process.env.DEPENDENCY_NAMES || '';
           const updateType = process.env.UPDATE_TYPE || '';
           const majorUpdateLabel = process.env.MAJOR_UPDATE_LABEL || 'run-prd-plan';
 
@@ -54,24 +71,42 @@ runs:
             updateType === 'security-update:semver-major';
 
           let autoMergeAllowed = false;
+          let majorLabelApplied = false;
+          let policyCode = 'non_dependabot';
           let reason = 'Dependabot policy is not applicable for non-Dependabot pull requests.';
 
           if (isDependabot) {
-            autoMergeAllowed = allowedUpdateTypes.has(updateType);
+            const hasUpdateType = Boolean(updateType);
+            autoMergeAllowed = hasUpdateType && allowedUpdateTypes.has(updateType);
+            policyCode = hasUpdateType
+              ? (autoMergeAllowed ? 'allowed_update_type' : 'blocked_update_type')
+              : 'metadata_unavailable';
             reason = autoMergeAllowed
-              ? `Dependabot auto-merge is allowed for update type: ${updateType || 'unknown'}.`
-              : `Dependabot auto-merge is blocked for update type: ${updateType || 'unknown'}. Manual review required.`;
+              ? `Dependabot auto-merge is allowed for update type: ${updateType}.`
+              : hasUpdateType
+                ? `Dependabot auto-merge is blocked for update type: ${updateType}. Manual review required.`
+                : 'Dependabot metadata is unavailable, so auto-merge is blocked. Manual review required.';
 
             if (isMajorUpdate && majorUpdateLabel) {
               const existingLabels = (context.payload.pull_request.labels || []).map(label => label.name);
               if (!existingLabels.includes(majorUpdateLabel)) {
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: context.issue.number,
-                  labels: [majorUpdateLabel]
-                });
-                reason += ` Added ${majorUpdateLabel} label.`;
+                try {
+                  await github.rest.issues.addLabels({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    labels: [majorUpdateLabel]
+                  });
+                  majorLabelApplied = true;
+                  reason += ` Added ${majorUpdateLabel} label.`;
+                } catch (error) {
+                  const status = error?.status;
+                  if (status === 403 || status === 404) {
+                    core.warning(`Unable to apply label '${majorUpdateLabel}' due to permissions or resource constraints.`);
+                  } else {
+                    throw error;
+                  }
+                }
               }
             }
           }
@@ -79,3 +114,160 @@ runs:
           core.info(reason);
           core.setOutput('is_dependabot', isDependabot ? 'true' : 'false');
           core.setOutput('auto_merge_allowed', autoMergeAllowed ? 'true' : 'false');
+          core.setOutput('policy_reason', reason);
+          core.setOutput('policy_code', policyCode);
+          core.setOutput('update_type', updateType || 'unknown');
+          core.setOutput('dependency_names', dependencyNames || 'unknown');
+          core.setOutput('major_label_applied', majorLabelApplied ? 'true' : 'false');
+
+    - name: Explain blocked policy on PR
+      if: ${{ steps.evaluate.outputs.is_dependabot == 'true' && steps.evaluate.outputs.auto_merge_allowed != 'true' }}
+      uses: actions/github-script@v7
+      env:
+        POLICY_REASON: ${{ steps.evaluate.outputs.policy_reason }}
+        POLICY_CODE: ${{ steps.evaluate.outputs.policy_code }}
+        UPDATE_TYPE: ${{ steps.evaluate.outputs.update_type }}
+        DEPENDENCY_NAMES: ${{ steps.evaluate.outputs.dependency_names }}
+        MAJOR_LABEL_APPLIED: ${{ steps.evaluate.outputs.major_label_applied }}
+        MAJOR_UPDATE_LABEL: ${{ inputs.major-update-label }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const issueNumber = context.issue.number;
+          const marker = '<!-- dependabot-policy-comment -->';
+
+          const policyReason = process.env.POLICY_REASON || 'Policy blocked auto-merge.';
+          const policyCode = process.env.POLICY_CODE || 'blocked_update_type';
+          const updateType = process.env.UPDATE_TYPE || 'unknown';
+          const dependencyNames = process.env.DEPENDENCY_NAMES || 'unknown';
+          const majorLabelApplied = process.env.MAJOR_LABEL_APPLIED === 'true';
+          const majorUpdateLabel = process.env.MAJOR_UPDATE_LABEL || 'run-prd-plan';
+
+          const dependencyList = dependencyNames
+            .split(',')
+            .map(name => name.trim())
+            .filter(Boolean)
+            .join(', ') || 'unknown';
+
+          const lines = [
+            marker,
+            '## Dependabot Auto-Merge Policy',
+            '',
+            'Auto-merge is currently blocked by policy for this pull request.',
+            '',
+            `- Reason: ${policyReason}`,
+            `- Policy code: ${policyCode}`,
+            `- Update type: ${updateType}`,
+            `- Dependencies: ${dependencyList}`
+          ];
+
+          if (majorLabelApplied) {
+            lines.push(`- Label added by policy: ${majorUpdateLabel}`);
+          }
+
+          lines.push('', 'Next action: manual review and merge is required.', '', '_This comment is maintained automatically by the dependabot-policy action._');
+          const body = lines.join('\n');
+
+          try {
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100
+            });
+
+            const markerComments = comments
+              .filter(comment => comment.user?.login === 'github-actions[bot]' && (comment.body || '').includes(marker))
+              .sort((a, b) => a.id - b.id);
+
+            const existing = markerComments[markerComments.length - 1];
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body
+              });
+            }
+
+            const commentsAfterUpsert = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100
+            });
+
+            const markerCommentsAfterUpsert = commentsAfterUpsert
+              .filter(comment => comment.user?.login === 'github-actions[bot]' && (comment.body || '').includes(marker))
+              .sort((a, b) => a.id - b.id);
+
+            if (markerCommentsAfterUpsert.length > 1) {
+              const latest = markerCommentsAfterUpsert[markerCommentsAfterUpsert.length - 1];
+              for (const comment of markerCommentsAfterUpsert) {
+                if (comment.id !== latest.id) {
+                  await github.rest.issues.deleteComment({
+                    owner,
+                    repo,
+                    comment_id: comment.id
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            const status = error?.status;
+            if (status === 403 || status === 404) {
+              core.warning('Unable to create or update the Dependabot policy comment due to permissions or resource constraints.');
+            } else {
+              throw error;
+            }
+          }
+
+    - name: Remove stale policy comment when auto-merge is allowed
+      if: ${{ steps.evaluate.outputs.is_dependabot == 'true' && steps.evaluate.outputs.auto_merge_allowed == 'true' }}
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const issueNumber = context.issue.number;
+          const marker = '<!-- dependabot-policy-comment -->';
+
+          try {
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: issueNumber,
+              per_page: 100
+            });
+
+            const markerComments = comments.filter(comment =>
+              comment.user?.login === 'github-actions[bot]' &&
+              (comment.body || '').includes(marker)
+            );
+
+            for (const comment of markerComments) {
+              await github.rest.issues.deleteComment({
+                owner,
+                repo,
+                comment_id: comment.id
+              });
+            }
+          } catch (error) {
+            const status = error?.status;
+            if (status === 403 || status === 404) {
+              core.warning('Unable to remove stale Dependabot policy comment due to permissions or resource constraints.');
+            } else {
+              throw error;
+            }
+          }
