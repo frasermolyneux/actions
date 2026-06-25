@@ -29,6 +29,14 @@ inputs:
     description: "Set to true to skip uploading NuGet package artifacts"
     required: false
     default: "false"
+  skip-format-check:
+    description: "Set to true to skip dotnet format verification"
+    required: false
+    default: "false"
+  format-target:
+    description: "Path to pass to dotnet format (relative to src-folder)"
+    required: false
+    default: "."
   dotnet-workloads:
     description: "Optional space-separated list of .NET workloads to install (e.g. 'aspire')"
     required: false
@@ -85,6 +93,13 @@ runs:
       run: |
         cd ${{ inputs.src-folder }}
         dotnet restore
+
+    - name: Verify formatting
+      if: inputs.skip-format-check != 'true'
+      shell: bash
+      run: |
+        cd ${{ inputs.src-folder }}
+        dotnet format "${{ inputs.format-target }}" --no-restore --verify-no-changes
       
     - name: Build
       shell: bash
