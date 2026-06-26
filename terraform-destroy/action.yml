@@ -137,7 +137,26 @@ runs:
       shell: bash
       run: |
         cd ${{ inputs.terraform-folder }}
-        terraform destroy -auto-approve -var-file=${{ inputs.terraform-var-file }} ${{ inputs.terraform-additional-args }}
+        attempt=1
+        max_attempts=2
+
+        while true; do
+          echo "Running terraform destroy (attempt ${attempt}/${max_attempts})"
+
+          if terraform destroy -auto-approve -var-file=${{ inputs.terraform-var-file }} ${{ inputs.terraform-additional-args }}; then
+            echo "Terraform destroy succeeded."
+            break
+          fi
+
+          if [ "$attempt" -ge "$max_attempts" ]; then
+            echo "Terraform destroy failed after ${max_attempts} attempts."
+            exit 1
+          fi
+
+          echo "Terraform destroy failed on attempt ${attempt}. Retrying in 20 seconds..."
+          attempt=$((attempt + 1))
+          sleep 20
+        done
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
