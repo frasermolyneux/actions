@@ -1,0 +1,57 @@
+name: "cmake-ci"
+description: "Configures, builds, and optionally tests CMake projects"
+
+inputs:
+  perform-checkout:
+    description: "Set to false if the repository has already been checked out"
+    required: false
+    default: "true"
+  cmake-source-dir:
+    description: "CMake source directory"
+    required: false
+    default: "."
+  cmake-build-dir:
+    description: "CMake build directory"
+    required: false
+    default: "build"
+  cmake-configure-args:
+    description: "Additional arguments passed to cmake configure"
+    required: false
+    default: "-DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
+  cmake-build-args:
+    description: "Additional arguments passed to cmake --build"
+    required: false
+    default: "--config Release"
+  ctest-args:
+    description: "Additional arguments passed to ctest"
+    required: false
+    default: "--output-on-failure --build-config Release"
+  run-tests:
+    description: "Set to false to skip ctest execution"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout repository
+      if: inputs.perform-checkout == 'true'
+      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      with:
+        fetch-depth: 0
+
+    - name: Configure CMake
+      shell: bash
+      run: |
+        cmake -S "${{ inputs.cmake-source-dir }}" -B "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-configure-args }}
+
+    - name: Build
+      shell: bash
+      run: |
+        cmake --build "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-build-args }}
+
+    - name: Test
+      if: inputs.run-tests == 'true'
+      shell: bash
+      run: |
+        ctest --test-dir "${{ inputs.cmake-build-dir }}" ${{ inputs.ctest-args }}

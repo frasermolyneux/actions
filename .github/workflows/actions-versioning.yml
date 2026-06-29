@@ -33,6 +33,7 @@ jobs:
           ACTIONS=(
             apim-api-import
             bicep-lint-code
+            cmake-ci
             copilot-setup
             deploy-app-service
             detect-changes

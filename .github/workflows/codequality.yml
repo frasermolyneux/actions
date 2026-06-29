@@ -18,7 +18,7 @@ on:
         default: https://sonarcloud.io
         type: string
       build-target:
-        description: Selects the composite build action to run (dotnet-ci, dotnet-web-ci, or dotnet-func-ci).
+        description: Selects the composite build action to run (dotnet-ci, dotnet-web-ci, dotnet-func-ci, or cmake-ci).
         required: false
         default: dotnet-ci
         type: string
@@ -51,6 +51,41 @@ on:
         required: false
         default: false
         type: boolean
+      codeql-languages:
+        description: CodeQL languages to initialize (for example csharp or cpp).
+        required: false
+        default: csharp
+        type: string
+      codeql-category:
+        description: Category used by CodeQL analyze.
+        required: false
+        default: /language:csharp
+        type: string
+      cmake-source-dir:
+        description: Source directory for CMake builds.
+        required: false
+        default: .
+        type: string
+      cmake-build-dir:
+        description: Build directory for CMake builds.
+        required: false
+        default: build
+        type: string
+      cmake-configure-args:
+        description: Additional arguments passed to cmake configure.
+        required: false
+        default: -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        type: string
+      cmake-build-args:
+        description: Additional arguments passed to cmake --build.
+        required: false
+        default: --config Release
+        type: string
+      ctest-args:
+        description: Additional arguments passed to ctest.
+        required: false
+        default: --output-on-failure --build-config Release
+        type: string
       skip-sonar:
         description: Skip SonarCloud analysis (only run CodeQL).
         required: false
@@ -94,14 +129,14 @@ jobs:
           distribution: zulu
 
       - name: Cache SonarCloud packages
-        if: ${{ inputs.skip-sonar != true }}
+        if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: ${{ env.SONAR_CACHE_DIR }}
           key: ${{ runner.os }}-sonar-cache
 
       - name: Cache SonarCloud scanner
-        if: ${{ inputs.skip-sonar != true }}
+        if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' }}
         id: cache-sonar-scanner
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
@@ -109,17 +144,28 @@ jobs:
           key: ${{ runner.os }}-sonar-scanner
 
       - name: Install SonarCloud scanner
-        if: ${{ inputs.skip-sonar != true && steps.cache-sonar-scanner.outputs.cache-hit != 'true' }}
+        if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' && steps.cache-sonar-scanner.outputs.cache-hit != 'true' }}
         shell: bash
         run: |
           mkdir -p "${{ env.SONAR_SCANNER_DIR }}"
           dotnet tool update dotnet-sonarscanner --tool-path "${{ env.SONAR_SCANNER_DIR }}"
 
+      - name: Validate build target
+        shell: bash
+        run: |
+          case "${{ inputs.build-target }}" in
+            dotnet-ci|dotnet-web-ci|dotnet-func-ci|cmake-ci) ;;
+            *)
+              echo "Unsupported build-target: ${{ inputs.build-target }}" >&2
+              exit 1
+              ;;
+          esac
+
       - name: Initialize CodeQL
         if: ${{ inputs.skip-codeql != true }}
         uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
-          languages: csharp
+          languages: ${{ inputs.codeql-languages }}
 
       - name: Validate project inputs
         if: inputs.build-target == 'dotnet-func-ci' || inputs.build-target == 'dotnet-web-ci'
@@ -131,7 +177,7 @@ jobs:
           fi
 
       - name: Begin SonarCloud analysis
-        if: ${{ inputs.skip-sonar != true }}
+        if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' }}
         shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -145,7 +191,7 @@ jobs:
 
       - name: Build and test (.NET)
         if: inputs.build-target == 'dotnet-ci'
-        uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v1
+        uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v2
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           src-folder: ${{ inputs.src-folder }}
@@ -153,7 +199,7 @@ jobs:
 
       - name: Build and publish (Web)
         if: inputs.build-target == 'dotnet-web-ci'
-        uses: frasermolyneux/actions/dotnet-web-ci@dotnet-web-ci/v1
+        uses: frasermolyneux/actions/dotnet-web-ci@dotnet-web-ci/v2
         with:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
@@ -164,7 +210,7 @@ jobs:
 
       - name: Build and test (Function)
         if: inputs.build-target == 'dotnet-func-ci'
-        uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v1
+        uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v2
         with:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
@@ -172,8 +218,37 @@ jobs:
           perform-checkout: 'false'
           use-framework-output-root: ${{ inputs.use-framework-output-root }}
 
+      - name: Configure CMake
+        if: inputs.build-target == 'cmake-ci'
+        shell: bash
+        run: |
+          cmake -S "${{ inputs.cmake-source-dir }}" -B "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-configure-args }}
+
+      - name: Build (CMake)
+        if: inputs.build-target == 'cmake-ci'
+        shell: bash
+        run: |
+          cmake --build "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-build-args }}
+
+      - name: Test (CMake)
+        if: inputs.build-target == 'cmake-ci'
+        shell: bash
+        run: |
+          ctest --test-dir "${{ inputs.cmake-build-dir }}" ${{ inputs.ctest-args }}
+
+      - name: Run SonarCloud analysis (C/C++)
+        if: ${{ inputs.skip-sonar != true && inputs.build-target == 'cmake-ci' }}
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ inputs.sonar-project-key }}
+            -Dsonar.organization=${{ inputs.sonar-organization }}
+            -Dsonar.host.url=${{ inputs.sonar-host-url }}
+
       - name: End SonarCloud analysis
-        if: ${{ inputs.skip-sonar != true && always() }}
+        if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' && always() }}
         shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -185,4 +260,4 @@ jobs:
         if: ${{ inputs.skip-codeql != true }}
         uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
         with:
-          category: /language:csharp
+          category: ${{ inputs.codeql-category }}
