@@ -246,7 +246,7 @@ jobs:
 
       - name: Run SonarCloud analysis (C/C++)
         if: ${{ inputs.skip-sonar != true && inputs.build-target == 'cmake-ci' }}
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
