@@ -41,6 +41,11 @@ on:
         required: false
         default: 9.0.x
         type: string
+      skip-format-check:
+        description: Skip dotnet format verification in .NET build actions.
+        required: false
+        default: false
+        type: boolean
       src-folder:
         description: Folder that contains the .NET solution/projects.
         required: false
@@ -194,6 +199,7 @@ jobs:
         uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v2
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
+          skip-format-check: ${{ inputs.skip-format-check }}
           src-folder: ${{ inputs.src-folder }}
           perform-checkout: 'false'
 
@@ -204,6 +210,7 @@ jobs:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
           publish-frameworks: ${{ inputs.publish-frameworks }}
+          skip-format-check: ${{ inputs.skip-format-check }}
           src-folder: ${{ inputs.src-folder }}
           nugetArtifactName: ${{ inputs.nuget-artifact-name }}
           perform-checkout: 'false'
@@ -214,6 +221,7 @@ jobs:
         with:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
+          skip-format-check: ${{ inputs.skip-format-check }}
           src-folder: ${{ inputs.src-folder }}
           perform-checkout: 'false'
           use-framework-output-root: ${{ inputs.use-framework-output-root }}
