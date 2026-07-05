@@ -168,7 +168,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        uses: github/codeql-action/init@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a
         with:
           languages: ${{ inputs.codeql-languages }}
 
@@ -246,7 +246,7 @@ jobs:
 
       - name: Run SonarCloud analysis (C/C++)
         if: ${{ inputs.skip-sonar != true && inputs.build-target == 'cmake-ci' }}
-        uses: SonarSource/sonarqube-scan-action@v5
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
@@ -266,6 +266,6 @@ jobs:
 
       - name: Perform CodeQL analysis
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        uses: github/codeql-action/analyze@54f647b7e1bb85c95cddabcd46b0c578ec92bc1a
         with:
           category: ${{ inputs.codeql-category }}
