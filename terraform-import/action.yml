@@ -189,7 +189,11 @@ runs:
       run: |
         set -euo pipefail
         cd ${{ inputs.terraform-folder }}
-        terraform plan -var-file=${{ inputs.terraform-var-file }}
+        # Tee the plan to a file for the PR comment step. The comment reads this from a
+        # file (not an environment variable) so large plans do not exceed the process
+        # env/argument size limit when the PR-comment step spawns Node. Keep stderr on
+        # its own channel (no 2>&1) so deprecation warnings aren't double-counted.
+        terraform plan -no-color -var-file=${{ inputs.terraform-var-file }} | tee "$RUNNER_TEMP/tf-plan-output.txt"
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
@@ -205,7 +209,7 @@ runs:
         VALIDATE_STDERR: ${{ steps.validate.outputs.stderr }}
         VALIDATE_EXITCODE: ${{ steps.validate.outputs.exitcode }}
         VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
-        PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
+        PLAN_OUTPUT_FILE: ${{ runner.temp }}/tf-plan-output.txt
         PLAN_STDERR: ${{ steps.plan.outputs.stderr }}
         PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
         PLAN_OUTCOME: ${{ steps.plan.outcome }}
@@ -232,7 +236,7 @@ runs:
               outcome: process.env.VALIDATE_OUTCOME,
             },
             plan: {
-              stdout: process.env.PLAN_STDOUT,
+              stdout: fmt.readOutputFile(process.env.PLAN_OUTPUT_FILE),
               stderr: process.env.PLAN_STDERR,
               exitcode: process.env.PLAN_EXITCODE,
               outcome: process.env.PLAN_OUTCOME,
