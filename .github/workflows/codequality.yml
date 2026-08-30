@@ -41,6 +41,11 @@ on:
         required: false
         default: 9.0.x
         type: string
+      skip-format-check:
+        description: Skip dotnet format verification in .NET build actions.
+        required: false
+        default: false
+        type: boolean
       src-folder:
         description: Folder that contains the .NET solution/projects.
         required: false
@@ -117,13 +122,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
 
       - name: Set up JDK 17
         if: ${{ inputs.skip-sonar != true }}
-        uses: actions/setup-java@1bcf9fb12cf4aa7d266a90ae39939e61372fe520
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95
         with:
           java-version: 17
           distribution: zulu
@@ -163,7 +168,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38
         with:
           languages: ${{ inputs.codeql-languages }}
 
@@ -194,6 +199,7 @@ jobs:
         uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v2
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
+          skip-format-check: ${{ inputs.skip-format-check }}
           src-folder: ${{ inputs.src-folder }}
           perform-checkout: 'false'
 
@@ -204,6 +210,7 @@ jobs:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
           publish-frameworks: ${{ inputs.publish-frameworks }}
+          skip-format-check: ${{ inputs.skip-format-check }}
           src-folder: ${{ inputs.src-folder }}
           nugetArtifactName: ${{ inputs.nuget-artifact-name }}
           perform-checkout: 'false'
@@ -214,6 +221,7 @@ jobs:
         with:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
+          skip-format-check: ${{ inputs.skip-format-check }}
           src-folder: ${{ inputs.src-folder }}
           perform-checkout: 'false'
           use-framework-output-root: ${{ inputs.use-framework-output-root }}
@@ -238,7 +246,7 @@ jobs:
 
       - name: Run SonarCloud analysis (C/C++)
         if: ${{ inputs.skip-sonar != true && inputs.build-target == 'cmake-ci' }}
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
@@ -258,6 +266,6 @@ jobs:
 
       - name: Perform CodeQL analysis
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e
+        uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38
         with:
           category: ${{ inputs.codeql-category }}

@@ -7,6 +7,7 @@ Use this reusable workflow to run SonarCloud analysis, CodeQL, and shared build/
 - `sonar-organization` (default `frasermolyneux`): SonarCloud organization key.
 - `sonar-host-url` (default `https://sonarcloud.io`): Sonar endpoint.
 - `build-target` (default `dotnet-ci`): `dotnet-ci`, `dotnet-web-ci`, `dotnet-func-ci`, or `cmake-ci` composite to run.
+- `skip-format-check` (default `false`): Set to `true` for .NET build targets when format validation already runs in dedicated build/test workflows.
 - `dotnet-project`: Required when `build-target` is `dotnet-web-ci` or `dotnet-func-ci`; project name to upload as the artifact.
 - `publish-frameworks` (default empty): For `dotnet-web-ci`, optional comma/newline list of target frameworks to publish explicitly.
 - `nuget-artifact-name` (default `nuget-packages`): For `dotnet-web-ci`, artifact name for NuGet packages.
@@ -49,6 +50,7 @@ jobs:
     with:
       sonar-project-key: frasermolyneux_my-project
       build-target: dotnet-ci
+      skip-format-check: true
       dotnet-version: 9.0.x
       src-folder: src
     secrets:
@@ -77,6 +79,7 @@ jobs:
     with:
       sonar-project-key: frasermolyneux_my-webapp
       build-target: dotnet-web-ci
+      skip-format-check: true
       dotnet-project: My.WebApp
       dotnet-version: 9.0.x
       src-folder: src
@@ -107,6 +110,7 @@ jobs:
     with:
       sonar-project-key: frasermolyneux_portal-server-events
       build-target: dotnet-func-ci
+      skip-format-check: true
       dotnet-project: XtremeIdiots.Portal.ServerEvents.App
       dotnet-version: 9.0.x
       src-folder: src

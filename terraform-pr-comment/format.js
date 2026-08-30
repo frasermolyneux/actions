@@ -1,6 +1,23 @@
 // Shared formatting utilities for Terraform PR comments.
 // Used by terraform-plan, terraform-plan-readonly, terraform-plan-and-apply, and terraform-import actions.
 
+const fs = require('fs');
+
+/**
+ * Read a Terraform output file written by the plan step. Returns '' when the path
+ * is empty or the file is missing/unreadable. Plan output is passed via a file
+ * (not an environment variable) so large plans do not exceed the process
+ * argument/environment size limit when the PR-comment step spawns Node.
+ */
+function readOutputFile(filePath) {
+  if (!filePath) return '';
+  try {
+    return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 /**
  * Strip ANSI escape codes from a string.
  */
@@ -300,4 +317,4 @@ async function postComment(github, context, marker, body) {
   });
 }
 
-module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, parseDeprecations, buildSummaryTable, buildResourceTable, buildDeprecationSection, buildComment, postComment, deriveEnvironment };
+module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, parseDeprecations, buildSummaryTable, buildResourceTable, buildDeprecationSection, buildComment, postComment, deriveEnvironment, readOutputFile };
