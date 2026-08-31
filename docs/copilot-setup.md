@@ -1,8 +1,8 @@
 # Copilot setup v2
 
-`copilot-setup` v2 is planned as a deterministic environment setup action for GitHub Copilot cloud agent setup workflows. It provides optional repository checkout and opt-in installation of the .NET, Node.js, and Python runtimes already supported by v1.
+`copilot-setup` v2 is a deterministic environment setup action for GitHub Copilot cloud agent setup workflows. It provides optional repository checkout and opt-in installation of the .NET, Node.js, and Python runtimes already supported by v1.
 
-Version 2 is not released yet. Consumers must continue using `copilot-setup/v1` until the v2 tag is published and their repository is migrated.
+Version 2 is published at `copilot-setup/v2`. Consumers can migrate from v1 when they need custom runtime installation or dependency restore before an agent starts.
 
 ## Breaking change from v1
 
@@ -90,7 +90,7 @@ Before:
       10.0.x
 ```
 
-After v2 is released:
+After:
 
 ```yaml
 - name: Set up Copilot environment

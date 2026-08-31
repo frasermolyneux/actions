@@ -1,15 +1,38 @@
 # Copilot Instructions
 
-- Purpose: this repo is a catalog of reusable composite GitHub Actions for .NET and CMake CI, Terraform automation, and deployment helpers. Each action lives in its own folder with an `action.yml` and `version.json` (for example, [dotnet-ci/action.yml](dotnet-ci/action.yml), [cmake-ci/action.yml](cmake-ci/action.yml), [terraform-plan/action.yml](terraform-plan/action.yml)).
-- Versioning: Nerdbank.GitVersioning runs per folder. Bump the folder's `version.json` when introducing feature or breaking changes; patch numbers derive from commit height. Pushes to `main` trigger [actions/.github/workflows/actions-versioning.yml](.github/workflows/actions-versioning.yml) to retag only the folders changed with `<folder>/vX.Y.Z`, `<folder>/vX.Y`, and `<folder>/vX` tags.
-- .NET CI composites: [dotnet-ci](dotnet-ci/action.yml) restores/builds/tests solutions and uploads NuGet packages; [dotnet-web-ci](dotnet-web-ci/action.yml) adds publish plus optional framework-specific outputs; [dotnet-func-ci](dotnet-func-ci/action.yml) publishes Azure Functions and can upload either the framework root or `bin/Release`. All expect `perform-checkout` with `fetch-depth: 0`, run tests excluding `FullyQualifiedName~IntegrationTests`, use [dotnet-sdk-setup](dotnet-sdk-setup/action.yml) to install SDKs (handles stable/preview lists), and call [nbgv-metadata](nbgv-metadata/action.yml) to export build versions.
-- C++/CMake CI composite: [cmake-ci](cmake-ci/action.yml) provides a generic configure/build/test flow (`cmake -S/-B`, `cmake --build`, `ctest`) with configurable directories and args so CMake-based repos can consume the same shared-action pattern as .NET repos.
-- Terraform composites: [terraform-plan](terraform-plan/action.yml) performs init/validate/plan with Azure OIDC (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`), supports backend config via file or explicit inputs, uploads the plan, and can post PR comments via `terraform-pr-commenter`. [terraform-apply](terraform-apply/action.yml) downloads the plan artifact and applies it with the same OIDC env vars. [terraform-destroy](terraform-destroy/action.yml) runs init then destroy with var-file and optional backend overrides. Related helpers exist for plan-and-apply, plan-readonly, import, destroy-resources, and state removal; review their `action.yml` before use.
-- Deployment helpers: folders under `deploy-*` (App Service, Function App, Logic App, SQL Database) and [logic-app-ci](logic-app-ci/action.yml) provide Azure deployment/build flows; confirm required inputs/secrets from each `action.yml` before wiring into workflows.
-- Utilities: [run-api-integration-tests/action.yml](run-api-integration-tests/action.yml) executes API integration tests; [publish-nuget-packages/action.yml](publish-nuget-packages/action.yml) pushes packages; [bicep-lint-code/action.yml](bicep-lint-code/action.yml) checks Bicep templates; [terraform-state-rm/action.yml](terraform-state-rm/action.yml) cleans Terraform state.
-- Copilot setup: [copilot-setup/action.yml](copilot-setup/action.yml) provides deterministic, opt-in repository checkout and .NET/Node/Python runtime installation for `copilot-setup-steps.yml` workflows. The planned v2 contract does not distribute shared instructions; consumers keep instructions and skills in their own repositories.
-- Workflow badges: repository workflows include actions-versioning, codequality (SonarCloud + CodeQL + .NET/CMake composite builds), dependabot-automerge, and devops-secure-scanning.
-- Shell conventions: steps mix bash and PowerShell; defaults target `ubuntu-latest`. Actions commonly rely on package caching (`actions/cache`) and artifacts (`actions/upload-artifact` / `download-artifact`). Keep checkouts at `fetch-depth: 0` to satisfy NBGV and code scanning requirements.
-- Documentation: see [docs/action-versioning.md](docs/action-versioning.md) for tag shapes, [docs/codequality.md](docs/codequality.md) for the reusable workflow inputs, and [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) for NBGV expectations.
+## Repository purpose and layout
 
-If anything here feels incomplete or unclear, let me know so we can tighten these notes.
+This repository is a catalog of reusable composite GitHub Actions for .NET and CMake CI, Terraform automation, Azure deployments, and workflow utilities.
+
+- Each published action is stored in a top-level folder containing `action.yml` and `version.json`.
+- Reusable and repository workflows are under `.github/workflows/`.
+- Repository documentation is under `docs/`.
+- Action folders are named for the capability they provide and are invoked with folder-scoped tags such as `dotnet-ci/v2`.
+
+## Validation
+
+Read the complete manifest before changing an action and run the smallest validation that covers the changed behavior. There is no single local integration suite for all actions.
+
+```powershell
+git diff --check
+Get-Content <action-name>\version.json -Raw | ConvertFrom-Json
+nbgv get-version -p <action-name> -f json
+```
+
+For action implementation changes, also exercise the affected commands or a representative consumer workflow where practical. Documentation-only configuration changes do not require unrelated action integration tests.
+
+## Composite-action conventions
+
+- Preserve the existing `inputs`, `outputs`, and step behavior unless a contract change is intentional.
+- Keep explicit `shell` values on `run` steps and follow the surrounding Bash or PowerShell style.
+- Keep third-party action references pinned consistently with existing manifests. Use folder-scoped release tags for actions from this repository.
+- Keep `fetch-depth: 0` when Nerdbank.GitVersioning or full repository history is required.
+- Do not hard-code secrets, tokens, connection strings, or subscription GUIDs. Azure automation uses OIDC or managed identity.
+
+## Versioning and releases
+
+Nerdbank.GitVersioning operates independently in each action folder. Update that folder's `version.json` for feature or breaking changes; patch versions are derived from commit history. Pushes to `main` run `.github/workflows/actions-versioning.yml`, which tags only changed action folders with `<folder>/vX.Y.Z`, `<folder>/vX.Y`, and `<folder>/vX`.
+
+When adding an action, include both required files and add its folder name to the workflow's `ACTIONS` array.
+
+See [`docs/action-versioning.md`](../docs/action-versioning.md) for tag behavior and [`docs/nerdbank-gitversioning.md`](../docs/nerdbank-gitversioning.md) for .NET checkout requirements.

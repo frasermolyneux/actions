@@ -2,14 +2,13 @@
 [![Actions Versioning](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/actions-versioning.yml)
 [![Code Quality](https://github.com/frasermolyneux/actions/actions/workflows/code-quality.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/code-quality.yml)
 [![Codequality](https://github.com/frasermolyneux/actions/actions/workflows/codequality.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/codequality.yml)
-[![Copilot Setup Steps](https://github.com/frasermolyneux/actions/actions/workflows/copilot-setup-steps.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/copilot-setup-steps.yml)
 [![Dependabot Auto-Merge](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/dependabot-automerge.yml)
 [![Devops Secure Scanning](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml)
 
 ## Documentation
 - [docs/action-versioning.md](docs/action-versioning.md) - Tagging strategy and guidance for selecting version pins.
 - [docs/codequality.md](docs/codequality.md) - Reusable workflow that wires SonarCloud, CodeQL, and composite builds.
-- [docs/copilot-setup.md](docs/copilot-setup.md) - Planned v2 contract and migration guidance for deterministic Copilot environment setup.
+- [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.
 
 ## Overview
