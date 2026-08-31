@@ -13,6 +13,7 @@
 
 ## Overview
 Reusable composite GitHub Actions keep .NET and CMake builds, Terraform automation, deployment flows, and Copilot environment setup consistent across personal projects. Each action folder owns a version.json so Nerdbank.GitVersioning can stamp independent tags, refreshed by the actions-versioning workflow on main. Composites cover .NET solution, web, and Azure Functions CI, generic CMake configure/build/test CI, SDK setup and NBGV metadata, Terraform plan/apply/destroy with Azure OIDC, optional Copilot runtime setup, and deployment helpers for App Service, Functions, Logic Apps, and SQL.
+Each action's `action.yml` is the source of truth for its inputs, outputs, and behavior.
 
 ## Contributing
 Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.
