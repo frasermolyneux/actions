@@ -1,35 +1,23 @@
 name: "copilot-setup"
-description: "Shared setup for Copilot coding-agent sessions (repo checkout, shared .github-copilot checkout, optional runtimes)."
+description: "Deterministic environment setup for Copilot coding-agent sessions (optional repository checkout and runtimes)."
 
 inputs:
   checkout-repo:
-    description: "Checkout the current repository first."
+    description: "Checkout the current repository when later setup steps need repository files."
     required: false
-    default: "true"
+    default: "false"
   checkout-fetch-depth:
     description: "Fetch depth used when checking out the current repository."
     required: false
     default: "1"
-  checkout-shared-copilot:
-    description: "Checkout frasermolyneux/.github-copilot for shared instructions/prompts/agents."
-    required: false
-    default: "true"
-  shared-copilot-repository:
-    description: "Repository to checkout for shared Copilot configuration."
-    required: false
-    default: "frasermolyneux/.github-copilot"
-  shared-copilot-path:
-    description: "Path where shared Copilot configuration is checked out."
-    required: false
-    default: ".github-copilot"
   setup-dotnet:
     description: "Install .NET SDK(s)."
     required: false
     default: "false"
   dotnet-version:
-    description: "The version(s) of .NET to install (newline or comma separated)."
+    description: "The version(s) of .NET to install when setup-dotnet is true (newline or comma separated)."
     required: false
-    default: "9.0.x\n10.0.x"
+    default: ""
   setup-node:
     description: "Install Node.js."
     required: false
@@ -37,7 +25,7 @@ inputs:
   node-version:
     description: "The Node.js version to install when setup-node is true."
     required: false
-    default: "20.x"
+    default: ""
   setup-python:
     description: "Install Python."
     required: false
@@ -45,19 +33,33 @@ inputs:
   python-version:
     description: "The Python version to install when setup-python is true."
     required: false
-    default: "3.x"
+    default: ""
 
 runs:
   using: "composite"
   steps:
-    - name: Validate shared Copilot path
-      if: inputs.checkout-shared-copilot == 'true'
+    - name: Validate runtime versions
+      if: inputs.setup-dotnet == 'true' || inputs.setup-node == 'true' || inputs.setup-python == 'true'
       shell: bash
+      env:
+        SETUP_DOTNET: ${{ inputs.setup-dotnet }}
+        DOTNET_VERSION: ${{ inputs.dotnet-version }}
+        SETUP_NODE: ${{ inputs.setup-node }}
+        NODE_VERSION: ${{ inputs.node-version }}
+        SETUP_PYTHON: ${{ inputs.setup-python }}
+        PYTHON_VERSION: ${{ inputs.python-version }}
       run: |
         set -euo pipefail
-        path="${{ inputs.shared-copilot-path }}"
-        if [[ -z "$path" || "$path" == "." || "$path" == "/" ]]; then
-          echo "Invalid shared-copilot-path '$path'. Use a non-root path such as .github-copilot."
+        if [[ "$SETUP_DOTNET" == "true" && -z "$DOTNET_VERSION" ]]; then
+          echo "dotnet-version is required when setup-dotnet is true." >&2
+          exit 1
+        fi
+        if [[ "$SETUP_NODE" == "true" && -z "$NODE_VERSION" ]]; then
+          echo "node-version is required when setup-node is true." >&2
+          exit 1
+        fi
+        if [[ "$SETUP_PYTHON" == "true" && -z "$PYTHON_VERSION" ]]; then
+          echo "python-version is required when setup-python is true." >&2
           exit 1
         fi
 
@@ -66,13 +68,6 @@ runs:
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         fetch-depth: ${{ inputs.checkout-fetch-depth }}
-
-    - name: Checkout shared Copilot configuration
-      if: inputs.checkout-shared-copilot == 'true'
-      uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
-      with:
-        repository: ${{ inputs.shared-copilot-repository }}
-        path: ${{ inputs.shared-copilot-path }}
 
     - name: Setup .NET
       if: inputs.setup-dotnet == 'true'

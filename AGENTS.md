@@ -10,20 +10,15 @@ This file is the brief for the **GitHub Copilot coding agent** (and any other ag
 
 ## Required reading (read these BEFORE doing any work)
 
-The `copilot-setup-steps.yml` workflow checks out `frasermolyneux/.github-copilot` at `./.github-copilot/` in the runner, so the paths below resolve.
-
 1. `.github/copilot-instructions.md` — repo-specific orientation, build commands, conventions
-2. `.github-copilot/.github/instructions/personal.working-preferences.instructions.md` — Fraser's always-on rules: git hands-off, default to assigned branch, run `code-review` agent before reporting done
-3. `.github-copilot/.github/copilot-instructions.md` — org-wide context catalog (use as index for the layered instruction files below)
-4. Stack-specific files — see **Stack guardrails** below
+2. Relevant repository-native files under `.github/instructions/`
+3. Stack-specific files available through the organization catalog when relevant
 
 ---
 
 ## Org conventions via MCP (when available)
 
-If a `frasermolyneux-copilot` MCP server is configured in your client (`~/.copilot/mcp-config.json`, VS Code user `mcp.json`, or an equivalent stdio MCP wire-up), **prefer its catalog tools** over your own assumptions when answering questions about org standards, branching, workflows, Terraform, .NET projects, Azure patterns, or shared library / platform consumption contracts. The catalog source-of-truth lives in `frasermolyneux/.github-copilot` — see `mcp-server/README.md` there for the tool contract.
-
-This is **complementary** to the file-load model: if `./.github-copilot/` is checked out in the runner (per `copilot-setup-steps.yml`), continue to read those files directly. If both are available, prefer MCP for freshness. If no MCP server is configured in your client, treat this section as a no-op and fall back to the file paths above.
+If a `frasermolyneux-copilot` MCP server is configured in your client (`~/.copilot/mcp-config.json`, VS Code user `mcp.json`, or an equivalent stdio MCP wire-up), **prefer its catalog tools** over your own assumptions when answering questions about org standards, branching, workflows, Terraform, .NET projects, Azure patterns, or shared library / platform consumption contracts. The catalog source-of-truth is maintained outside this repository. The `copilot-setup` action does not clone or distribute that catalog. If no MCP server is configured in your client, use the repository-native instructions available in this checkout.
 
 ---
 
@@ -31,22 +26,7 @@ This is **complementary** to the file-load model: if `./.github-copilot/` is che
 
 
 
-### Tenant facts (always-on)
-- `.github-copilot/.github/instructions/tenant.subscriptions.instructions.md`
-- `.github-copilot/.github/instructions/tenant.regions.instructions.md`
-- `.github-copilot/.github/instructions/tenant.identity.instructions.md`
-- `.github-copilot/.github/instructions/tenant.dns.instructions.md`
-- `.github-copilot/.github/instructions/tenant.network-topology.instructions.md`
-
-### Enforceable standards (apply to your changes)
-- `.github-copilot/.github/instructions/standards.oidc-and-secrets.instructions.md` — **no client secrets, ever**
-- `.github-copilot/.github/instructions/standards.branching-and-prs.instructions.md`
-
-- `.github-copilot/.github/instructions/standards.azure-naming.instructions.md`
-- `.github-copilot/.github/instructions/standards.azure-tagging.instructions.md`
-- `.github-copilot/.github/instructions/standards.terraform-style.instructions.md`
-
-- `.github-copilot/.github/instructions/standards.dotnet-project.instructions.md`
+Use the organization catalog for tenant facts and enforceable standards when available. Keep repository-specific, enforceable guidance in repository-native instruction files.
 
 ### Patterns (apply where relevant)
 
@@ -94,7 +74,7 @@ terraform -chdir=terraform plan -var-file=tfvars/dev.tfvars
 - ❌ Do not introduce client secrets, connection strings, or hard-coded subscription IDs / GUIDs. Auth is OIDC + managed identity only — see `standards.oidc-and-secrets.instructions.md`.
 - ❌ Do not bypass `terraform fmt`, `dotnet format`, test runs, or other validation gates.
 - ❌ Do not change resource naming/tagging conventions — they are enforced (`standards.azure-naming.instructions.md`, `standards.azure-tagging.instructions.md`).
-- ❌ Do not pull context from sibling workspace folders. Only what is inside this repo and `./.github-copilot/` is in scope.
+- ❌ Do not pull context from sibling workspace folders. Only what is inside this repository is in scope unless the task explicitly requires a read-only consumer inventory.
 - ❌ Do not assume tools/SDKs are installed beyond what `.github/workflows/copilot-setup-steps.yml` provisions. If you need more, add the step and explain why.
 - ❌ Do not modify `.github/workflows/`, `.github/dependabot.yml`, `version.json`, `Directory.Build.props`, or any `platform-*` consumption wiring unless that is the explicit task.
 
@@ -141,5 +121,4 @@ Stop and escalate when:
 - A `code-review` finding is High severity and you cannot resolve it without expanding scope.
 - A required tool/SDK is unavailable in the runner and `copilot-setup-steps.yml` would need significant modification.
 - The acceptance criteria are ambiguous or contradict the linked instruction files.
-
 
