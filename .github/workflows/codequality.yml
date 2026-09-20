@@ -128,7 +128,7 @@ jobs:
 
       - name: Set up JDK 17
         if: ${{ inputs.skip-sonar != true }}
-        uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
         with:
           java-version: 17
           distribution: zulu
@@ -168,7 +168,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938
+        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63
         with:
           languages: ${{ inputs.codeql-languages }}
 
@@ -266,6 +266,6 @@ jobs:
 
       - name: Perform CodeQL analysis
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938
+        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63
         with:
           category: ${{ inputs.codeql-category }}
