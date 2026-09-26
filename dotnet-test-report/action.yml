@@ -1,0 +1,72 @@
+name: "dotnet-test-report"
+description: "Parses a single TRX file into a bounded JSON test report, uploads the results as an artifact, writes a step summary, and emits failure annotations."
+
+inputs:
+  suite:
+    description: "Label for the suite being reported (e.g. Unit, HttpIntegration, Browser)."
+    required: true
+  results-directory:
+    description: "Directory expected to contain exactly one *.trx file for this invocation."
+    required: true
+  run-outcome:
+    description: "Outcome of the preceding test-run step (success, failure, cancelled, skipped, or unknown). A 'success' outcome that does not resolve to a passing report fails this action."
+    required: false
+    default: "unknown"
+  artifact-name:
+    description: "Name of the artifact to upload. When omitted (and artifact-id is not set), no artifact is uploaded and the report's artifactId is null."
+    required: false
+    default: ""
+  artifact-paths:
+    description: "Newline separated list of paths to upload as the artifact. Defaults to everything under results-directory."
+    required: false
+    default: ""
+  retention-days:
+    description: "Artifact retention in days."
+    required: false
+    default: "7"
+  artifact-id:
+    description: "Reuse an already-uploaded artifact's ID instead of uploading one from this action (e.g. when a prior step already uploaded results this report should link to). Takes precedence over artifact-name/artifact-paths."
+    required: false
+    default: ""
+  source-path-pattern:
+    description: "Regex a repository-relative source path must match before a failure gets a file/line annotation, e.g. '^src/MyProject\\.Tests/.+\\.cs$'. Omit to skip source-mapped annotations."
+    required: false
+    default: ""
+  repository-root:
+    description: "Repository root used to resolve relative source paths for annotations. Defaults to GITHUB_WORKSPACE."
+    required: false
+    default: ""
+
+outputs:
+  report:
+    description: "Bounded schema-1 JSON report: schema, suite, status, reason, total, executed, passed, failed, skipped, durationSeconds, artifactId."
+    value: ${{ steps.report.outputs.report }}
+  artifact-id:
+    description: "Numeric ID of the linked artifact (uploaded by this action or passed through via the artifact-id input), or empty when neither resolves to a valid numeric ID."
+    value: ${{ steps.report.outputs.artifact-id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Upload ${{ inputs.suite }} results
+      id: artifact
+      if: always() && inputs.artifact-id == '' && inputs.artifact-name != ''
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ inputs.artifact-paths != '' && inputs.artifact-paths || format('{0}/**', inputs.results-directory) }}
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error
+
+    - name: Report ${{ inputs.suite }} results
+      id: report
+      if: always()
+      shell: pwsh
+      run: |
+        & '${{ github.action_path }}/report-test-results.ps1' `
+          -Suite '${{ inputs.suite }}' `
+          -ResultsDirectory '${{ inputs.results-directory }}' `
+          -RunOutcome '${{ inputs.run-outcome }}' `
+          -ArtifactId '${{ inputs.artifact-id != '' && inputs.artifact-id || steps.artifact.outputs.artifact-id }}' `
+          -SourcePathPattern '${{ inputs.source-path-pattern }}' `
+          -RepositoryRoot '${{ inputs.repository-root }}'

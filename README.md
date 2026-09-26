@@ -9,10 +9,11 @@
 - [docs/action-versioning.md](docs/action-versioning.md) - Tagging strategy and guidance for selecting version pins.
 - [docs/codequality.md](docs/codequality.md) - Reusable workflow that wires SonarCloud, CodeQL, and composite builds.
 - [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.
+- [docs/dotnet-test-reporting.md](docs/dotnet-test-reporting.md) - `dotnet-node-setup` and `dotnet-test-report` composites for .NET + npm test environments and bounded TRX reporting.
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.
 
 ## Overview
-Reusable composite GitHub Actions keep .NET and CMake builds, Terraform automation, deployment flows, and Copilot environment setup consistent across personal projects. Each action folder owns a version.json so Nerdbank.GitVersioning can stamp independent tags, refreshed by the actions-versioning workflow on main. Composites cover .NET solution, web, and Azure Functions CI, generic CMake configure/build/test CI, SDK setup and NBGV metadata, Terraform plan/apply/destroy with Azure OIDC, optional Copilot runtime setup, and deployment helpers for App Service, Functions, Logic Apps, and SQL.
+Reusable composite GitHub Actions keep .NET and CMake builds, Terraform automation, deployment flows, and Copilot environment setup consistent across personal projects. Each action folder owns a version.json so Nerdbank.GitVersioning can stamp independent tags, refreshed by the actions-versioning workflow on main. Composites cover .NET solution, web, and Azure Functions CI, generic CMake configure/build/test CI, SDK setup and NBGV metadata, combined .NET + Node test-environment setup with bounded TRX reporting, Terraform plan/apply/destroy with Azure OIDC, optional Copilot runtime setup, and deployment helpers for App Service, Functions, Logic Apps, and SQL.
 
 ## Contributing
 Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.
