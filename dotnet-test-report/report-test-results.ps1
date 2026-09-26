@@ -77,7 +77,12 @@ function Get-TestSource {
             if ($sourcePath.StartsWith('/_/', [StringComparison]::Ordinal)) {
                 $sourcePath = Join-Path $RepositoryRoot $sourcePath.Substring(3)
             }
-            $path = [IO.Path]::GetFullPath($sourcePath)
+            $path = if ([IO.Path]::IsPathRooted($sourcePath)) {
+                [IO.Path]::GetFullPath($sourcePath)
+            }
+            else {
+                [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $sourcePath))
+            }
             $relative = [IO.Path]::GetRelativePath($RepositoryRoot, $path).Replace('\', '/')
             if ($relative -notmatch $SourcePathPattern -or
                 -not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
@@ -247,7 +252,10 @@ if ($env:GITHUB_STEP_SUMMARY) { [IO.File]::AppendAllText($env:GITHUB_STEP_SUMMAR
 else { Write-Host $summary.ToString() }
 $json = $report | ConvertTo-Json -Compress -Depth 6
 if ([Text.Encoding]::UTF8.GetByteCount($json) -gt 4096) { throw 'Suite report exceeds its output limit.' }
-if ($env:GITHUB_OUTPUT) { [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "$OutputName=$json`n", [System.Text.UTF8Encoding]::new($false)) }
+if ($env:GITHUB_OUTPUT) {
+    [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "$OutputName=$json`n", [System.Text.UTF8Encoding]::new($false))
+    [IO.File]::AppendAllText($env:GITHUB_OUTPUT, "artifact-id=$($report.artifactId)`n", [System.Text.UTF8Encoding]::new($false))
+}
 Write-Host "$Suite report: $json"
 if ($RunOutcome -eq 'success' -and $report.status -ne 'passed') {
     throw "$Suite did not produce a valid passing test report ($($report.reason))."

@@ -21,7 +21,6 @@ end (e.g. Razor/Blazor apps bundling SCSS/TypeScript).
 | `npm-cache-dependency-path` | yes | - | Path to `package-lock.json`, passed through to `actions/setup-node`. |
 | `global-json-file` | no | `global.json` | Path used to resolve the .NET SDK version. |
 | `node-version-file` | no | `.node-version` | Path containing the required Node.js version. |
-| `nuget-cache-key-files` | no | common project/lock globs | Newline-separated glob list hashed for the NuGet cache key. |
 
 Output: `dotnet-version` - the resolved SDK version (`dotnet --version`).
 
@@ -57,6 +56,7 @@ diagnostics) as an artifact, writes a step summary table, and emits `::error` an
 | `artifact-name` | no | *(none)* | When set, uploads `artifact-paths` (default: everything under `results-directory`) as an artifact. |
 | `artifact-paths` | no | `results-directory/**` | Newline-separated paths to upload. |
 | `retention-days` | no | `7` | Artifact retention. |
+| `artifact-id` | no | *(none)* | Reuse an already-uploaded artifact's ID instead of uploading a new one (e.g. when another step already uploaded these results). Takes precedence over `artifact-name`/`artifact-paths`. |
 | `source-path-pattern` | no | *(none)* | Regex a repository-relative source path must match before a failure gets a file/line annotation. Omit to skip source-mapped annotations. |
 | `repository-root` | no | `GITHUB_WORKSPACE` | Root used to resolve relative source paths. |
 

@@ -42,8 +42,8 @@ outputs:
     description: "Bounded schema-1 JSON report: schema, suite, status, reason, total, executed, passed, failed, skipped, durationSeconds, artifactId."
     value: ${{ steps.report.outputs.report }}
   artifact-id:
-    description: "Numeric ID of the linked artifact (uploaded by this action or passed through via the artifact-id input), or empty when none applies."
-    value: ${{ inputs.artifact-id != '' && inputs.artifact-id || steps.artifact.outputs.artifact-id }}
+    description: "Numeric ID of the linked artifact (uploaded by this action or passed through via the artifact-id input), or empty when neither resolves to a valid numeric ID."
+    value: ${{ steps.report.outputs.artifact-id }}
 
 runs:
   using: "composite"
