@@ -1,0 +1,62 @@
+name: "dotnet-node-setup"
+description: "Sets up .NET (global.json) and Node.js (.node-version) with NuGet and npm caching for combined .NET + front-end test/build environments."
+
+inputs:
+  npm-cache-dependency-path:
+    description: "Path to the package-lock.json used to key the npm cache (passed through to actions/setup-node)."
+    required: true
+  global-json-file:
+    description: "Path to the global.json used to resolve the .NET SDK version."
+    required: false
+    default: "global.json"
+  node-version-file:
+    description: "Path to the file containing the required Node.js version."
+    required: false
+    default: ".node-version"
+  nuget-cache-key-files:
+    description: "Newline separated glob list of files to hash for the NuGet cache key."
+    required: false
+    default: |
+      **/packages.lock.json
+      **/*.csproj
+      **/*.sln
+      **/*.slnx
+      **/Directory.Packages.props
+      **/nuget.config
+      **/NuGet.config
+      **/global.json
+
+outputs:
+  dotnet-version:
+    description: "SDK version resolved from global.json."
+    value: ${{ steps.resolve.outputs.dotnet-version }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
+      with:
+        global-json-file: ${{ inputs.global-json-file }}
+
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      with:
+        node-version-file: ${{ inputs.node-version-file }}
+        cache: npm
+        cache-dependency-path: ${{ inputs.npm-cache-dependency-path }}
+
+    - name: Cache NuGet packages
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      with:
+        path: ~/.nuget/packages
+        key: ${{ runner.os }}-nuget-${{ github.repository_id }}-${{ hashFiles(inputs.nuget-cache-key-files) }}
+        restore-keys: |
+          ${{ runner.os }}-nuget-${{ github.repository_id }}-
+          ${{ runner.os }}-nuget-
+
+    - name: Resolve .NET SDK version
+      id: resolve
+      shell: pwsh
+      run: |
+        $version = dotnet --version
+        if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the .NET SDK version after setup.' }
+        "dotnet-version=$version" >> $env:GITHUB_OUTPUT

@@ -44,7 +44,9 @@ jobs:
             deploy-sql-database
             dotnet-ci
             dotnet-func-ci
+            dotnet-node-setup
             dotnet-playwright-tests
+            dotnet-test-report
             dotnet-web-ci
             dotnet-sdk-setup
             logic-app-ci

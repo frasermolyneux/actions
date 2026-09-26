@@ -36,6 +36,7 @@ Documentation-only Copilot configuration changes do not require action integrati
 
 - [`docs/nerdbank-gitversioning.md`](docs/nerdbank-gitversioning.md) - checkout and NBGV requirements for .NET composites.
 - [`docs/codequality.md`](docs/codequality.md) - reusable code-quality workflow contract.
+- [`docs/dotnet-test-reporting.md`](docs/dotnet-test-reporting.md) - `dotnet-node-setup` / `dotnet-test-report` composites for .NET + npm test environments and TRX reporting.
 
 ## Do not
 
