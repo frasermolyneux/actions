@@ -168,7 +168,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           languages: ${{ inputs.codeql-languages }}
 
@@ -266,6 +266,6 @@ jobs:
 
       - name: Perform CodeQL analysis
         if: ${{ inputs.skip-codeql != true }}
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           category: ${{ inputs.codeql-category }}
