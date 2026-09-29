@@ -34,28 +34,32 @@ runs:
       run: |
         set -euo pipefail
 
-        mapfile -t PR_NUMBERS < <(gh api "repos/${REPOSITORY}/pulls?state=open&per_page=100" --paginate --jq '.[] | select(.auto_merge != null) | .number')
+        # Captured via assignment (not process substitution) so a failing
+        # `gh api` call trips `set -e` instead of being silently swallowed.
+        PR_NUMBERS_RAW=$(gh api "repos/${REPOSITORY}/pulls?state=open&per_page=100" --paginate --jq '.[] | select(.auto_merge != null) | .number')
 
         UPDATED=()
-        for NUM in "${PR_NUMBERS[@]:-}"; do
-          [[ -z "$NUM" ]] && continue
-          STATE=$(gh api "repos/${REPOSITORY}/pulls/${NUM}" --jq '.mergeable_state')
-          echo "PR #${NUM}: mergeable_state=${STATE}"
+        if [[ -n "$PR_NUMBERS_RAW" ]]; then
+          while IFS= read -r NUM; do
+            [[ -z "$NUM" ]] && continue
+            STATE=$(gh api "repos/${REPOSITORY}/pulls/${NUM}" --jq '.mergeable_state')
+            echo "PR #${NUM}: mergeable_state=${STATE}"
 
-          if [[ "$STATE" == "behind" ]]; then
-            if [[ "$DRY_RUN" == "true" ]]; then
-              echo "Dry-run: would update branch for PR #${NUM}"
-            else
-              if gh api -X PUT "repos/${REPOSITORY}/pulls/${NUM}/update-branch" --silent; then
-                echo "Requested branch update for PR #${NUM}"
+            if [[ "$STATE" == "behind" ]]; then
+              if [[ "$DRY_RUN" == "true" ]]; then
+                echo "Dry-run: would update branch for PR #${NUM}"
               else
-                echo "::warning::Update-branch request failed for PR #${NUM} (it may already be queued)"
-                continue
+                if gh api -X PUT "repos/${REPOSITORY}/pulls/${NUM}/update-branch" --silent; then
+                  echo "Requested branch update for PR #${NUM}"
+                else
+                  echo "::warning::Update-branch request failed for PR #${NUM} (it may already be queued)"
+                  continue
+                fi
               fi
+              UPDATED+=("${NUM}")
             fi
-            UPDATED+=("${NUM}")
-          fi
-        done
+          done <<< "$PR_NUMBERS_RAW"
+        fi
 
         COUNT=${#UPDATED[@]}
         JOINED=$(IFS=,; echo "${UPDATED[*]:-}")
