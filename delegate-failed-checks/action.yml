@@ -63,6 +63,8 @@ runs:
 
             SKIP=false
             for EX in "${EXCLUDED[@]:-}"; do
+              EX="${EX#"${EX%%[![:space:]]*}"}"
+              EX="${EX%"${EX##*[![:space:]]}"}"
               [[ -z "$EX" ]] && continue
               if [[ "$AUTHOR" == "$EX" ]]; then
                 SKIP=true
