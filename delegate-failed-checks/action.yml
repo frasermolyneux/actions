@@ -76,7 +76,8 @@ runs:
             # `--jq` runs per response page, so emit one failing check-run id
             # per line (stable across pages) and count lines, rather than
             # counting per page (which would yield a multiline result).
-            FAILED_IDS=$(gh api "repos/${REPOSITORY}/commits/${SHA}/check-runs" --paginate --jq '.check_runs[]? | select(.conclusion == "failure") | .id')
+            # Treat timed-out and startup-failed runs as failures too.
+            FAILED_IDS=$(gh api "repos/${REPOSITORY}/commits/${SHA}/check-runs" --paginate --jq '.check_runs[]? | select(.conclusion == "failure" or .conclusion == "timed_out" or .conclusion == "startup_failure") | .id')
             FAILED_COUNT=0
             if [[ -n "$FAILED_IDS" ]]; then
               FAILED_COUNT=$(printf '%s\n' "$FAILED_IDS" | grep -c '.')
@@ -88,10 +89,12 @@ runs:
             # `gh api --jq` doesn't accept `--arg`; emit one comment object
             # per line across all pages, then slurp into external `jq` (which
             # does support `--arg`) for the marker/sha containment check.
+            # Restrict the match to bot-authored comments so a PR participant
+            # cannot post the marker/sha text to suppress delegation.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
             ALREADY_DELEGATED=0
             if [[ -n "$COMMENTS_RAW" ]]; then
-              ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
+              ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
             fi
             if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
               echo "PR #${NUM}: already delegated for sha ${SHA}"

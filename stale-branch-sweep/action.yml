@@ -43,7 +43,17 @@ runs:
           while IFS= read -r NUM; do
             [[ -z "$NUM" ]] && continue
             STATE=$(gh api "repos/${REPOSITORY}/pulls/${NUM}" --jq '.mergeable_state')
-            echo "PR #${NUM}: mergeable_state=${STATE}"
+
+            # GitHub can briefly report "unknown" while it computes
+            # mergeability; poll a few times rather than skipping a PR that
+            # may actually be behind.
+            POLL_ATTEMPTS=0
+            while [[ "$STATE" == "unknown" && "$POLL_ATTEMPTS" -lt 5 ]]; do
+              sleep 2
+              STATE=$(gh api "repos/${REPOSITORY}/pulls/${NUM}" --jq '.mergeable_state')
+              POLL_ATTEMPTS=$((POLL_ATTEMPTS + 1))
+            done
+            echo "PR #${NUM}: mergeable_state=${STATE} (polled ${POLL_ATTEMPTS} time(s))"
 
             if [[ "$STATE" == "behind" ]]; then
               if [[ "$DRY_RUN" == "true" ]]; then
