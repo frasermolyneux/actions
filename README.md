@@ -13,7 +13,7 @@
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.
 
 ## Overview
-Reusable composite GitHub Actions keep .NET and CMake builds, Terraform automation, deployment flows, and Copilot environment setup consistent across personal projects. Each action folder owns a version.json so Nerdbank.GitVersioning can stamp independent tags, refreshed by the actions-versioning workflow on main. Composites cover .NET solution, web, and Azure Functions CI, generic CMake configure/build/test CI, SDK setup and NBGV metadata, combined .NET + Node test-environment setup with bounded TRX reporting, Terraform plan/apply/destroy with Azure OIDC, optional Copilot runtime setup, and deployment helpers for App Service, Functions, Logic Apps, and SQL.
+Reusable composite GitHub Actions keep .NET and CMake builds, Terraform automation, deployment flows, and Copilot environment setup consistent across personal projects. Each action folder owns a version.json so Nerdbank.GitVersioning can stamp independent tags, refreshed by the actions-versioning workflow on main. Composites cover .NET solution, web, and Azure Functions CI, generic CMake configure/build/test CI, SDK setup and NBGV metadata, combined .NET + Node test-environment setup with bounded TRX reporting, Terraform plan/apply/destroy with Azure OIDC, optional Copilot runtime setup, deployment helpers for App Service, Functions, Logic Apps, and SQL, and repository devex automation helpers (`stale-branch-sweep`, `delegate-failed-checks`) consumed by `platform-devex`.
 
 ## Contributing
 Please read the [contributing](CONTRIBUTING.md) guidance; this is a learning and development project.

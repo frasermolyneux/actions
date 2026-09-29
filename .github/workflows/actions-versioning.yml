@@ -39,6 +39,7 @@ jobs:
             deploy-app-service
             detect-changes
             dependabot-policy
+            delegate-failed-checks
             deploy-function-app
             deploy-logic-app
             deploy-sql-database
@@ -53,6 +54,7 @@ jobs:
             nbgv-metadata
             publish-nuget-packages
             run-api-integration-tests
+            stale-branch-sweep
             terraform-apply
             terraform-destroy
             terraform-destroy-resources
