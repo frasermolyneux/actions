@@ -1,0 +1,99 @@
+name: "delegate-failed-checks"
+description: "Delegates open pull requests with failed checks to the Copilot coding agent by commenting a delegation request once per failing commit"
+
+inputs:
+  github-token:
+    description: "Token with issues:write and pull-requests:read on the target repository"
+    required: true
+  repository:
+    description: "Target repository in owner/repo form"
+    required: true
+  exclude-authors:
+    description: "Comma-separated pull request author logins to skip (e.g. dependabot[bot])"
+    required: false
+    default: ""
+  dry-run:
+    description: "When true, only report which pull requests would be delegated"
+    required: false
+    default: "false"
+
+outputs:
+  delegated_count:
+    description: "Number of pull requests delegated to Copilot (or that would be, in dry-run)"
+    value: ${{ steps.delegate.outputs.delegated_count }}
+  delegated_pull_requests:
+    description: "Comma-separated pull request numbers that were delegated (or would be, in dry-run)"
+    value: ${{ steps.delegate.outputs.delegated_pull_requests }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Delegate failed checks to Copilot
+      id: delegate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        REPOSITORY: ${{ inputs.repository }}
+        EXCLUDE_AUTHORS: ${{ inputs.exclude-authors }}
+        DRY_RUN: ${{ inputs.dry-run }}
+      run: |
+        set -euo pipefail
+
+        MARKER="<!-- devex-copilot-delegate -->"
+
+        IFS=',' read -ra EXCLUDED <<< "${EXCLUDE_AUTHORS}"
+
+        mapfile -t PR_NUMBERS < <(gh api "repos/${REPOSITORY}/pulls?state=open&per_page=100" --paginate --jq '.[].number')
+
+        DELEGATED=()
+        for NUM in "${PR_NUMBERS[@]:-}"; do
+          [[ -z "$NUM" ]] && continue
+
+          PR_JSON=$(gh api "repos/${REPOSITORY}/pulls/${NUM}")
+          DRAFT=$(echo "$PR_JSON" | jq -r '.draft')
+          AUTHOR=$(echo "$PR_JSON" | jq -r '.user.login')
+          SHA=$(echo "$PR_JSON" | jq -r '.head.sha')
+
+          if [[ "$DRAFT" == "true" ]]; then
+            continue
+          fi
+
+          SKIP=false
+          for EX in "${EXCLUDED[@]:-}"; do
+            [[ -z "$EX" ]] && continue
+            if [[ "$AUTHOR" == "$EX" ]]; then
+              SKIP=true
+              break
+            fi
+          done
+          if [[ "$SKIP" == "true" ]]; then
+            continue
+          fi
+
+          FAILED_COUNT=$(gh api "repos/${REPOSITORY}/commits/${SHA}/check-runs" --paginate --jq '[.check_runs[]? | select(.conclusion == "failure")] | length')
+          if [[ "$FAILED_COUNT" -eq 0 ]]; then
+            continue
+          fi
+
+          ALREADY_DELEGATED=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
+          if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
+            echo "PR #${NUM}: already delegated for sha ${SHA}"
+            continue
+          fi
+
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "Dry-run: would delegate PR #${NUM} (${FAILED_COUNT} failing check(s) at ${SHA})"
+          else
+            BODY=$(printf '%s<!-- sha:%s -->\n@copilot investigate and resolve the failed checks on this pull request.' "$MARKER" "$SHA")
+            gh api "repos/${REPOSITORY}/issues/${NUM}/comments" -f body="$BODY" --silent
+            echo "Delegated PR #${NUM} (${FAILED_COUNT} failing check(s) at ${SHA})"
+          fi
+          DELEGATED+=("${NUM}")
+        done
+
+        COUNT=${#DELEGATED[@]}
+        JOINED=$(IFS=,; echo "${DELEGATED[*]:-}")
+
+        echo "Delegated ${COUNT} pull request(s): ${JOINED:-none}"
+        echo "delegated_count=${COUNT}" >> "$GITHUB_OUTPUT"
+        echo "delegated_pull_requests=${JOINED}" >> "$GITHUB_OUTPUT"
