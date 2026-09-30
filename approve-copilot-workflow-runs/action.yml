@@ -107,8 +107,10 @@ runs:
             # Fetch the raw diff once, for the same BASE_SHA...HEAD_SHA
             # range the pending run was triggered from - never a
             # superseded/newer commit if the PR has moved on since. Changed
-            # file names are then parsed directly out of this diff (`diff
-            # --git a/... b/...` header lines) rather than from the compare
+            # file names are then parsed directly out of this diff (both the
+            # old and new path from each `diff --git a/... b/...` header
+            # line, so a rename/copy into a denied destination is caught
+            # too) rather than from the compare
             # API's JSON `.files` list, which GitHub caps at 300 entries and
             # would silently drop file names beyond that cap, letting a
             # workflow-file change slip past the deny check undetected.
@@ -120,7 +122,7 @@ runs:
               DIFF_TEXT=""
               CI_TOUCHED=true
             else
-              CHANGED_FILES=$(printf '%s\n' "$DIFF_TEXT" | grep -oE '^diff --git a/.* b/.*' | sed -E 's#^diff --git a/(.*) b/.*#\1#' || true)
+              CHANGED_FILES=$(printf '%s\n' "$DIFF_TEXT" | grep -oE '^diff --git a/.* b/.*' | sed -E 's#^diff --git a/(.*) b/(.*)#\1\n\2#' || true)
 
               if [[ -n "$CHANGED_FILES" ]]; then
                 while IFS= read -r FILE; do
@@ -170,17 +172,22 @@ runs:
               RESPONSE_FILE=$(mktemp)
               # This review needs no tools at all - it only has to read the
               # diff already embedded in the prompt and return a verdict.
-              # --available-tools=view restricts the model to the read-only
-              # "view" tool kind (used to display file contents); every
-              # other tool kind (shell, write, fetch, MCP, etc.) is entirely
-              # unavailable for this session, not merely denied-with-prompt,
-              # so a prompt-injected diff cannot execute commands, write
-              # files, or make network calls no matter what it asks for.
-              # GH_TOKEN/COPILOT_TOKEN are also stripped from the subprocess
-              # environment so only the narrowly-scoped Copilot Requests PAT
-              # is ever visible to it.
+              # "none-required" is not a real tool kind name; passing it as
+              # the sole --available-tools value makes every real tool kind
+              # (including the otherwise-default-available read-only "view"
+              # kind) entirely unavailable for the session - verified
+              # locally that shell, fetch, write, and view are all genuinely
+              # blocked under this pattern (unlike --deny-tool, which only
+              # blocks the specific kinds named and leaves everything else
+              # reachable). --no-custom-instructions additionally stops any
+              # repository or home-directory Copilot instructions file from
+              # being loaded into the prompt, since those are additional
+              # untrusted-content surface on a runner that may have an
+              # untrusted checkout. GH_TOKEN/COPILOT_TOKEN are also stripped
+              # from the subprocess environment so only the narrowly-scoped
+              # Copilot Requests PAT is ever visible to it.
               if env -u GH_TOKEN -u COPILOT_TOKEN COPILOT_GITHUB_TOKEN="$COPILOT_TOKEN" copilot -p "$(cat "$PROMPT_FILE")" \
-                --available-tools=view --disable-builtin-mcps --silent --model "$COPILOT_MODEL" \
+                --available-tools=none-required --disable-builtin-mcps --no-custom-instructions --silent --model "$COPILOT_MODEL" \
                 >"$RESPONSE_FILE" 2>&1; then
                 VERDICT_JSON=$(grep -m1 -oE '\{.*\}' "$RESPONSE_FILE" || true)
                 if [[ -n "$VERDICT_JSON" ]] && echo "$VERDICT_JSON" | jq -e '
