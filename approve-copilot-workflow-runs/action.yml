@@ -3,7 +3,7 @@ description: "Reviews Actions workflow runs awaiting approval that were triggere
 
 inputs:
   github-token:
-    description: "Token with actions:write (list and approve workflow runs), pull-requests:read, contents:read, and issues:write (used to post the review-decision comment) on the target repository"
+    description: "Token with actions:write (list, rerun, and release pending workflow runs), pull-requests:read, contents:read, and issues:write (used to post the review-decision comment) on the target repository"
     required: true
   copilot-token:
     description: "Fine-grained personal access token from a human account with Copilot entitlement and the 'Copilot Requests' permission. Used only to authenticate the local Copilot CLI review; never used for any repository write."
@@ -16,7 +16,7 @@ inputs:
     required: false
     default: "claude-haiku-4.5"
   dry-run:
-    description: "When true, run the full review but never call the approve API"
+    description: "When true, run the full review but never call the release (rerun) API"
     required: false
     default: "false"
 
@@ -267,10 +267,23 @@ runs:
 
             if [[ "$VERDICT" == "approve" ]]; then
               if [[ "$DRY_RUN" == "true" ]]; then
-                echo "Dry-run: would approve run ${RUN_ID} (PR #${PR_NUM}): ${REASON}"
+                echo "Dry-run: would release run ${RUN_ID} (PR #${PR_NUM}): ${REASON}"
               else
-                gh api -X POST "repos/${REPOSITORY}/actions/runs/${RUN_ID}/approve" --silent
-                echo "Approved run ${RUN_ID} (PR #${PR_NUM}): ${REASON}"
+                # The `.../actions/runs/{id}/approve` endpoint only accepts
+                # runs "from a fork pull request or queued by the Actions
+                # bot" (verified empirically: it 403s with that exact
+                # message for a real same-repository Copilot-actor pending
+                # run). Copilot coding agent commits push directly to a
+                # branch in the same repository, so that endpoint can never
+                # release them - this is the exact scenario this action
+                # exists to automate, so using it would make the action a
+                # silent no-op. `.../actions/runs/{id}/rerun`, called with
+                # this action's own (human-owned or App) token, re-queues
+                # the run under this token's trusted identity instead and
+                # was verified empirically to move a real pending run from
+                # conclusion=action_required to status=queued.
+                gh api -X POST "repos/${REPOSITORY}/actions/runs/${RUN_ID}/rerun" --silent
+                echo "Released run ${RUN_ID} (PR #${PR_NUM}) via rerun: ${REASON}"
               fi
               APPROVED+=("${PR_NUM}")
               COMMENT_BODY=$(printf '%s<!-- sha:%s -->\nAuto-approved workflow run(s) for this commit after an automated risk review: %s' "$MARKER" "$HEAD_SHA" "$REASON")
