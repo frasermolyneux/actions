@@ -183,6 +183,7 @@ runs:
               } > "$PROMPT_FILE"
 
               RESPONSE_FILE=$(mktemp)
+              STDERR_FILE=$(mktemp)
               # This review needs no tools at all - it only has to read the
               # diff already embedded in the prompt and return a verdict.
               # "none-required" is not a real tool kind name; passing it as
@@ -199,9 +200,17 @@ runs:
               # untrusted checkout. GH_TOKEN/COPILOT_TOKEN are also stripped
               # from the subprocess environment so only the narrowly-scoped
               # Copilot Requests PAT is ever visible to it.
+              # Stdout (the model's actual response) and stderr are kept in
+              # separate files. "none-required" is deliberately not a real
+              # tool kind name (see below), and the CLI logs a diagnostic
+              # about that unknown allowlist entry to stderr on every run;
+              # merging the two streams would permanently prepend that
+              # diagnostic to the response and make the whole-response JSON
+              # check below fail on every single invocation, regardless of
+              # what the model actually returned.
               if env -u GH_TOKEN -u COPILOT_TOKEN COPILOT_GITHUB_TOKEN="$COPILOT_TOKEN" copilot -p "$(cat "$PROMPT_FILE")" \
                 --available-tools=none-required --disable-builtin-mcps --no-custom-instructions --silent --model "$COPILOT_MODEL" \
-                >"$RESPONSE_FILE" 2>&1; then
+                >"$RESPONSE_FILE" 2>"$STDERR_FILE"; then
                 # Require the entire trimmed response to be exactly one JSON
                 # value matching the schema - not merely a substring
                 # extracted from it. `jq -e .` fails on any leading/trailing
@@ -230,7 +239,7 @@ runs:
                 REASON="Copilot CLI review failed to run; failing closed"
               fi
 
-              rm -f "$PROMPT_FILE" "$RESPONSE_FILE"
+              rm -f "$PROMPT_FILE" "$RESPONSE_FILE" "$STDERR_FILE"
               fi
             fi
 
