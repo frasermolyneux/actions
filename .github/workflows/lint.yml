@@ -1,0 +1,34 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  actionlint:
+    name: actionlint (+ shellcheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Run actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ubuntu-latest runners ship shellcheck preinstalled; actionlint
+          # auto-detects it on PATH and lints the bash embedded in every
+          # composite action's `run:` steps as well as the workflow YAML
+          # itself, so no separate shellcheck step is needed.
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest
+
+          ./actionlint -color
