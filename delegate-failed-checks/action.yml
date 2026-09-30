@@ -29,7 +29,7 @@ inputs:
     required: false
     default: ""
   trusted-bot-login:
-    description: "Login (including the [bot] suffix, e.g. 'my-app[bot]') of the bot identity that github-token posts as. Delegation/escalation marker comments are only trusted from this login or from a human with OWNER/MEMBER/COLLABORATOR association, so an unrelated installed bot (SonarCloud, Dependabot, etc.) cannot spoof a marker to suppress delegation or force escalation. Defaults to the built-in Actions token's identity."
+    description: "Login (including the [bot] suffix, e.g. 'my-app[bot]') of the bot identity that github-token posts as. Delegation/escalation marker comments are only trusted from this login or from a human with OWNER/COLLABORATOR association (i.e. actual write access to this repository - org membership alone does not imply that), so an unrelated installed bot (SonarCloud, Dependabot, etc.) or an org member without repo access cannot spoof a marker to suppress delegation or force escalation. Defaults to the built-in Actions token's identity."
     required: false
     default: "github-actions[bot]"
 
@@ -143,16 +143,18 @@ runs:
             # author_association "NONE", not "COLLABORATOR", so association
             # alone would wrongly exclude it - and generic .user.type=="Bot"
             # would wrongly trust unrelated bots like Dependabot/SonarCloud),
-            # or a human with write-level association (any repo
-            # owner/member/collaborator, not one fixed login, so rotating
-            # which human holds mention-token doesn't reset state). A
-            # participant without write access and who isn't the configured
-            # bot can fake neither: login/type are set by GitHub, not
-            # comment content, and association reflects actual permissions.
+            # or a human with OWNER/COLLABORATOR association - i.e. actual
+            # write access to this specific repo, not one fixed login (so
+            # rotating which human holds mention-token doesn't reset state).
+            # "MEMBER" is deliberately excluded: it only signals org
+            # membership, not write access to this repository. A participant
+            # without write access and who isn't the configured bot can fake
+            # neither: login/type are set by GitHub, not comment content,
+            # and association reflects actual permissions.
             # shellcheck disable=SC2016 # intentional: $bot_login is a jq
             # variable reference (bound via --arg below), not a bash
             # expansion, so this must stay single-quoted.
-            TRUSTED_FILTER='((.user.login == $bot_login and .user.type == "Bot") or .author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")'
+            TRUSTED_FILTER='((.user.login == $bot_login and .user.type == "Bot") or .author_association == "OWNER" or .author_association == "COLLABORATOR")'
             TRUSTED_JQ_ARGS=(--arg bot_login "$TRUSTED_BOT_LOGIN")
 
             ALREADY_ESCALATED=0
