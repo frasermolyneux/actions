@@ -97,7 +97,8 @@ jobs:
         run: |
           set -euo pipefail
           export PATH="$PATH:$HOME/.dotnet/tools"
-          for ACTION in $CHANGED_ACTIONS; do
+          read -ra ACTIONS_ARR <<< "$CHANGED_ACTIONS"
+          for ACTION in "${ACTIONS_ARR[@]}"; do
             VERSION_INFO=$(nbgv get-version -p "$ACTION" -f json)
             MAJOR_MINOR=$(echo "$VERSION_INFO" | jq -r '.MajorMinorVersion')
 
