@@ -257,7 +257,16 @@ runs:
             # produced several pending runs gets exactly one decision
             # comment, and re-runs of this sweep do not spam the same
             # pull request with repeats about a commit already decided.
-            EXISTING_COMMENTS=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq '.[] | select(.body | contains("<!-- sha:'"${HEAD_SHA}"' -->")) | .id')
+            # Both MARKER and the sha tag must be present, and the comment
+            # must have been posted by a bot identity - github-token is
+            # always an App installation token here, never a human account,
+            # so a real PR participant cannot forge our own author type.
+            # Without this, any commenter could pre-post a matching
+            # `<!-- sha:<head> -->` comment to suppress our official audit
+            # comment while approval still silently proceeds.
+            EXISTING_COMMENTS=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq \
+              --arg marker "$MARKER" --arg sha "$HEAD_SHA" \
+              '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id')
             if [[ -z "$EXISTING_COMMENTS" && "$DRY_RUN" != "true" ]]; then
               gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments" -f body="$COMMENT_BODY" --silent
             fi
