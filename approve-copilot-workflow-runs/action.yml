@@ -84,6 +84,13 @@ runs:
             RUN_JSON=$(gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}")
             PR_NUM=$(echo "$RUN_JSON" | jq -r '.pull_requests[0].number // empty')
             HEAD_SHA=$(echo "$RUN_JSON" | jq -r '.head_sha')
+            # Use the base sha the run itself was triggered against
+            # (recorded on the run's pull_requests entry at event time),
+            # not a fresh `pulls/{n}` lookup - the PR's current base can
+            # advance while an older run is still pending, which would
+            # review a different diff range than the one that actually
+            # triggered this run.
+            EVENT_BASE_SHA=$(echo "$RUN_JSON" | jq -r '.pull_requests[0].base.sha // empty')
 
             if [[ -z "$PR_NUM" ]]; then
               echo "Run ${RUN_ID}: no associated pull request, leaving for human approval"
@@ -91,7 +98,10 @@ runs:
               continue
             fi
 
-            CACHE_KEY="${PR_NUM}:${HEAD_SHA}"
+            # Included in the cache key alongside PR + head sha so a run
+            # whose base has moved since an earlier cached verdict never
+            # reuses a review of a different (now-stale) diff range.
+            CACHE_KEY="${PR_NUM}:${HEAD_SHA}:${EVENT_BASE_SHA}"
             if [[ -n "${VERDICT_CACHE[$CACHE_KEY]+set}" ]]; then
               VERDICT="${VERDICT_CACHE[$CACHE_KEY]}"
               REASON="${REASON_CACHE[$CACHE_KEY]}"
@@ -102,7 +112,15 @@ runs:
             REASON="not evaluated"
             CI_TOUCHED=false
 
-            BASE_SHA=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUM}" --jq '.base.sha')
+            if [[ -n "$EVENT_BASE_SHA" ]]; then
+              BASE_SHA="$EVENT_BASE_SHA"
+            else
+              # Fallback for the rare case the run's own pull_requests entry
+              # has no base sha recorded - still better than nothing, but
+              # logged since it carries the base-drift risk above.
+              BASE_SHA=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUM}" --jq '.base.sha')
+              echo "Run ${RUN_ID}: no event-time base sha recorded, falling back to current PR base ${BASE_SHA}"
+            fi
 
             # Fetch the raw diff once, for the same BASE_SHA...HEAD_SHA
             # range the pending run was triggered from - never a
@@ -279,15 +297,26 @@ runs:
             # for the marker/sha/author containment check, matching the
             # pattern in delegate-failed-checks/action.yml:116-130. A
             # failure here must never abort the loop after we have already
-            # approved a run.
-            COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq '.[]')
+            # approved a run. Neither the lookup nor the post is allowed to
+            # be fatal at this point - by this point in the loop the run may
+            # already be approved, so a `set -e` abort here would silently
+            # skip the audit comment, all remaining pending runs, and the
+            # step outputs. If the lookup itself fails we cannot tell
+            # whether a comment already exists, so we skip posting (a
+            # missing audit comment is preferable to risking a duplicate
+            # spam loop on a transient API error).
+            LOOKUP_OK=true
+            COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq '.[]') || LOOKUP_OK=false
             EXISTING_COMMENTS=""
-            if [[ -n "$COMMENTS_RAW" ]]; then
+            if [[ "$LOOKUP_OK" == "true" && -n "$COMMENTS_RAW" ]]; then
               EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" \
-                '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id')
+                '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id') || true
             fi
-            if [[ -z "$EXISTING_COMMENTS" && "$DRY_RUN" != "true" ]]; then
-              gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments" -f body="$COMMENT_BODY" --silent
+            if [[ "$LOOKUP_OK" == "true" && -z "$EXISTING_COMMENTS" && "$DRY_RUN" != "true" ]]; then
+              gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments" -f body="$COMMENT_BODY" --silent \
+                || echo "::warning::failed to post audit comment on PR #${PR_NUM} for ${HEAD_SHA}"
+            elif [[ "$LOOKUP_OK" == "false" ]]; then
+              echo "::warning::failed to look up existing comments on PR #${PR_NUM}; skipping audit comment for ${HEAD_SHA} to avoid duplicate risk"
             fi
           done <<< "$RUN_IDS_RAW"
         fi
