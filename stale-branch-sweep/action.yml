@@ -75,5 +75,7 @@ runs:
         JOINED=$(IFS=,; echo "${UPDATED[*]:-}")
 
         echo "Updated ${COUNT} pull request(s): ${JOINED:-none}"
-        echo "updated_count=${COUNT}" >> "$GITHUB_OUTPUT"
-        echo "updated_pull_requests=${JOINED}" >> "$GITHUB_OUTPUT"
+        {
+          echo "updated_count=${COUNT}"
+          echo "updated_pull_requests=${JOINED}"
+        } >> "$GITHUB_OUTPUT"

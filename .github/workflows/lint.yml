@@ -52,11 +52,11 @@ jobs:
         env:
           # actionlint only understands `.github/workflows/*.yml`, so
           # composite action.yml scripts need a dedicated ShellCheck pass.
-          # Scoped for now to the composite actions actively maintained as
-          # part of the self-heal automation work; extending this to every
+          # Scoped to the self-heal composite actions that are permanently
+          # in the critical path across ~58 repos; extending this to every
           # action.yml in the repo is a reasonable follow-up but is a much
           # larger, separate cleanup (many pre-existing findings elsewhere).
-          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks"
+          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep"
         run: |
           set -euo pipefail
 
