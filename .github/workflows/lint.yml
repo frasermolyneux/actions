@@ -24,6 +24,11 @@ jobs:
         shell: bash
         env:
           ACTIONLINT_VERSION: "1.7.12"
+          # Pinned from the published checksums.txt for this exact release
+          # and hardcoded here rather than downloaded at run time: fetching
+          # the checksum from the same mutable release as the binary would
+          # let a compromised release replace both together undetected.
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
         run: |
           set -euo pipefail
 
@@ -34,9 +39,7 @@ jobs:
           BASE_URL="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
 
           curl --proto '=https' --tlsv1.2 -fsSL -o "$ASSET" "${BASE_URL}/${ASSET}"
-          curl --proto '=https' --tlsv1.2 -fsSL -o checksums.txt "${BASE_URL}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
-
-          grep " ${ASSET}\$" checksums.txt | sha256sum -c -
+          echo "${ACTIONLINT_SHA256}  ${ASSET}" | sha256sum -c -
 
           tar -xzf "$ASSET" actionlint
 
