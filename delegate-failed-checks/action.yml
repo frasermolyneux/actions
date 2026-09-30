@@ -29,7 +29,7 @@ inputs:
     required: false
     default: ""
   trusted-bot-login:
-    description: "Login (including the [bot] suffix, e.g. 'my-app[bot]') of the bot identity that github-token posts as. Delegation/escalation marker comments are only trusted from this login or from a human with OWNER/COLLABORATOR association (i.e. actual write access to this repository - org membership alone does not imply that), so an unrelated installed bot (SonarCloud, Dependabot, etc.) or an org member without repo access cannot spoof a marker to suppress delegation or force escalation. Defaults to the built-in Actions token's identity."
+    description: "Login (including the [bot] suffix, e.g. 'my-app[bot]') of the bot identity that github-token posts as. Delegation/escalation marker comments are only trusted from this login (when also reported as a Bot) or from whichever identity mention-token/github-token itself resolves to for the current run, so an unrelated installed bot (SonarCloud, Dependabot, etc.) or any other participant cannot spoof a marker to suppress delegation or force escalation - author_association is deliberately not used for this, since it does not reliably indicate write access. Defaults to the built-in Actions token's identity."
     required: false
     default: "github-actions[bot]"
 
@@ -95,17 +95,21 @@ runs:
 
         # Resolve the login that COMMENT_TOKEN actually posts as, once, so
         # it can be trusted directly by identity rather than by
-        # author_association. association is not a reliable write-access
-        # proxy: on an org-owned repository the token owner can be
-        # reported as "MEMBER" (org membership) rather than "COLLABORATOR"
-        # even though they hold write access via team permissions, and
-        # "MEMBER" is deliberately not trusted (see TRUSTED_FILTER below)
-        # because it does not by itself imply write access. Without this,
-        # the action's own delegation/escalation comments could be judged
-        # untrusted, so ALREADY_DELEGATED/TOTAL_DELEGATIONS would never see
-        # them and the same commit could be delegated repeatedly, the cap
-        # never being reached.
-        COMMENT_LOGIN=$(GH_TOKEN="$COMMENT_TOKEN" gh api user --jq '.login')
+        # author_association (association is not a reliable write-access
+        # proxy - see TRUSTED_FILTER below for why it's not used at all).
+        if [[ -n "$MENTION_TOKEN" ]]; then
+          # A human PAT: the /user endpoint authenticates it directly.
+          COMMENT_LOGIN=$(GH_TOKEN="$COMMENT_TOKEN" gh api user --jq '.login')
+        else
+          # COMMENT_TOKEN falls back to github-token, which is typically a
+          # GitHub App installation token; the /user endpoint only
+          # authenticates OAuth/PAT tokens; not installation tokens, so
+          # calling it here would abort the whole action (set -e). An
+          # installation token posts comments as the configured bot
+          # identity (see trusted-bot-login's description), so use that
+          # directly instead of resolving it over the API.
+          COMMENT_LOGIN="$TRUSTED_BOT_LOGIN"
+        fi
 
         IFS=',' read -ra EXCLUDED <<< "${EXCLUDE_AUTHORS}"
 
@@ -160,30 +164,30 @@ runs:
             # does support `--arg`) for the marker/sha containment check.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
 
-            # Trust any identity this action can actually post comments as,
-            # plus any other human known to have write access:
+            # Trust only the exact identities this action can itself post
+            # comments as - never author_association. GitHub's association
+            # values do not reliably imply write access: "COLLABORATOR" is
+            # set for any explicitly added collaborator regardless of
+            # whether their actual role is read/triage/write/admin, and
+            # "MEMBER" only signals org membership. A read-only collaborator
+            # or org member could otherwise comment a forged marker to
+            # suppress delegation or force escalation. The two identities
+            # trusted here are:
             #   - the resolved login of COMMENT_TOKEN itself (COMMENT_LOGIN)
-            #     - this is the action's own identity, trusted unconditionally
-            #     regardless of what author_association GitHub happens to
-            #     report for it (see the COMMENT_LOGIN resolution above);
+            #     - this is the action's own identity for this run, and
+            #     resolves fresh each run so rotating which human holds
+            #     mention-token is handled automatically;
             #   - the configured bot login, but only when GitHub also
             #     reports it as a Bot (author_association alone can't be
             #     trusted for the github-token App identity, which shows
             #     "NONE", and generic .user.type=="Bot" would wrongly trust
-            #     unrelated bots like Dependabot/SonarCloud);
-            #   - any other human with OWNER/COLLABORATOR association, i.e.
-            #     actual write access to this specific repo (so rotating
-            #     which human holds mention-token doesn't reset state).
-            # "MEMBER" is deliberately excluded from that last case: it only
-            # signals org membership, not write access to this repository.
-            # A participant who isn't COMMENT_LOGIN, isn't the configured
-            # bot, and lacks OWNER/COLLABORATOR association can fake none of
-            # these: login/type are set by GitHub, not comment content, and
-            # association reflects actual permissions.
+            #     unrelated bots like Dependabot/SonarCloud).
+            # A participant who is neither of these can fake neither: login
+            # and type are set by GitHub, not comment content.
             # shellcheck disable=SC2016 # intentional: $bot_login/$comment_login
             # are jq variable references (bound via --arg below), not bash
             # expansions, so this must stay single-quoted.
-            TRUSTED_FILTER='(.user.login == $comment_login or (.user.login == $bot_login and .user.type == "Bot") or .author_association == "OWNER" or .author_association == "COLLABORATOR")'
+            TRUSTED_FILTER='(.user.login == $comment_login or (.user.login == $bot_login and .user.type == "Bot"))'
             TRUSTED_JQ_ARGS=(--arg bot_login "$TRUSTED_BOT_LOGIN" --arg comment_login "$COMMENT_LOGIN")
 
             ALREADY_ESCALATED=0
