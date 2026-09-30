@@ -131,19 +131,27 @@ runs:
             # `gh api --jq` doesn't accept `--arg`; emit one comment object
             # per line across all pages, then slurp into external `jq` (which
             # does support `--arg`) for the marker/sha containment check.
-            # Dedup matches on marker+sha text alone, regardless of which
-            # identity posted the comment: scoping to a resolved login broke
-            # if the posting identity rotated mid-PR (e.g. mention-token
-            # added/changed after the sweep had already posted comments
-            # under github-token), silently resetting the delegation and
-            # escalation counters. Trusting the marker text accepts the
-            # (already-established, defense-in-depth) risk that another
-            # commenter with write access could spoof it.
+            # Trust is scoped via GitHub's own `author_association` rather
+            # than a resolved login/Bot-type: that survives posting-identity
+            # rotation (mention-token added/changed mid-PR no longer resets
+            # the counters) while still rejecting markers spoofed by an
+            # untrusted participant who lacks write access to this repo.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
+
+            # Trust either identity this action can post as: a Bot-type
+            # account (the GitHub App used for github-token posts as "NONE"
+            # association, not "COLLABORATOR", so association alone would
+            # wrongly exclude it), or a human with write-level association
+            # (any repo owner/member/collaborator, not one fixed login, so
+            # rotating which human holds mention-token doesn't reset state).
+            # A participant without write access can fake neither: .user.type
+            # is set by GitHub, not comment content, and association reflects
+            # actual repo permissions.
+            TRUSTED_FILTER='(.user.type == "Bot" or .author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")'
 
             ALREADY_ESCALATED=0
             if [[ -n "$COMMENTS_RAW" ]]; then
-              ALREADY_ESCALATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$ESCALATION_MARKER" '[.[] | select(.body | contains($marker))] | length')
+              ALREADY_ESCALATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$ESCALATION_MARKER" "[.[] | select(${TRUSTED_FILTER}) | select(.body | contains(\$marker))] | length")
             fi
             if [[ "$ALREADY_ESCALATED" -gt 0 ]]; then
               echo "PR #${NUM}: already escalated to a human; not re-delegating"
@@ -155,7 +163,7 @@ runs:
             # act on (Copilot may still be working the prior attempt), so
             # skip rather than escalating an unchanged sha just because the
             # cap happens to have been reached already.
-            ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
+            ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" "[.[] | select(${TRUSTED_FILTER}) | select(.body | contains(\$marker)) | select(.body | contains(\$sha))] | length")
             if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
               echo "PR #${NUM}: already delegated for sha ${SHA}"
               continue
@@ -171,7 +179,7 @@ runs:
             # again.
             TOTAL_DELEGATIONS=0
             if [[ -n "$COMMENTS_RAW" ]]; then
-              TOTAL_DELEGATIONS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" '[.[] | select(.body | contains($marker))] | length')
+              TOTAL_DELEGATIONS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" "[.[] | select(${TRUSTED_FILTER}) | select(.body | contains(\$marker))] | length")
             fi
             if [[ "$TOTAL_DELEGATIONS" -ge "$MAX_DELEGATIONS" ]]; then
               if [[ "$DRY_RUN" == "true" ]]; then
