@@ -19,6 +19,10 @@ inputs:
     description: "When true, run the full review but never call the release (rerun) API"
     required: false
     default: "false"
+  bot-login:
+    description: "Login (e.g. 'my-app[bot]') of the identity github-token actually posts comments as. When set, audit-comment dedup requires an exact match on this login instead of merely any Bot-type account, so another installed bot cannot pre-post a matching marker/sha comment to suppress ours. Leave unset only if the calling workflow cannot resolve its own App slug; the weaker Bot-type-only check is used as a fallback."
+    required: false
+    default: ""
 
 outputs:
   approved_count:
@@ -52,6 +56,7 @@ runs:
         REPOSITORY: ${{ inputs.repository }}
         COPILOT_MODEL: ${{ inputs.copilot-model }}
         DRY_RUN: ${{ inputs.dry-run }}
+        BOT_LOGIN: ${{ inputs.bot-login }}
       run: |
         set -euo pipefail
 
@@ -297,13 +302,14 @@ runs:
             # produced several pending runs gets exactly one decision
             # comment, and re-runs of this sweep do not spam the same
             # pull request with repeats about a commit already decided.
-            # Both MARKER and the sha tag must be present, and the comment
-            # must have been posted by a bot identity - github-token is
-            # always an App installation token here, never a human account,
-            # so a real PR participant cannot forge our own author type.
-            # Without this, any commenter could pre-post a matching
-            # `<!-- sha:<head> -->` comment to suppress our official audit
-            # comment while approval still silently proceeds.
+            # Both MARKER and the sha tag must be present, and (when
+            # BOT_LOGIN is supplied) the comment must have been posted by
+            # that exact login - matching only .user.type == "Bot" would
+            # accept a marker/sha comment forged by any other installed bot
+            # in the repository, not just the one github-token authenticates
+            # as, letting it suppress our audit comment the same way a
+            # human PR participant could. Falls back to the weaker
+            # Bot-type-only check if the caller has no login to supply.
             # `gh api --jq` does not accept extra jq flags like `--arg`; emit
             # one comment object per line across all pages via --jq '.[]',
             # then slurp into external `jq -s` (which does support `--arg`)
@@ -322,8 +328,13 @@ runs:
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq '.[]') || LOOKUP_OK=false
             EXISTING_COMMENTS=""
             if [[ "$LOOKUP_OK" == "true" && -n "$COMMENTS_RAW" ]]; then
-              EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" \
-                '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id') || true
+              if [[ -n "$BOT_LOGIN" ]]; then
+                EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" --arg login "$BOT_LOGIN" \
+                  '.[] | select(.user.login == $login) | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id') || true
+              else
+                EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" \
+                  '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id') || true
+              fi
             fi
             if [[ "$LOOKUP_OK" == "true" && -z "$EXISTING_COMMENTS" && "$DRY_RUN" != "true" ]]; then
               gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments" -f body="$COMMENT_BODY" --silent \
