@@ -42,6 +42,66 @@ jobs:
 
           # ubuntu-latest runners ship shellcheck preinstalled; actionlint
           # auto-detects it on PATH and lints the bash embedded in every
-          # composite action's `run:` steps as well as the workflow YAML
-          # itself, so no separate shellcheck step is needed.
+          # `.github/workflows/*.yml` file's `run:` steps. actionlint does
+          # not lint composite action metadata (top-level action.yml files),
+          # so those are checked separately below.
           ./actionlint -color
+
+      - name: Lint composite action scripts with ShellCheck
+        shell: bash
+        env:
+          # actionlint only understands `.github/workflows/*.yml`, so
+          # composite action.yml scripts need a dedicated ShellCheck pass.
+          # Scoped for now to the composite actions actively maintained as
+          # part of the self-heal automation work; extending this to every
+          # action.yml in the repo is a reasonable follow-up but is a much
+          # larger, separate cleanup (many pre-existing findings elsewhere).
+          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks"
+        run: |
+          set -euo pipefail
+
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml
+
+          python3 - "$COMPOSITE_ACTION_DIRS" <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+
+          import yaml
+
+          EXPR_RE = re.compile(r"\$\{\{.*?\}\}", re.S)
+
+          action_dirs = sys.argv[1].split()
+          out_root = "/tmp/composite-scripts"
+          os.makedirs(out_root, exist_ok=True)
+
+          script_paths = []
+          for action_dir in action_dirs:
+              path = os.path.join(action_dir, "action.yml")
+              with open(path, "r", encoding="utf-8") as f:
+                  doc = yaml.safe_load(f)
+
+              runs = (doc or {}).get("runs") or {}
+              if runs.get("using") != "composite":
+                  sys.exit(f"{path}: expected a composite action")
+
+              for idx, step in enumerate(runs.get("steps") or []):
+                  script = step.get("run")
+                  if script is None or step.get("shell") != "bash":
+                      continue
+                  safe_script = EXPR_RE.sub("__GHA_EXPR__", script)
+                  out_path = os.path.join(out_root, f"{action_dir}-step{idx}.sh")
+                  with open(out_path, "w", encoding="utf-8", newline="\n") as out:
+                      out.write("#!/usr/bin/env bash\n")
+                      out.write(safe_script)
+                  script_paths.append((path, out_path))
+
+          exit_code = 0
+          for source, script in script_paths:
+              result = subprocess.run(["shellcheck", script])
+              if result.returncode != 0:
+                  print(f"ShellCheck findings in {source} ({script})")
+                  exit_code = 1
+          sys.exit(exit_code)
+          PY
