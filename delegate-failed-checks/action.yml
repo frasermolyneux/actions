@@ -80,15 +80,6 @@ runs:
           echo "::warning::mention-token not set; delegation comments will be posted with github-token and Copilot will not act on them"
         fi
 
-        # Dedup must match the identity that actually posts the comment.
-        # `/user` only works for a real user token (mention-token); a
-        # GitHub App installation token (the github-token fallback) 404s on
-        # that endpoint, so fall back to the previous Bot-type check in that
-        # case rather than resolving a login.
-        if [[ -n "$MENTION_TOKEN" ]]; then
-          COMMENT_AUTHOR_LOGIN=$(GH_TOKEN="$COMMENT_TOKEN" gh api user --jq '.login')
-        fi
-
         IFS=',' read -ra EXCLUDED <<< "${EXCLUDE_AUTHORS}"
 
         # Captured via assignment (not process substitution) so a failing
@@ -140,26 +131,19 @@ runs:
             # `gh api --jq` doesn't accept `--arg`; emit one comment object
             # per line across all pages, then slurp into external `jq` (which
             # does support `--arg`) for the marker/sha containment check.
-            # Restrict the match to the identity that posts delegation
-            # comments so a different PR participant cannot post the
-            # marker/sha text to suppress delegation: the resolved human
-            # login when mention-token is set, otherwise the previous
-            # Bot-type check for the github-token fallback.
+            # Dedup matches on marker+sha text alone, regardless of which
+            # identity posted the comment: scoping to a resolved login broke
+            # if the posting identity rotated mid-PR (e.g. mention-token
+            # added/changed after the sweep had already posted comments
+            # under github-token), silently resetting the delegation and
+            # escalation counters. Trusting the marker text accepts the
+            # (already-established, defense-in-depth) risk that another
+            # commenter with write access could spoof it.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
-
-            AUTHOR_FILTER='.user.type == "Bot"'
-            AUTHOR_JQ_ARGS=()
-            if [[ -n "${COMMENT_AUTHOR_LOGIN:-}" ]]; then
-              # shellcheck disable=SC2016 # intentional: $author is a jq
-              # variable reference (bound via --arg below), not a bash
-              # expansion, so this must stay single-quoted.
-              AUTHOR_FILTER='.user.login == $author'
-              AUTHOR_JQ_ARGS=(--arg author "$COMMENT_AUTHOR_LOGIN")
-            fi
 
             ALREADY_ESCALATED=0
             if [[ -n "$COMMENTS_RAW" ]]; then
-              ALREADY_ESCALATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$ESCALATION_MARKER" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker))] | length")
+              ALREADY_ESCALATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$ESCALATION_MARKER" '[.[] | select(.body | contains($marker))] | length')
             fi
             if [[ "$ALREADY_ESCALATED" -gt 0 ]]; then
               echo "PR #${NUM}: already escalated to a human; not re-delegating"
@@ -171,7 +155,7 @@ runs:
             # act on (Copilot may still be working the prior attempt), so
             # skip rather than escalating an unchanged sha just because the
             # cap happens to have been reached already.
-            ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker)) | select(.body | contains(\$sha))] | length")
+            ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
             if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
               echo "PR #${NUM}: already delegated for sha ${SHA}"
               continue
@@ -187,7 +171,7 @@ runs:
             # again.
             TOTAL_DELEGATIONS=0
             if [[ -n "$COMMENTS_RAW" ]]; then
-              TOTAL_DELEGATIONS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker))] | length")
+              TOTAL_DELEGATIONS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" '[.[] | select(.body | contains($marker))] | length')
             fi
             if [[ "$TOTAL_DELEGATIONS" -ge "$MAX_DELEGATIONS" ]]; then
               if [[ "$DRY_RUN" == "true" ]]; then
