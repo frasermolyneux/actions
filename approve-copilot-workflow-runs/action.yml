@@ -6,7 +6,7 @@ inputs:
     description: "Token with actions:write (list, rerun, and release pending workflow runs), pull-requests:read, contents:read, and issues:write (used to post the review-decision comment) on the target repository"
     required: true
   copilot-token:
-    description: "Fine-grained personal access token from a human account with Copilot entitlement and the 'Copilot Requests' permission. Used only to authenticate the local Copilot CLI review; never used for any repository write."
+    description: "Fine-grained personal access token from a human account with Copilot entitlement and the account-level Copilot permission required for Copilot CLI/API auth (currently labelled 'Copilot agent settings' in the token creation UI). Used only to authenticate the local Copilot CLI review; never used for any repository write."
     required: true
   repository:
     description: "Target repository in owner/repo form"
