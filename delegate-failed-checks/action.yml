@@ -60,8 +60,8 @@ runs:
       run: |
         set -euo pipefail
 
-        if ! [[ "$MAX_DELEGATIONS" =~ ^[0-9]+$ ]] || [[ "$MAX_DELEGATIONS" -lt 1 ]]; then
-          echo "::error::max-delegations must be a positive integer, got: ${MAX_DELEGATIONS}"
+        if ! [[ "$MAX_DELEGATIONS" =~ ^[1-9][0-9]*$ ]]; then
+          echo "::error::max-delegations must be a positive integer with no leading zeros, got: ${MAX_DELEGATIONS}"
           exit 1
         fi
 
@@ -150,6 +150,9 @@ runs:
             AUTHOR_FILTER='.user.type == "Bot"'
             AUTHOR_JQ_ARGS=()
             if [[ -n "${COMMENT_AUTHOR_LOGIN:-}" ]]; then
+              # shellcheck disable=SC2016 # intentional: $author is a jq
+              # variable reference (bound via --arg below), not a bash
+              # expansion, so this must stay single-quoted.
               AUTHOR_FILTER='.user.login == $author'
               AUTHOR_JQ_ARGS=(--arg author "$COMMENT_AUTHOR_LOGIN")
             fi
@@ -160,6 +163,17 @@ runs:
             fi
             if [[ "$ALREADY_ESCALATED" -gt 0 ]]; then
               echo "PR #${NUM}: already escalated to a human; not re-delegating"
+              continue
+            fi
+
+            # Check the current-sha dedup before the cap: if this exact
+            # commit was already delegated, the sweep has nothing new to
+            # act on (Copilot may still be working the prior attempt), so
+            # skip rather than escalating an unchanged sha just because the
+            # cap happens to have been reached already.
+            ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker)) | select(.body | contains(\$sha))] | length")
+            if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
+              echo "PR #${NUM}: already delegated for sha ${SHA}"
               continue
             fi
 
@@ -179,7 +193,10 @@ runs:
               if [[ "$DRY_RUN" == "true" ]]; then
                 echo "Dry-run: would escalate PR #${NUM} to a human (${TOTAL_DELEGATIONS} delegation(s) already attempted, cap is ${MAX_DELEGATIONS})"
               else
-                ESCALATION_BODY=$(printf '%s\nThis pull request has been delegated to @copilot %s time(s) without resolving its failing checks. Stopping automatic re-delegation; this needs a human to look at it directly.' "$ESCALATION_MARKER" "$TOTAL_DELEGATIONS")
+                # Use plain "Copilot" (no @ mention) so posting this
+                # escalation comment with a human mention-token cannot
+                # itself re-trigger the coding agent and undo the cap.
+                ESCALATION_BODY=$(printf '%s\nThis pull request has been delegated to Copilot %s time(s) without resolving its failing checks. Stopping automatic re-delegation; this needs a human to look at it directly.' "$ESCALATION_MARKER" "$TOTAL_DELEGATIONS")
                 GH_TOKEN="$COMMENT_TOKEN" gh api "repos/${REPOSITORY}/issues/${NUM}/comments" -f body="$ESCALATION_BODY" --silent
                 if [[ -n "$ESCALATION_LABEL" ]]; then
                   GH_TOKEN="$COMMENT_TOKEN" gh api "repos/${REPOSITORY}/issues/${NUM}/labels" -f "labels[]=${ESCALATION_LABEL}" --silent \
@@ -188,12 +205,6 @@ runs:
                 echo "Escalated PR #${NUM} to a human (${TOTAL_DELEGATIONS} delegation(s) already attempted, cap is ${MAX_DELEGATIONS})"
               fi
               ESCALATED+=("${NUM}")
-              continue
-            fi
-
-            ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker)) | select(.body | contains(\$sha))] | length")
-            if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
-              echo "PR #${NUM}: already delegated for sha ${SHA}"
               continue
             fi
 
@@ -214,8 +225,10 @@ runs:
         ESCALATED_JOINED=$(IFS=,; echo "${ESCALATED[*]:-}")
 
         echo "Delegated ${COUNT} pull request(s): ${JOINED:-none}; escalated ${ESCALATED_COUNT} pull request(s): ${ESCALATED_JOINED:-none}"
-        echo "delegated_count=${COUNT}" >> "$GITHUB_OUTPUT"
-        echo "delegated_pull_requests=${JOINED}" >> "$GITHUB_OUTPUT"
-        echo "escalated_count=${ESCALATED_COUNT}" >> "$GITHUB_OUTPUT"
-        echo "escalated_pull_requests=${ESCALATED_JOINED}" >> "$GITHUB_OUTPUT"
+        {
+          echo "delegated_count=${COUNT}"
+          echo "delegated_pull_requests=${JOINED}"
+          echo "escalated_count=${ESCALATED_COUNT}"
+          echo "escalated_pull_requests=${ESCALATED_JOINED}"
+        } >> "$GITHUB_OUTPUT"
 
