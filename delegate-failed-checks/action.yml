@@ -93,6 +93,20 @@ runs:
           echo "::warning::mention-token not set; delegation comments will be posted with github-token and Copilot will not act on them"
         fi
 
+        # Resolve the login that COMMENT_TOKEN actually posts as, once, so
+        # it can be trusted directly by identity rather than by
+        # author_association. association is not a reliable write-access
+        # proxy: on an org-owned repository the token owner can be
+        # reported as "MEMBER" (org membership) rather than "COLLABORATOR"
+        # even though they hold write access via team permissions, and
+        # "MEMBER" is deliberately not trusted (see TRUSTED_FILTER below)
+        # because it does not by itself imply write access. Without this,
+        # the action's own delegation/escalation comments could be judged
+        # untrusted, so ALREADY_DELEGATED/TOTAL_DELEGATIONS would never see
+        # them and the same commit could be delegated repeatedly, the cap
+        # never being reached.
+        COMMENT_LOGIN=$(GH_TOKEN="$COMMENT_TOKEN" gh api user --jq '.login')
+
         IFS=',' read -ra EXCLUDED <<< "${EXCLUDE_AUTHORS}"
 
         # Captured via assignment (not process substitution) so a failing
@@ -146,24 +160,31 @@ runs:
             # does support `--arg`) for the marker/sha containment check.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
 
-            # Trust either identity this action can post as: the configured
-            # bot login (the GitHub App used for github-token posts with
-            # author_association "NONE", not "COLLABORATOR", so association
-            # alone would wrongly exclude it - and generic .user.type=="Bot"
-            # would wrongly trust unrelated bots like Dependabot/SonarCloud),
-            # or a human with OWNER/COLLABORATOR association - i.e. actual
-            # write access to this specific repo, not one fixed login (so
-            # rotating which human holds mention-token doesn't reset state).
-            # "MEMBER" is deliberately excluded: it only signals org
-            # membership, not write access to this repository. A participant
-            # without write access and who isn't the configured bot can fake
-            # neither: login/type are set by GitHub, not comment content,
-            # and association reflects actual permissions.
-            # shellcheck disable=SC2016 # intentional: $bot_login is a jq
-            # variable reference (bound via --arg below), not a bash
-            # expansion, so this must stay single-quoted.
-            TRUSTED_FILTER='((.user.login == $bot_login and .user.type == "Bot") or .author_association == "OWNER" or .author_association == "COLLABORATOR")'
-            TRUSTED_JQ_ARGS=(--arg bot_login "$TRUSTED_BOT_LOGIN")
+            # Trust any identity this action can actually post comments as,
+            # plus any other human known to have write access:
+            #   - the resolved login of COMMENT_TOKEN itself (COMMENT_LOGIN)
+            #     - this is the action's own identity, trusted unconditionally
+            #     regardless of what author_association GitHub happens to
+            #     report for it (see the COMMENT_LOGIN resolution above);
+            #   - the configured bot login, but only when GitHub also
+            #     reports it as a Bot (author_association alone can't be
+            #     trusted for the github-token App identity, which shows
+            #     "NONE", and generic .user.type=="Bot" would wrongly trust
+            #     unrelated bots like Dependabot/SonarCloud);
+            #   - any other human with OWNER/COLLABORATOR association, i.e.
+            #     actual write access to this specific repo (so rotating
+            #     which human holds mention-token doesn't reset state).
+            # "MEMBER" is deliberately excluded from that last case: it only
+            # signals org membership, not write access to this repository.
+            # A participant who isn't COMMENT_LOGIN, isn't the configured
+            # bot, and lacks OWNER/COLLABORATOR association can fake none of
+            # these: login/type are set by GitHub, not comment content, and
+            # association reflects actual permissions.
+            # shellcheck disable=SC2016 # intentional: $bot_login/$comment_login
+            # are jq variable references (bound via --arg below), not bash
+            # expansions, so this must stay single-quoted.
+            TRUSTED_FILTER='(.user.login == $comment_login or (.user.login == $bot_login and .user.type == "Bot") or .author_association == "OWNER" or .author_association == "COLLABORATOR")'
+            TRUSTED_JQ_ARGS=(--arg bot_login "$TRUSTED_BOT_LOGIN" --arg comment_login "$COMMENT_LOGIN")
 
             ALREADY_ESCALATED=0
             if [[ -n "$COMMENTS_RAW" ]]; then
