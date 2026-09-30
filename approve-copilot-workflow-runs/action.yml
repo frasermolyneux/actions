@@ -327,17 +327,24 @@ runs:
                 echo "Released run ${RUN_ID} (PR #${PR_NUM}) via rerun: ${REASON}"
               fi
               APPROVED+=("${PR_NUM}")
-              COMMENT_BODY=$(printf '%s<!-- sha:%s -->\nAuto-approved workflow run(s) for this commit after an automated risk review: %s' "$MARKER" "$HEAD_SHA" "$REASON")
+              COMMENT_BODY=$(printf '%s<!-- sha:%s:%s -->\nAuto-approved workflow run(s) for this commit after an automated risk review: %s' "$MARKER" "$HEAD_SHA" "$EVENT_BASE_SHA" "$REASON")
             else
               echo "Left run ${RUN_ID} (PR #${PR_NUM}) pending human approval: ${REASON}"
               BLOCKED+=("${PR_NUM}")
-              COMMENT_BODY=$(printf '%s<!-- sha:%s -->\nLeft workflow run(s) for this commit pending manual approval after an automated risk review: %s' "$MARKER" "$HEAD_SHA" "$REASON")
+              COMMENT_BODY=$(printf '%s<!-- sha:%s:%s -->\nLeft workflow run(s) for this commit pending manual approval after an automated risk review: %s' "$MARKER" "$HEAD_SHA" "$EVENT_BASE_SHA" "$REASON")
             fi
 
-            # Dedup on marker + head sha (not run id) so a commit that
-            # produced several pending runs gets exactly one decision
+            # Dedup on marker + head sha + base sha (not run id) so a commit
+            # that produced several pending runs gets exactly one decision
             # comment, and re-runs of this sweep do not spam the same
-            # pull request with repeats about a commit already decided.
+            # pull request with repeats about a commit already decided. The
+            # base sha is included alongside the head sha because the
+            # verdict cache key also distinguishes it (CACHE_KEY above): two
+            # pending runs can share a head sha but have been triggered
+            # against different bases (and therefore reviewed as different
+            # diff ranges with potentially different verdicts), and a
+            # head-only marker would wrongly suppress the second one's
+            # audit comment as if it were a duplicate of the first.
             # Both MARKER and the sha tag must be present, and (when
             # BOT_LOGIN is supplied) the comment must have been posted by
             # that exact login - matching only .user.type == "Bot" would
@@ -365,11 +372,11 @@ runs:
             EXISTING_COMMENTS=""
             if [[ "$LOOKUP_OK" == "true" && -n "$COMMENTS_RAW" ]]; then
               if [[ -n "$BOT_LOGIN" ]]; then
-                EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" --arg login "$BOT_LOGIN" \
-                  '.[] | select(.user.login == $login) | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id') || true
+                EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" --arg base "$EVENT_BASE_SHA" --arg login "$BOT_LOGIN" \
+                  '.[] | select(.user.login == $login) | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + ":" + $base + " -->")) | .id') || true
               else
-                EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" \
-                  '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id') || true
+                EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" --arg base "$EVENT_BASE_SHA" \
+                  '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + ":" + $base + " -->")) | .id') || true
               fi
             fi
             if [[ "$LOOKUP_OK" == "true" && -z "$EXISTING_COMMENTS" && "$DRY_RUN" != "true" ]]; then
