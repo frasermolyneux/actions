@@ -3,7 +3,7 @@ description: "Delegates open pull requests with failed checks to the Copilot cod
 
 inputs:
   github-token:
-    description: "Token with pull-requests:read and checks:read on the target repository, used for all read-only lookups (listing pull requests, checks, and existing comments)"
+    description: "Token with pull-requests:read and checks:read on the target repository, used for all read-only lookups (listing pull requests, checks, and existing comments). Also needs issues:write, since it is used to post the delegation comment when mention-token is not supplied."
     required: true
   mention-token:
     description: "Personal access token from a human user with write access and Copilot entitlement on the target repository. GitHub's Copilot coding agent only acts on @copilot mentions authored by a real user; comments posted by a GitHub App or other bot identity are ignored, so the delegation comment must be posted with this token rather than github-token. Falls back to github-token (which will not trigger Copilot) when not provided."
@@ -57,11 +57,14 @@ runs:
           echo "::warning::mention-token not set; delegation comments will be posted with github-token and Copilot will not act on them"
         fi
 
-        # Dedup must match the identity that actually posts the comment
-        # (COMMENT_TOKEN), not a fixed "Bot" type: once a mention-token is
-        # supplied, delegation comments are authored by that human user, not
-        # a bot.
-        COMMENT_AUTHOR_LOGIN=$(GH_TOKEN="$COMMENT_TOKEN" gh api user --jq '.login')
+        # Dedup must match the identity that actually posts the comment.
+        # `/user` only works for a real user token (mention-token); a
+        # GitHub App installation token (the github-token fallback) 404s on
+        # that endpoint, so fall back to the previous Bot-type check in that
+        # case rather than resolving a login.
+        if [[ -n "$MENTION_TOKEN" ]]; then
+          COMMENT_AUTHOR_LOGIN=$(GH_TOKEN="$COMMENT_TOKEN" gh api user --jq '.login')
+        fi
 
         IFS=',' read -ra EXCLUDED <<< "${EXCLUDE_AUTHORS}"
 
@@ -113,14 +116,19 @@ runs:
             # `gh api --jq` doesn't accept `--arg`; emit one comment object
             # per line across all pages, then slurp into external `jq` (which
             # does support `--arg`) for the marker/sha containment check.
-            # Restrict the match to comments from the identity that posts
-            # delegation comments (COMMENT_AUTHOR_LOGIN) so a different PR
-            # participant cannot post the marker/sha text to suppress
-            # delegation.
+            # Restrict the match to the identity that posts delegation
+            # comments so a different PR participant cannot post the
+            # marker/sha text to suppress delegation: the resolved human
+            # login when mention-token is set, otherwise the previous
+            # Bot-type check for the github-token fallback.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
             ALREADY_DELEGATED=0
             if [[ -n "$COMMENTS_RAW" ]]; then
-              ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" --arg author "$COMMENT_AUTHOR_LOGIN" '[.[] | select(.user.login == $author) | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
+              if [[ -n "${COMMENT_AUTHOR_LOGIN:-}" ]]; then
+                ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" --arg author "$COMMENT_AUTHOR_LOGIN" '[.[] | select(.user.login == $author) | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
+              else
+                ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
+              fi
             fi
             if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
               echo "PR #${NUM}: already delegated for sha ${SHA}"
