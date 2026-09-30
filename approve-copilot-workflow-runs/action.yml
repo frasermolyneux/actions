@@ -62,7 +62,7 @@ runs:
         # for a human, regardless of what the model review says. This is
         # the primary control, not the LLM: it is the exact class of change
         # (workflow/CI tampering) the approval gate exists to catch.
-        DENY_REGEX='(^|/)\.github/workflows/|(^|/)\.github/actions/|(^|/)action\.ya?ml$|(^|/)Dockerfile([^/]*)$|(^|/)\.github/CODEOWNERS$|(^|/)\.github/dependabot\.ya?ml$'
+        DENY_REGEX='(^|/)\.github/workflows/|(^|/)\.github/actions/|(^|/)action\.ya?ml$|(^|/)Dockerfile([^/]*)$|^CODEOWNERS$|(^|/)docs/CODEOWNERS$|(^|/)\.github/CODEOWNERS$|(^|/)\.github/dependabot\.ya?ml$'
 
         # Only ever consider runs triggered by the Copilot coding agent's
         # own commits (our delegation target) - never any other
@@ -109,8 +109,20 @@ runs:
               # review. It is passed to the model purely as data inside
               # delimited tags, and the prompt explicitly instructs the
               # model to ignore any instructions embedded within it.
-              DIFF_TEXT=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUM}" -H "Accept: application/vnd.github.v3.diff" | head -c 60000)
+              #
+              # Fetched from the same BASE_SHA...HEAD_SHA range used for the
+              # changed-files check above, so the model reviews exactly the
+              # commit the pending run was triggered by - never a
+              # superseded/newer commit if the PR has moved on since.
+              DIFF_TEXT=$(gh api "repos/${REPOSITORY}/compare/${BASE_SHA}...${HEAD_SHA}" -H "Accept: application/vnd.github.v3.diff")
+              DIFF_BYTES=$(printf '%s' "$DIFF_TEXT" | wc -c)
 
+              if [[ "$DIFF_BYTES" -gt 60000 ]]; then
+                REASON="diff is ${DIFF_BYTES} bytes, exceeding the 60000 byte review limit; failing closed rather than reviewing a truncated diff"
+                DIFF_TEXT=""
+              fi
+
+              if [[ -n "$DIFF_TEXT" ]]; then
               PROMPT_FILE=$(mktemp)
               {
                 echo "You are an automated pre-merge risk reviewer for a GitHub Actions workflow run that is pending approval."
@@ -138,27 +150,41 @@ runs:
               } > "$PROMPT_FILE"
 
               RESPONSE_FILE=$(mktemp)
-              if COPILOT_GITHUB_TOKEN="$COPILOT_TOKEN" copilot -p "$(cat "$PROMPT_FILE")" \
-                --allow-all-tools --disable-builtin-mcps --silent --model "$COPILOT_MODEL" \
+              # This review needs no tools at all - it only has to read the
+              # diff already embedded in the prompt and return a verdict. The
+              # diff is untrusted, so tool use is explicitly denied (belt and
+              # braces alongside --disable-builtin-mcps) to prevent a
+              # prompt-injected diff from executing shell commands or writing
+              # files, and GH_TOKEN/COPILOT_TOKEN are stripped from the
+              # subprocess environment so only the narrowly-scoped
+              # Copilot Requests PAT is ever visible to it.
+              if env -u GH_TOKEN -u COPILOT_TOKEN COPILOT_GITHUB_TOKEN="$COPILOT_TOKEN" copilot -p "$(cat "$PROMPT_FILE")" \
+                --allow-all-tools --deny-tool shell --deny-tool write --disable-builtin-mcps --silent --model "$COPILOT_MODEL" \
                 >"$RESPONSE_FILE" 2>&1; then
                 VERDICT_JSON=$(grep -m1 -oE '\{.*\}' "$RESPONSE_FILE" || true)
-                if [[ -n "$VERDICT_JSON" ]] && echo "$VERDICT_JSON" | jq -e . >/dev/null 2>&1; then
-                  MODEL_VERDICT=$(echo "$VERDICT_JSON" | jq -r '.verdict // "block"')
-                  MODEL_TOUCHES_CI=$(echo "$VERDICT_JSON" | jq -r '.touches_ci // true')
-                  REASON=$(echo "$VERDICT_JSON" | jq -r '.reason // "no reason given"')
+                if [[ -n "$VERDICT_JSON" ]] && echo "$VERDICT_JSON" | jq -e '
+                    type == "object"
+                    and (.verdict == "approve" or .verdict == "block")
+                    and ((.touches_ci | type) == "boolean")
+                    and ((.reason | type) == "string")
+                  ' >/dev/null 2>&1; then
+                  MODEL_VERDICT=$(echo "$VERDICT_JSON" | jq -r '.verdict')
+                  MODEL_TOUCHES_CI=$(echo "$VERDICT_JSON" | jq -r '.touches_ci')
+                  REASON=$(echo "$VERDICT_JSON" | jq -r '.reason')
                   if [[ "$MODEL_VERDICT" == "approve" && "$MODEL_TOUCHES_CI" == "false" ]]; then
                     VERDICT="approve"
                   else
                     REASON="model recommended human review: ${REASON}"
                   fi
                 else
-                  REASON="could not parse a JSON verdict from the Copilot CLI review; failing closed"
+                  REASON="Copilot CLI response failed schema validation (missing/invalid verdict, touches_ci, or reason fields); failing closed"
                 fi
               else
                 REASON="Copilot CLI review failed to run; failing closed"
               fi
 
               rm -f "$PROMPT_FILE" "$RESPONSE_FILE"
+              fi
             fi
 
             if [[ "$VERDICT" == "approve" ]]; then
