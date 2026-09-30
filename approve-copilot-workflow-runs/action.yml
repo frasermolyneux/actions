@@ -122,9 +122,22 @@ runs:
               DIFF_TEXT=""
               CI_TOUCHED=true
             else
+              # Git C-quotes an entire diff header path when it contains
+              # non-ASCII or control characters (e.g. `diff --git
+              # "a/.github/workflows/tést.yml" "b/..."`), which the plain
+              # unquoted a/...b/... pattern below cannot safely unescape.
+              # Comparing the count of all `diff --git ` headers against the
+              # count that actually matched our parser catches that (and any
+              # other unparseable header) and fails closed instead of
+              # silently dropping it from the deny check.
+              TOTAL_HEADERS=$(printf '%s\n' "$DIFF_TEXT" | grep -cE '^diff --git ' || true)
               CHANGED_FILES=$(printf '%s\n' "$DIFF_TEXT" | grep -oE '^diff --git a/.* b/.*' | sed -E 's#^diff --git a/(.*) b/(.*)#\1\n\2#' || true)
+              PARSED_HEADERS=$(printf '%s\n' "$DIFF_TEXT" | grep -cE '^diff --git a/.* b/.*' || true)
 
-              if [[ -n "$CHANGED_FILES" ]]; then
+              if [[ "$PARSED_HEADERS" -ne "$TOTAL_HEADERS" ]]; then
+                REASON="diff contains a file header that could not be safely parsed (e.g. a quoted non-ASCII path); failing closed"
+                CI_TOUCHED=true
+              elif [[ -n "$CHANGED_FILES" ]]; then
                 while IFS= read -r FILE; do
                   [[ -z "$FILE" ]] && continue
                   if [[ "$FILE" =~ $DENY_REGEX ]]; then
@@ -189,7 +202,13 @@ runs:
               if env -u GH_TOKEN -u COPILOT_TOKEN COPILOT_GITHUB_TOKEN="$COPILOT_TOKEN" copilot -p "$(cat "$PROMPT_FILE")" \
                 --available-tools=none-required --disable-builtin-mcps --no-custom-instructions --silent --model "$COPILOT_MODEL" \
                 >"$RESPONSE_FILE" 2>&1; then
-                VERDICT_JSON=$(grep -m1 -oE '\{.*\}' "$RESPONSE_FILE" || true)
+                # Require the entire trimmed response to be exactly one JSON
+                # value matching the schema - not merely a substring
+                # extracted from it. `jq -e .` fails on any leading/trailing
+                # prose or a second JSON value, so a prompt-injected response
+                # that smuggles an extra "approve" object alongside its real
+                # verdict fails closed instead of being silently accepted.
+                VERDICT_JSON=$(sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$RESPONSE_FILE")
                 if [[ -n "$VERDICT_JSON" ]] && echo "$VERDICT_JSON" | jq -e '
                     type == "object"
                     and (.verdict == "approve" or .verdict == "block")
