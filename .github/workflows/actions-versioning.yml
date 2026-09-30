@@ -23,7 +23,7 @@ jobs:
         run: |
           dotnet tool uninstall --global nbgv || true
           dotnet tool install --global nbgv --version 3.9.50
-          echo "PATH=$PATH:$HOME/.dotnet/tools" >> $GITHUB_ENV
+          echo "PATH=$PATH:$HOME/.dotnet/tools" >> "$GITHUB_ENV"
 
       - name: Detect changed actions
         id: filter
@@ -116,7 +116,7 @@ jobs:
             CURRENT_PATCH_TAG=
             while IFS= read -r TAG; do
               if [[ "$TAG" == ${PATCH_TAG_PREFIX}* ]]; then
-                PATCH="${TAG#${PATCH_TAG_PREFIX}}"
+                PATCH="${TAG#"${PATCH_TAG_PREFIX}"}"
                 if [[ "$PATCH" =~ ^[0-9]+$ ]]; then
                   CURRENT_PATCH_TAG="$TAG"
                   break
@@ -125,13 +125,13 @@ jobs:
             done < <(git tag --points-at "${GITHUB_SHA}")
 
             if [[ -n "$CURRENT_PATCH_TAG" ]]; then
-              VERSION="${CURRENT_PATCH_TAG#${ACTION}/v}"
+              VERSION="${CURRENT_PATCH_TAG#"${ACTION}"/v}"
               PATCH_TAG="$CURRENT_PATCH_TAG"
               echo "Commit already has $PATCH_TAG. Refreshing rolling tags."
             else
               LAST_PATCH=
               while IFS= read -r TAG; do
-                PATCH="${TAG#${PATCH_TAG_PREFIX}}"
+                PATCH="${TAG#"${PATCH_TAG_PREFIX}"}"
                 if [[ "$PATCH" =~ ^[0-9]+$ ]]; then
                   if [[ -z "$LAST_PATCH" ]]; then
                     LAST_PATCH="$PATCH"
