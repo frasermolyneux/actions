@@ -393,6 +393,8 @@ runs:
         BLOCKED_COUNT=${#BLOCKED[@]}
 
         echo "Approved ${APPROVED_COUNT} run(s): ${APPROVED_JOINED:-none}; left ${BLOCKED_COUNT} run(s) pending human approval"
-        echo "approved_count=${APPROVED_COUNT}" >> "$GITHUB_OUTPUT"
-        echo "approved_pull_requests=${APPROVED_JOINED}" >> "$GITHUB_OUTPUT"
-        echo "blocked_count=${BLOCKED_COUNT}" >> "$GITHUB_OUTPUT"
+        {
+          echo "approved_count=${APPROVED_COUNT}"
+          echo "approved_pull_requests=${APPROVED_JOINED}"
+          echo "blocked_count=${BLOCKED_COUNT}"
+        } >> "$GITHUB_OUTPUT"
