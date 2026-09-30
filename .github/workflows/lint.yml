@@ -22,13 +22,26 @@ jobs:
 
       - name: Run actionlint
         shell: bash
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
         run: |
           set -euo pipefail
+
+          # Download a pinned actionlint release over HTTPS and verify its
+          # checksum before extracting/executing it, rather than piping a
+          # downloaded script straight into bash.
+          ASSET="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          BASE_URL="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$ASSET" "${BASE_URL}/${ASSET}"
+          curl --proto '=https' --tlsv1.2 -fsSL -o checksums.txt "${BASE_URL}/actionlint_${ACTIONLINT_VERSION}_checksums.txt"
+
+          grep " ${ASSET}\$" checksums.txt | sha256sum -c -
+
+          tar -xzf "$ASSET" actionlint
 
           # ubuntu-latest runners ship shellcheck preinstalled; actionlint
           # auto-detects it on PATH and lints the bash embedded in every
           # composite action's `run:` steps as well as the workflow YAML
           # itself, so no separate shellcheck step is needed.
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) latest
-
           ./actionlint -color
