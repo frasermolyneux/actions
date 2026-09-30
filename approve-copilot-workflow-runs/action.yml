@@ -71,6 +71,12 @@ runs:
 
         APPROVED=()
         BLOCKED=()
+        # Keyed by "PR_NUM:HEAD_SHA" so a single commit that produced several
+        # pending workflow runs (a common case) is reviewed and metered
+        # against the Copilot CLI exactly once, and gets exactly one
+        # decision comment, instead of once per run.
+        declare -A VERDICT_CACHE
+        declare -A REASON_CACHE
         if [[ -n "$RUN_IDS_RAW" ]]; then
           while IFS= read -r RUN_ID; do
             [[ -z "$RUN_ID" ]] && continue
@@ -85,43 +91,55 @@ runs:
               continue
             fi
 
+            CACHE_KEY="${PR_NUM}:${HEAD_SHA}"
+            if [[ -n "${VERDICT_CACHE[$CACHE_KEY]+set}" ]]; then
+              VERDICT="${VERDICT_CACHE[$CACHE_KEY]}"
+              REASON="${REASON_CACHE[$CACHE_KEY]}"
+              echo "Run ${RUN_ID}: reusing cached review for PR #${PR_NUM} @ ${HEAD_SHA}"
+            else
+
             VERDICT="block"
             REASON="not evaluated"
             CI_TOUCHED=false
 
             BASE_SHA=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUM}" --jq '.base.sha')
-            CHANGED_FILES=$(gh api "repos/${REPOSITORY}/compare/${BASE_SHA}...${HEAD_SHA}" --paginate --jq '.files[]?.filename')
 
-            if [[ -n "$CHANGED_FILES" ]]; then
-              while IFS= read -r FILE; do
-                [[ -z "$FILE" ]] && continue
-                if [[ "$FILE" =~ $DENY_REGEX ]]; then
-                  CI_TOUCHED=true
-                  break
-                fi
-              done <<< "$CHANGED_FILES"
+            # Fetch the raw diff once, for the same BASE_SHA...HEAD_SHA
+            # range the pending run was triggered from - never a
+            # superseded/newer commit if the PR has moved on since. Changed
+            # file names are then parsed directly out of this diff (`diff
+            # --git a/... b/...` header lines) rather than from the compare
+            # API's JSON `.files` list, which GitHub caps at 300 entries and
+            # would silently drop file names beyond that cap, letting a
+            # workflow-file change slip past the deny check undetected.
+            DIFF_TEXT=$(gh api "repos/${REPOSITORY}/compare/${BASE_SHA}...${HEAD_SHA}" -H "Accept: application/vnd.github.v3.diff")
+            DIFF_BYTES=$(printf '%s' "$DIFF_TEXT" | wc -c)
+
+            if [[ "$DIFF_BYTES" -gt 60000 ]]; then
+              REASON="diff is ${DIFF_BYTES} bytes, exceeding the 60000 byte review limit; failing closed rather than reviewing a truncated diff"
+              DIFF_TEXT=""
+              CI_TOUCHED=true
+            else
+              CHANGED_FILES=$(printf '%s\n' "$DIFF_TEXT" | grep -oE '^diff --git a/.* b/.*' | sed -E 's#^diff --git a/(.*) b/.*#\1#' || true)
+
+              if [[ -n "$CHANGED_FILES" ]]; then
+                while IFS= read -r FILE; do
+                  [[ -z "$FILE" ]] && continue
+                  if [[ "$FILE" =~ $DENY_REGEX ]]; then
+                    CI_TOUCHED=true
+                    break
+                  fi
+                done <<< "$CHANGED_FILES"
+              fi
             fi
 
             if [[ "$CI_TOUCHED" == "true" ]]; then
-              REASON="diff touches a CI/workflow/CODEOWNERS path; always requires human approval"
+              [[ "$REASON" == "not evaluated" ]] && REASON="diff touches a CI/workflow/CODEOWNERS path; always requires human approval"
             else
               # Diff content is untrusted input from the pull request under
               # review. It is passed to the model purely as data inside
               # delimited tags, and the prompt explicitly instructs the
               # model to ignore any instructions embedded within it.
-              #
-              # Fetched from the same BASE_SHA...HEAD_SHA range used for the
-              # changed-files check above, so the model reviews exactly the
-              # commit the pending run was triggered by - never a
-              # superseded/newer commit if the PR has moved on since.
-              DIFF_TEXT=$(gh api "repos/${REPOSITORY}/compare/${BASE_SHA}...${HEAD_SHA}" -H "Accept: application/vnd.github.v3.diff")
-              DIFF_BYTES=$(printf '%s' "$DIFF_TEXT" | wc -c)
-
-              if [[ "$DIFF_BYTES" -gt 60000 ]]; then
-                REASON="diff is ${DIFF_BYTES} bytes, exceeding the 60000 byte review limit; failing closed rather than reviewing a truncated diff"
-                DIFF_TEXT=""
-              fi
-
               if [[ -n "$DIFF_TEXT" ]]; then
               PROMPT_FILE=$(mktemp)
               {
@@ -151,15 +169,18 @@ runs:
 
               RESPONSE_FILE=$(mktemp)
               # This review needs no tools at all - it only has to read the
-              # diff already embedded in the prompt and return a verdict. The
-              # diff is untrusted, so tool use is explicitly denied (belt and
-              # braces alongside --disable-builtin-mcps) to prevent a
-              # prompt-injected diff from executing shell commands or writing
-              # files, and GH_TOKEN/COPILOT_TOKEN are stripped from the
-              # subprocess environment so only the narrowly-scoped
-              # Copilot Requests PAT is ever visible to it.
+              # diff already embedded in the prompt and return a verdict.
+              # --available-tools=view restricts the model to the read-only
+              # "view" tool kind (used to display file contents); every
+              # other tool kind (shell, write, fetch, MCP, etc.) is entirely
+              # unavailable for this session, not merely denied-with-prompt,
+              # so a prompt-injected diff cannot execute commands, write
+              # files, or make network calls no matter what it asks for.
+              # GH_TOKEN/COPILOT_TOKEN are also stripped from the subprocess
+              # environment so only the narrowly-scoped Copilot Requests PAT
+              # is ever visible to it.
               if env -u GH_TOKEN -u COPILOT_TOKEN COPILOT_GITHUB_TOKEN="$COPILOT_TOKEN" copilot -p "$(cat "$PROMPT_FILE")" \
-                --allow-all-tools --deny-tool shell --deny-tool write --disable-builtin-mcps --silent --model "$COPILOT_MODEL" \
+                --available-tools=view --disable-builtin-mcps --silent --model "$COPILOT_MODEL" \
                 >"$RESPONSE_FILE" 2>&1; then
                 VERDICT_JSON=$(grep -m1 -oE '\{.*\}' "$RESPONSE_FILE" || true)
                 if [[ -n "$VERDICT_JSON" ]] && echo "$VERDICT_JSON" | jq -e '
@@ -187,6 +208,10 @@ runs:
               fi
             fi
 
+            VERDICT_CACHE[$CACHE_KEY]="$VERDICT"
+            REASON_CACHE[$CACHE_KEY]="$REASON"
+            fi
+
             if [[ "$VERDICT" == "approve" ]]; then
               if [[ "$DRY_RUN" == "true" ]]; then
                 echo "Dry-run: would approve run ${RUN_ID} (PR #${PR_NUM}): ${REASON}"
@@ -195,17 +220,18 @@ runs:
                 echo "Approved run ${RUN_ID} (PR #${PR_NUM}): ${REASON}"
               fi
               APPROVED+=("${PR_NUM}")
-              COMMENT_BODY=$(printf '%s<!-- run:%s -->\nAuto-approved this workflow run after an automated risk review: %s' "$MARKER" "$RUN_ID" "$REASON")
+              COMMENT_BODY=$(printf '%s<!-- sha:%s -->\nAuto-approved workflow run(s) for this commit after an automated risk review: %s' "$MARKER" "$HEAD_SHA" "$REASON")
             else
               echo "Left run ${RUN_ID} (PR #${PR_NUM}) pending human approval: ${REASON}"
               BLOCKED+=("${PR_NUM}")
-              COMMENT_BODY=$(printf '%s<!-- run:%s -->\nLeft this workflow run pending manual approval after an automated risk review: %s' "$MARKER" "$RUN_ID" "$REASON")
+              COMMENT_BODY=$(printf '%s<!-- sha:%s -->\nLeft workflow run(s) for this commit pending manual approval after an automated risk review: %s' "$MARKER" "$HEAD_SHA" "$REASON")
             fi
 
-            # Dedup on marker + run id so re-runs of this sweep do not spam
-            # the same pull request with repeat comments about a run that's
-            # already been decided.
-            EXISTING_COMMENTS=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq '.[] | select(.body | contains("<!-- run:'"${RUN_ID}"' -->")) | .id')
+            # Dedup on marker + head sha (not run id) so a commit that
+            # produced several pending runs gets exactly one decision
+            # comment, and re-runs of this sweep do not spam the same
+            # pull request with repeats about a commit already decided.
+            EXISTING_COMMENTS=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq '.[] | select(.body | contains("<!-- sha:'"${HEAD_SHA}"' -->")) | .id')
             if [[ -z "$EXISTING_COMMENTS" && "$DRY_RUN" != "true" ]]; then
               gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments" -f body="$COMMENT_BODY" --silent
             fi
