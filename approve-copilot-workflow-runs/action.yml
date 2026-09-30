@@ -41,7 +41,7 @@ runs:
 
     - name: Install GitHub Copilot CLI
       shell: bash
-      run: npm install --global @github/copilot@1.0.89
+      run: npm install --global --ignore-scripts @github/copilot@1.0.89
 
     - name: Review and approve pending Copilot workflow runs
       id: review
