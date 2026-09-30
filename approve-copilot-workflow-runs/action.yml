@@ -3,7 +3,7 @@ description: "Reviews Actions workflow runs awaiting approval that were triggere
 
 inputs:
   github-token:
-    description: "Token with actions:write (list and approve workflow runs), pull-requests:read and contents:read on the target repository"
+    description: "Token with actions:write (list and approve workflow runs), pull-requests:read, contents:read, and issues:write (used to post the review-decision comment) on the target repository"
     required: true
   copilot-token:
     description: "Fine-grained personal access token from a human account with Copilot entitlement and the 'Copilot Requests' permission. Used only to authenticate the local Copilot CLI review; never used for any repository write."
