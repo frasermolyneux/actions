@@ -1,5 +1,5 @@
 name: "delegate-failed-checks"
-description: "Delegates open pull requests with failed checks to the Copilot coding agent by commenting a delegation request once per failing commit"
+description: "Delegates open pull requests with failed checks to the Copilot coding agent by commenting a delegation request once per failing commit, escalating to a human instead of re-delegating indefinitely once an attempt cap is reached"
 
 inputs:
   github-token:
@@ -20,6 +20,14 @@ inputs:
     description: "When true, only report which pull requests would be delegated"
     required: false
     default: "false"
+  max-delegations:
+    description: "Maximum number of delegation comments (counted across all commits) to post on a single pull request before escalating instead of delegating again. Guards against an indefinite delegate/fail/re-delegate loop when the actual cause is environmental (e.g. cloud credentials, provider auth) and Copilot cannot fix it by changing code."
+    required: false
+    default: "3"
+  escalation-label:
+    description: "Label to add to the pull request when the delegation cap is reached (e.g. 'needs-human'). Best-effort: if the label does not already exist in the repository, adding it is skipped with a warning rather than failing the step. Leave empty to skip labeling entirely."
+    required: false
+    default: ""
 
 outputs:
   delegated_count:
@@ -28,6 +36,12 @@ outputs:
   delegated_pull_requests:
     description: "Comma-separated pull request numbers that were delegated (or would be, in dry-run)"
     value: ${{ steps.delegate.outputs.delegated_pull_requests }}
+  escalated_count:
+    description: "Number of pull requests left pending human attention after reaching max-delegations (or that would be, in dry-run)"
+    value: ${{ steps.delegate.outputs.escalated_count }}
+  escalated_pull_requests:
+    description: "Comma-separated pull request numbers that were escalated (or would be, in dry-run)"
+    value: ${{ steps.delegate.outputs.escalated_pull_requests }}
 
 runs:
   using: "composite"
@@ -41,10 +55,19 @@ runs:
         REPOSITORY: ${{ inputs.repository }}
         EXCLUDE_AUTHORS: ${{ inputs.exclude-authors }}
         DRY_RUN: ${{ inputs.dry-run }}
+        MAX_DELEGATIONS: ${{ inputs.max-delegations }}
+        ESCALATION_LABEL: ${{ inputs.escalation-label }}
       run: |
         set -euo pipefail
 
+        if ! [[ "$MAX_DELEGATIONS" =~ ^[0-9]+$ ]] || [[ "$MAX_DELEGATIONS" -lt 1 ]]; then
+          echo "::error::max-delegations must be a positive integer, got: ${MAX_DELEGATIONS}"
+          exit 1
+        fi
+
         MARKER="<!-- devex-copilot-delegate -->"
+        ESCALATION_MARKER="<!-- devex-copilot-delegate-escalated -->"
+
 
         # Comments must be posted with a human user's token or Copilot's
         # coding agent will not act on the @copilot mention (see
@@ -73,6 +96,7 @@ runs:
         PR_NUMBERS_RAW=$(gh api "repos/${REPOSITORY}/pulls?state=open&per_page=100" --paginate --jq '.[].number')
 
         DELEGATED=()
+        ESCALATED=()
         if [[ -n "$PR_NUMBERS_RAW" ]]; then
           while IFS= read -r NUM; do
             [[ -z "$NUM" ]] && continue
@@ -122,14 +146,52 @@ runs:
             # login when mention-token is set, otherwise the previous
             # Bot-type check for the github-token fallback.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
-            ALREADY_DELEGATED=0
-            if [[ -n "$COMMENTS_RAW" ]]; then
-              if [[ -n "${COMMENT_AUTHOR_LOGIN:-}" ]]; then
-                ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" --arg author "$COMMENT_AUTHOR_LOGIN" '[.[] | select(.user.login == $author) | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
-              else
-                ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
-              fi
+
+            AUTHOR_FILTER='.user.type == "Bot"'
+            AUTHOR_JQ_ARGS=()
+            if [[ -n "${COMMENT_AUTHOR_LOGIN:-}" ]]; then
+              AUTHOR_FILTER='.user.login == $author'
+              AUTHOR_JQ_ARGS=(--arg author "$COMMENT_AUTHOR_LOGIN")
             fi
+
+            ALREADY_ESCALATED=0
+            if [[ -n "$COMMENTS_RAW" ]]; then
+              ALREADY_ESCALATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$ESCALATION_MARKER" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker))] | length")
+            fi
+            if [[ "$ALREADY_ESCALATED" -gt 0 ]]; then
+              echo "PR #${NUM}: already escalated to a human; not re-delegating"
+              continue
+            fi
+
+            # Cap counts every delegation comment ever posted on this pull
+            # request (any commit), not just ones matching the current sha
+            # - otherwise a PR where Copilot keeps pushing new (still
+            # failing) commits would be delegated again on every single
+            # commit forever, e.g. when the real cause is environmental
+            # (cloud credentials, provider auth) and no code change can fix
+            # it. Once the cap is hit, escalate once instead of delegating
+            # again.
+            TOTAL_DELEGATIONS=0
+            if [[ -n "$COMMENTS_RAW" ]]; then
+              TOTAL_DELEGATIONS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker))] | length")
+            fi
+            if [[ "$TOTAL_DELEGATIONS" -ge "$MAX_DELEGATIONS" ]]; then
+              if [[ "$DRY_RUN" == "true" ]]; then
+                echo "Dry-run: would escalate PR #${NUM} to a human (${TOTAL_DELEGATIONS} delegation(s) already attempted, cap is ${MAX_DELEGATIONS})"
+              else
+                ESCALATION_BODY=$(printf '%s\nThis pull request has been delegated to @copilot %s time(s) without resolving its failing checks. Stopping automatic re-delegation; this needs a human to look at it directly.' "$ESCALATION_MARKER" "$TOTAL_DELEGATIONS")
+                GH_TOKEN="$COMMENT_TOKEN" gh api "repos/${REPOSITORY}/issues/${NUM}/comments" -f body="$ESCALATION_BODY" --silent
+                if [[ -n "$ESCALATION_LABEL" ]]; then
+                  GH_TOKEN="$COMMENT_TOKEN" gh api "repos/${REPOSITORY}/issues/${NUM}/labels" -f "labels[]=${ESCALATION_LABEL}" --silent \
+                    || echo "::warning::failed to add label '${ESCALATION_LABEL}' to PR #${NUM} (it may not exist in this repository)"
+                fi
+                echo "Escalated PR #${NUM} to a human (${TOTAL_DELEGATIONS} delegation(s) already attempted, cap is ${MAX_DELEGATIONS})"
+              fi
+              ESCALATED+=("${NUM}")
+              continue
+            fi
+
+            ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" "${AUTHOR_JQ_ARGS[@]}" "[.[] | select(${AUTHOR_FILTER}) | select(.body | contains(\$marker)) | select(.body | contains(\$sha))] | length")
             if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
               echo "PR #${NUM}: already delegated for sha ${SHA}"
               continue
@@ -148,7 +210,12 @@ runs:
 
         COUNT=${#DELEGATED[@]}
         JOINED=$(IFS=,; echo "${DELEGATED[*]:-}")
+        ESCALATED_COUNT=${#ESCALATED[@]}
+        ESCALATED_JOINED=$(IFS=,; echo "${ESCALATED[*]:-}")
 
-        echo "Delegated ${COUNT} pull request(s): ${JOINED:-none}"
+        echo "Delegated ${COUNT} pull request(s): ${JOINED:-none}; escalated ${ESCALATED_COUNT} pull request(s): ${ESCALATED_JOINED:-none}"
         echo "delegated_count=${COUNT}" >> "$GITHUB_OUTPUT"
         echo "delegated_pull_requests=${JOINED}" >> "$GITHUB_OUTPUT"
+        echo "escalated_count=${ESCALATED_COUNT}" >> "$GITHUB_OUTPUT"
+        echo "escalated_pull_requests=${ESCALATED_JOINED}" >> "$GITHUB_OUTPUT"
+
