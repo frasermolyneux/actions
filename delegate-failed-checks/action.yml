@@ -65,8 +65,16 @@ runs:
       run: |
         set -euo pipefail
 
-        if ! [[ "$MAX_DELEGATIONS" =~ ^[1-9][0-9]*$ ]]; then
-          echo "::error::max-delegations must be a positive integer with no leading zeros, got: ${MAX_DELEGATIONS}"
+        # Check the digit-count bound with string length (safe for any
+        # input size) before any arithmetic comparison is attempted
+        # elsewhere: a value that passes a plain ^[1-9][0-9]*$ regex but
+        # exceeds bash's 64-bit signed arithmetic range (e.g.
+        # 18446744073709551616) would silently wrap during later `-ge`/`-lt`
+        # comparisons, e.g. evaluating as 0 and escalating a PR that has had
+        # zero delegations. 6 digits (max 999999) is far beyond any sane
+        # real-world cap while staying comfortably inside that range.
+        if ! [[ "$MAX_DELEGATIONS" =~ ^[1-9][0-9]*$ ]] || [[ ${#MAX_DELEGATIONS} -gt 6 ]]; then
+          echo "::error::max-delegations must be a positive integer with no leading zeros and at most 6 digits (max 999999), got: ${MAX_DELEGATIONS}"
           exit 1
         fi
 
