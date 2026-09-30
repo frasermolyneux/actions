@@ -3,8 +3,12 @@ description: "Delegates open pull requests with failed checks to the Copilot cod
 
 inputs:
   github-token:
-    description: "Token with issues:write, pull-requests:read, and checks:read on the target repository"
+    description: "Token with pull-requests:read and checks:read on the target repository, used for all read-only lookups (listing pull requests, checks, and existing comments)"
     required: true
+  mention-token:
+    description: "Personal access token from a human user with write access and Copilot entitlement on the target repository. GitHub's Copilot coding agent only acts on @copilot mentions authored by a real user; comments posted by a GitHub App or other bot identity are ignored, so the delegation comment must be posted with this token rather than github-token. Falls back to github-token (which will not trigger Copilot) when not provided."
+    required: false
+    default: ""
   repository:
     description: "Target repository in owner/repo form"
     required: true
@@ -33,6 +37,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-token }}
+        MENTION_TOKEN: ${{ inputs.mention-token }}
         REPOSITORY: ${{ inputs.repository }}
         EXCLUDE_AUTHORS: ${{ inputs.exclude-authors }}
         DRY_RUN: ${{ inputs.dry-run }}
@@ -40,6 +45,23 @@ runs:
         set -euo pipefail
 
         MARKER="<!-- devex-copilot-delegate -->"
+
+        # Comments must be posted with a human user's token or Copilot's
+        # coding agent will not act on the @copilot mention (see
+        # mention-token description). Fall back to github-token so the
+        # action still runs (and still reports what it would delegate) when
+        # no mention-token is configured, but warn loudly since the mention
+        # will be inert in that case.
+        COMMENT_TOKEN="${MENTION_TOKEN:-$GH_TOKEN}"
+        if [[ -z "$MENTION_TOKEN" ]]; then
+          echo "::warning::mention-token not set; delegation comments will be posted with github-token and Copilot will not act on them"
+        fi
+
+        # Dedup must match the identity that actually posts the comment
+        # (COMMENT_TOKEN), not a fixed "Bot" type: once a mention-token is
+        # supplied, delegation comments are authored by that human user, not
+        # a bot.
+        COMMENT_AUTHOR_LOGIN=$(GH_TOKEN="$COMMENT_TOKEN" gh api user --jq '.login')
 
         IFS=',' read -ra EXCLUDED <<< "${EXCLUDE_AUTHORS}"
 
@@ -91,12 +113,14 @@ runs:
             # `gh api --jq` doesn't accept `--arg`; emit one comment object
             # per line across all pages, then slurp into external `jq` (which
             # does support `--arg`) for the marker/sha containment check.
-            # Restrict the match to bot-authored comments so a PR participant
-            # cannot post the marker/sha text to suppress delegation.
+            # Restrict the match to comments from the identity that posts
+            # delegation comments (COMMENT_AUTHOR_LOGIN) so a different PR
+            # participant cannot post the marker/sha text to suppress
+            # delegation.
             COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${NUM}/comments?per_page=100" --paginate --jq '.[]')
             ALREADY_DELEGATED=0
             if [[ -n "$COMMENTS_RAW" ]]; then
-              ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" '[.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
+              ALREADY_DELEGATED=$(printf '%s\n' "$COMMENTS_RAW" | jq -s --arg marker "$MARKER" --arg sha "$SHA" --arg author "$COMMENT_AUTHOR_LOGIN" '[.[] | select(.user.login == $author) | select(.body | contains($marker)) | select(.body | contains($sha))] | length')
             fi
             if [[ "$ALREADY_DELEGATED" -gt 0 ]]; then
               echo "PR #${NUM}: already delegated for sha ${SHA}"
@@ -107,7 +131,7 @@ runs:
               echo "Dry-run: would delegate PR #${NUM} (${FAILED_COUNT} failing check(s) at ${SHA})"
             else
               BODY=$(printf '%s<!-- sha:%s -->\n@copilot investigate and resolve the failed checks on this pull request.' "$MARKER" "$SHA")
-              gh api "repos/${REPOSITORY}/issues/${NUM}/comments" -f body="$BODY" --silent
+              GH_TOKEN="$COMMENT_TOKEN" gh api "repos/${REPOSITORY}/issues/${NUM}/comments" -f body="$BODY" --silent
               echo "Delegated PR #${NUM} (${FAILED_COUNT} failing check(s) at ${SHA})"
             fi
             DELEGATED+=("${NUM}")
