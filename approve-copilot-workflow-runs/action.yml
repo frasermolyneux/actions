@@ -273,9 +273,19 @@ runs:
             # Without this, any commenter could pre-post a matching
             # `<!-- sha:<head> -->` comment to suppress our official audit
             # comment while approval still silently proceeds.
-            EXISTING_COMMENTS=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq \
-              --arg marker "$MARKER" --arg sha "$HEAD_SHA" \
-              '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id')
+            # `gh api --jq` does not accept extra jq flags like `--arg`; emit
+            # one comment object per line across all pages via --jq '.[]',
+            # then slurp into external `jq -s` (which does support `--arg`)
+            # for the marker/sha/author containment check, matching the
+            # pattern in delegate-failed-checks/action.yml:116-130. A
+            # failure here must never abort the loop after we have already
+            # approved a run.
+            COMMENTS_RAW=$(gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments?per_page=100" --paginate --jq '.[]')
+            EXISTING_COMMENTS=""
+            if [[ -n "$COMMENTS_RAW" ]]; then
+              EXISTING_COMMENTS=$(printf '%s\n' "$COMMENTS_RAW" | jq -s -r --arg marker "$MARKER" --arg sha "$HEAD_SHA" \
+                '.[] | select(.user.type == "Bot") | select(.body | contains($marker)) | select(.body | contains("<!-- sha:" + $sha + " -->")) | .id')
+            fi
             if [[ -z "$EXISTING_COMMENTS" && "$DRY_RUN" != "true" ]]; then
               gh api "repos/${REPOSITORY}/issues/${PR_NUM}/comments" -f body="$COMMENT_BODY" --silent
             fi
