@@ -150,5 +150,7 @@ runs:
         JOINED=$(IFS=,; echo "${DELEGATED[*]:-}")
 
         echo "Delegated ${COUNT} pull request(s): ${JOINED:-none}"
-        echo "delegated_count=${COUNT}" >> "$GITHUB_OUTPUT"
-        echo "delegated_pull_requests=${JOINED}" >> "$GITHUB_OUTPUT"
+        {
+          echo "delegated_count=${COUNT}"
+          echo "delegated_pull_requests=${JOINED}"
+        } >> "$GITHUB_OUTPUT"

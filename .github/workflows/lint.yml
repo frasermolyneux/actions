@@ -1,0 +1,111 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  actionlint:
+    name: actionlint (+ shellcheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Run actionlint
+        shell: bash
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          # Pinned from the published checksums.txt for this exact release
+          # and hardcoded here rather than downloaded at run time: fetching
+          # the checksum from the same mutable release as the binary would
+          # let a compromised release replace both together undetected.
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          set -euo pipefail
+
+          # Download a pinned actionlint release over HTTPS and verify its
+          # checksum before extracting/executing it, rather than piping a
+          # downloaded script straight into bash.
+          ASSET="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          BASE_URL="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}"
+
+          curl --proto '=https' --tlsv1.2 -fsSL -o "$ASSET" "${BASE_URL}/${ASSET}"
+          echo "${ACTIONLINT_SHA256}  ${ASSET}" | sha256sum -c -
+
+          tar -xzf "$ASSET" actionlint
+
+          # ubuntu-latest runners ship shellcheck preinstalled; actionlint
+          # auto-detects it on PATH and lints the bash embedded in every
+          # `.github/workflows/*.yml` file's `run:` steps. actionlint does
+          # not lint composite action metadata (top-level action.yml files),
+          # so those are checked separately below.
+          ./actionlint -color
+
+      - name: Lint composite action scripts with ShellCheck
+        shell: bash
+        env:
+          # actionlint only understands `.github/workflows/*.yml`, so
+          # composite action.yml scripts need a dedicated ShellCheck pass.
+          # Scoped to the self-heal composite actions that are permanently
+          # in the critical path across ~58 repos; extending this to every
+          # action.yml in the repo is a reasonable follow-up but is a much
+          # larger, separate cleanup (many pre-existing findings elsewhere).
+          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep"
+        run: |
+          set -euo pipefail
+
+          python3 -m pip install --quiet --disable-pip-version-check \
+            --only-binary :all: "pyyaml==6.0.3"
+
+          python3 - "$COMPOSITE_ACTION_DIRS" <<'PY'
+          import os
+          import re
+          import subprocess
+          import sys
+
+          import yaml
+
+          EXPR_RE = re.compile(r"\$\{\{.*?\}\}", re.S)
+
+          action_dirs = sys.argv[1].split()
+          out_root = "/tmp/composite-scripts"
+          os.makedirs(out_root, exist_ok=True)
+
+          script_paths = []
+          for action_dir in action_dirs:
+              path = os.path.join(action_dir, "action.yml")
+              with open(path, "r", encoding="utf-8") as f:
+                  doc = yaml.safe_load(f)
+
+              runs = (doc or {}).get("runs") or {}
+              if runs.get("using") != "composite":
+                  sys.exit(f"{path}: expected a composite action")
+
+              for idx, step in enumerate(runs.get("steps") or []):
+                  script = step.get("run")
+                  if script is None or step.get("shell") != "bash":
+                      continue
+                  safe_script = EXPR_RE.sub("__GHA_EXPR__", script)
+                  out_path = os.path.join(out_root, f"{action_dir}-step{idx}.sh")
+                  with open(out_path, "w", encoding="utf-8", newline="\n") as out:
+                      out.write("#!/usr/bin/env bash\n")
+                      out.write(safe_script)
+                  script_paths.append((path, out_path))
+
+          exit_code = 0
+          for source, script in script_paths:
+              result = subprocess.run(["shellcheck", script])
+              if result.returncode != 0:
+                  print(f"ShellCheck findings in {source} ({script})")
+                  exit_code = 1
+          sys.exit(exit_code)
+          PY
