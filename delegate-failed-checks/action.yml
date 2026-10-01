@@ -264,4 +264,3 @@ runs:
           echo "escalated_count=${ESCALATED_COUNT}"
           echo "escalated_pull_requests=${ESCALATED_JOINED}"
         } >> "$GITHUB_OUTPUT"
-
