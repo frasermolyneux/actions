@@ -1,5 +1,5 @@
 name: "stale-branch-sweep"
-description: "Updates the head branch of open pull requests that have auto-merge enabled but are behind their base branch"
+description: "Updates the head branch of open pull requests that are behind their base branch"
 
 inputs:
   github-token:
@@ -36,7 +36,10 @@ runs:
 
         # Captured via assignment (not process substitution) so a failing
         # `gh api` call trips `set -e` instead of being silently swallowed.
-        PR_NUMBERS_RAW=$(gh api "repos/${REPOSITORY}/pulls?state=open&per_page=100" --paginate --jq '.[] | select(.auto_merge != null) | .number')
+        # Every open PR is considered, regardless of auto-merge status:
+        # updating a branch only merges base into head and re-runs checks,
+        # it does not bypass review or merge anything on its own.
+        PR_NUMBERS_RAW=$(gh api "repos/${REPOSITORY}/pulls?state=open&per_page=100" --paginate --jq '.[].number')
 
         UPDATED=()
         if [[ -n "$PR_NUMBERS_RAW" ]]; then
