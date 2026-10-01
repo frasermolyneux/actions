@@ -5,6 +5,7 @@ Each composite action in this repository owns a dedicated `version.json` so Nerd
 ## Publishing Flow
 
 - Pushing to `main` runs the `actions-versioning` workflow, which installs `nbgv`, recomputes versions for the folders touched in the push, and emits three tag shapes for each updated action.
+- The `ACTIONS` array is release order, not just a catalog. Put new dependencies before their consumers (for example, `dotnet-test-report`, then `dotnet-test`, then the CI wrappers) so a partial release cannot publish a wrapper pointing at missing tags.
 - Consumers should reference whichever tag scope matches their tolerance for updates when invoking the actions (see examples below).
 - To bump a major or minor version, edit the corresponding folder's `version.json` before merging to `main`; patch versions are derived automatically from commit height.
 

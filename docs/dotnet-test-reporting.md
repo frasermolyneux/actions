@@ -173,7 +173,7 @@ Portal-web keeps its richer coverage/provenance, browser bootstrap and required-
 
 ## Validation
 
-`node --test dotnet-test-report/report.test.js test-results-summary/summary.test.js` exercises parsing,
+`node --test dotnet-test/action.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js` exercises release ordering, parsing,
 failure propagation, source annotations, and comment ownership/write-context/stale-run behavior.
 The `Test reporting contracts` workflow additionally runs two real xUnit projects on both .NET 9
 and .NET 10 on Linux and Windows, and asserts that all four executions and the artifact ID survive.

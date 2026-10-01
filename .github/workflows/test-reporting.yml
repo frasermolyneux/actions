@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: "22"
       - name: Test TRX parsing and PR publishing contracts
-        run: node --test dotnet-test-report/report.test.js test-results-summary/summary.test.js
+        run: node --test dotnet-test/action.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
       - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
         with:
           dotnet-version: |
