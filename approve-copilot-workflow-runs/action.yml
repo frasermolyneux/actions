@@ -1,5 +1,5 @@
 name: "approve-copilot-workflow-runs"
-description: "Reviews Actions workflow runs awaiting approval that were triggered by Copilot coding agent commits, and approves the ones that pass a deterministic CI-file allowlist plus an automated Copilot CLI risk review"
+description: "Reviews Actions workflow runs awaiting approval that were triggered by Copilot coding agent commits (or other configured trusted automation), and approves the ones that pass a deterministic CI-file allowlist plus an automated Copilot CLI risk review"
 
 inputs:
   github-token:
@@ -21,6 +21,14 @@ inputs:
     default: "false"
   bot-login:
     description: "Login (e.g. 'my-app[bot]') of the identity github-token actually posts comments as. When set, audit-comment dedup requires an exact match on this login instead of merely any Bot-type account, so another installed bot cannot pre-post a matching marker/sha comment to suppress ours. Leave unset only if the calling workflow cannot resolve its own App slug; the weaker Bot-type-only check is used as a fallback."
+    required: false
+    default: ""
+  extra-trusted-actors:
+    description: "Comma-separated additional workflow-run actor logins (beyond the always-trusted 'Copilot') to consider for release, e.g. 'github-actions[bot]' for Dependabot-triggered pull requests. A run's actor login alone is often not specific enough to trust (e.g. 'github-actions[bot]' is the recorded actor for many unrelated action_required cases), so any actor listed here is additionally required to match extra-trusted-pr-authors on the run's pull request before it is reviewed; otherwise it is left pending for human approval."
+    required: false
+    default: ""
+  extra-trusted-pr-authors:
+    description: "Comma-separated pull request author logins (e.g. 'dependabot[bot]') required to authorize a run whose actor matched extra-trusted-actors. Ignored for the always-trusted 'Copilot' actor, which needs no additional author check."
     required: false
     default: ""
 
@@ -57,6 +65,8 @@ runs:
         COPILOT_MODEL: ${{ inputs.copilot-model }}
         DRY_RUN: ${{ inputs.dry-run }}
         BOT_LOGIN: ${{ inputs.bot-login }}
+        EXTRA_TRUSTED_ACTORS: ${{ inputs.extra-trusted-actors }}
+        EXTRA_TRUSTED_PR_AUTHORS: ${{ inputs.extra-trusted-pr-authors }}
       run: |
         set -euo pipefail
 
@@ -78,10 +88,20 @@ runs:
         # (workflow/CI tampering) the approval gate exists to catch.
         DENY_REGEX='(^|/)\.github/workflows/|(^|/)\.github/actions/|(^|/)action\.ya?ml$|(^|/)Dockerfile([^/]*)$|^CODEOWNERS$|(^|/)docs/CODEOWNERS$|(^|/)\.github/CODEOWNERS$|(^|/)\.github/dependabot\.ya?ml$'
 
-        # Only ever consider runs triggered by the Copilot coding agent's
-        # own commits (our delegation target) - never any other
-        # contributor's pending run.
-        RUN_IDS_RAW=$(gh api "repos/${REPOSITORY}/actions/runs?status=action_required&per_page=100" --paginate --jq '.workflow_runs[]? | select(.actor.login == "Copilot") | .id')
+        # Build the jq array of trusted actor logins once: "Copilot" is
+        # always trusted (our original delegation target, narrow and
+        # specific enough on its own), plus whatever the caller opted into
+        # via extra-trusted-actors (e.g. "github-actions[bot]" for
+        # Dependabot-triggered runs - Dependabot itself never appears as a
+        # run's actor; GitHub records the run as triggered by
+        # "github-actions[bot]" instead, verified empirically against a
+        # real stuck Dependabot pull request).
+        TRUSTED_ACTORS_JSON=$(printf '%s\n' "Copilot" "${EXTRA_TRUSTED_ACTORS//,/$'\n'}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$' | jq -R -s -c 'split("\n") | map(select(length > 0)) | unique')
+
+        # `gh api --jq` does not accept `--argjson`, so the actor filter is
+        # applied by an external `jq -s` over one run object per line
+        # (consistent with the comment-lookup pattern later in this step).
+        RUN_IDS_RAW=$(gh api "repos/${REPOSITORY}/actions/runs?status=action_required&per_page=100" --paginate --jq '.workflow_runs[]?' | jq -s -r --argjson actors "$TRUSTED_ACTORS_JSON" '.[] | select(.actor.login as $a | $actors | index($a)) | .id')
 
         APPROVED=()
         BLOCKED=()
@@ -98,6 +118,7 @@ runs:
             RUN_JSON=$(gh api "repos/${REPOSITORY}/actions/runs/${RUN_ID}")
             PR_NUM=$(echo "$RUN_JSON" | jq -r '.pull_requests[0].number // empty')
             HEAD_SHA=$(echo "$RUN_JSON" | jq -r '.head_sha')
+            ACTOR_LOGIN=$(echo "$RUN_JSON" | jq -r '.actor.login')
             # Use the base sha the run itself was triggered against
             # (recorded on the run's pull_requests entry at event time),
             # not a fresh `pulls/{n}` lookup - the PR's current base can
@@ -110,6 +131,35 @@ runs:
               echo "Run ${RUN_ID}: no associated pull request, leaving for human approval"
               BLOCKED+=("${RUN_ID}")
               continue
+            fi
+
+            # "Copilot" is a specific enough actor login to trust on its
+            # own, but the other actors a caller may opt into (e.g.
+            # "github-actions[bot]") are the recorded actor for many
+            # unrelated action_required cases, not just the automation this
+            # action is meant to cover. For any actor other than "Copilot",
+            # additionally require the pull request's own author to be in
+            # extra-trusted-pr-authors before reviewing it at all - this
+            # keeps a broad actor login from silently trusting an arbitrary
+            # contributor's pull request just because it shares that actor.
+            if [[ "$ACTOR_LOGIN" != "Copilot" ]]; then
+              PR_AUTHOR=$(gh api "repos/${REPOSITORY}/pulls/${PR_NUM}" --jq '.user.login')
+              AUTHOR_TRUSTED=false
+              IFS=',' read -ra TRUSTED_AUTHORS <<< "${EXTRA_TRUSTED_PR_AUTHORS}"
+              for TA in "${TRUSTED_AUTHORS[@]:-}"; do
+                TA="${TA#"${TA%%[![:space:]]*}"}"
+                TA="${TA%"${TA##*[![:space:]]}"}"
+                [[ -z "$TA" ]] && continue
+                if [[ "$PR_AUTHOR" == "$TA" ]]; then
+                  AUTHOR_TRUSTED=true
+                  break
+                fi
+              done
+              if [[ "$AUTHOR_TRUSTED" != "true" ]]; then
+                echo "Run ${RUN_ID} (PR #${PR_NUM}): actor ${ACTOR_LOGIN} is trusted only for authors [${EXTRA_TRUSTED_PR_AUTHORS}], but pull request author is ${PR_AUTHOR}; leaving for human approval"
+                BLOCKED+=("${RUN_ID}")
+                continue
+              fi
             fi
 
             # Included in the cache key alongside PR + head sha so a run
@@ -209,11 +259,20 @@ runs:
               # delimited tags, and the prompt explicitly instructs the
               # model to ignore any instructions embedded within it.
               if [[ -n "$DIFF_TEXT" ]]; then
+              # Describes the actual origin of the pending run so the model
+              # is not misled into assuming every review is a Copilot code
+              # fix - a Dependabot-authored dependency bump is a different
+              # (and differently risky) kind of change to reason about.
+              if [[ "$ACTOR_LOGIN" == "Copilot" ]]; then
+                ORIGIN_DESC="a commit from the GitHub Copilot coding agent, responding to an automated request to fix failing checks on this pull request"
+              else
+                ORIGIN_DESC="a commit on a pull request opened by ${PR_AUTHOR:-an automated actor} (workflow run actor: ${ACTOR_LOGIN}), pre-approved for review because both are on this repository's trusted automation list"
+              fi
+
               PROMPT_FILE=$(mktemp)
               {
                 echo "You are an automated pre-merge risk reviewer for a GitHub Actions workflow run that is pending approval."
-                echo "The workflow run was produced by a commit from the GitHub Copilot coding agent, responding to an automated"
-                echo "request to fix failing checks on this pull request. Your only job is to decide whether it is safe to let"
+                echo "The workflow run was produced by ${ORIGIN_DESC}. Your only job is to decide whether it is safe to let"
                 echo "the pending CI workflow run execute automatically, or whether a human must review it first."
                 echo ""
                 echo "Flag as unsafe (touches_ci: true) any change that: modifies GitHub Actions workflows or composite actions,"
