@@ -118,6 +118,8 @@ This runner targets the VSTest/TRX contract; it does not change projects to Micr
 existing solution-wide integration filter. Defaults remain unchanged so repositories without test
 projects are not broken by rolling tags. Opted-in repositories must actually execute tests.
 Build/version/package/application outputs and artifact names are unchanged.
+The reusable `codequality.yml` workflow accepts the same opt-in as a boolean, so analysis builds
+can retain the same reporting contract without granting PR-write permissions to build steps.
 
 ## `test-results-summary`
 

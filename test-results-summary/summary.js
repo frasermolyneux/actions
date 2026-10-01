@@ -56,6 +56,7 @@ function normalize(jobsText) {
     const outputs = Object.entries(job.outputs || {}).filter(([key]) => /(?:^|_)test_report$/.test(key));
     if (!outputs.length) outputs.push(['test_report', '']);
     for (const [key, text] of outputs) {
+      if (!/^[a-zA-Z_][a-zA-Z0-9_-]{0,99}$/.test(key)) throw new Error('Invalid test report output name.');
       let report = validateReport(parse(text, 4096));
       if (!report) {
         report = {
@@ -101,12 +102,12 @@ function render(reports, current) {
     '## Test results', '',
     `Head: \`${current.headSha.slice(0, 12)}\` | Tested: \`${current.sha.slice(0, 12)}\` | [Run ${current.runId}, attempt ${current.attempt}](${url})`,
     '',
-    '| Job / suite | Status | Passed | Failed | Skipped | Total | TRX windows | Results |',
+    '| Job / report / suite | Status | Passed | Failed | Skipped | Total | TRX windows | Results |',
     '| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |',
   ];
   for (const report of reports) {
     const artifact = report.artifactId ? `[TRX](${url}/artifacts/${report.artifactId})` : `[Run logs](${url})`;
-    lines.push(`| ${escape(report.job)} / ${escape(report.suite)} | ${report.status}: ${reasons[report.reason]} | ${report.passed} | ${report.failed} | ${report.skipped} | ${report.total} | ${report.durationSeconds.toFixed(3)} s | ${artifact} |`);
+    lines.push(`| ${escape(report.job)} / ${escape(report.output)} / ${escape(report.suite)} | ${report.status}: ${reasons[report.reason]} | ${report.passed} | ${report.failed} | ${report.skipped} | ${report.total} | ${report.durationSeconds.toFixed(3)} s | ${artifact} |`);
   }
   lines.push('', 'Counts include each project/framework execution; summed TRX windows are not wall-clock time. No cross-suite totals are inferred.',
     'The test/build jobs remain authoritative. Missing reports and unsuccessful job outcomes are never presented as passing.');

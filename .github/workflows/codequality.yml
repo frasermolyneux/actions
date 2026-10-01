@@ -46,6 +46,11 @@ on:
         required: false
         default: false
         type: boolean
+      test-reporting:
+        description: Opt in to isolated .NET TRX artifacts, validated summaries and failure annotations.
+        required: false
+        default: false
+        type: boolean
       src-folder:
         description: Folder that contains the .NET solution/projects.
         required: false
@@ -200,6 +205,7 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           skip-format-check: ${{ inputs.skip-format-check }}
+          test-reporting: ${{ inputs.test-reporting }}
           src-folder: ${{ inputs.src-folder }}
           perform-checkout: 'false'
 
@@ -211,6 +217,7 @@ jobs:
           dotnet-version: ${{ inputs.dotnet-version }}
           publish-frameworks: ${{ inputs.publish-frameworks }}
           skip-format-check: ${{ inputs.skip-format-check }}
+          test-reporting: ${{ inputs.test-reporting }}
           src-folder: ${{ inputs.src-folder }}
           nugetArtifactName: ${{ inputs.nuget-artifact-name }}
           perform-checkout: 'false'
@@ -222,6 +229,7 @@ jobs:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
           skip-format-check: ${{ inputs.skip-format-check }}
+          test-reporting: ${{ inputs.test-reporting }}
           src-folder: ${{ inputs.src-folder }}
           perform-checkout: 'false'
           use-framework-output-root: ${{ inputs.use-framework-output-root }}
