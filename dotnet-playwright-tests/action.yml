@@ -25,6 +25,15 @@ inputs:
     description: "Set to true to restore and build the solution before testing (use when running in a separate job)"
     required: false
     default: "false"
+  test-reporting:
+    description: "Opt in to isolated TRX reporting while preserving the existing integration-test filter."
+    required: false
+    default: "false"
+
+outputs:
+  test-report:
+    description: "Schema-1 Integration report when test-reporting is enabled."
+    value: ${{ steps.tests.outputs.report }}
 
 runs:
   using: "composite"
@@ -72,15 +81,26 @@ runs:
         pwsh ${{ inputs.src-folder }}/${{ inputs.test-project }}/bin/Release/${{ inputs.target-framework }}/playwright.ps1 install --with-deps chromium
 
     - name: Run Playwright integration tests
+      if: inputs.test-reporting != 'true'
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
         dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
 
     - name: Upload Test Results
-      if: always()
+      if: always() && inputs.test-reporting != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: test-results-${{ inputs.test-project }}
         path: ${{ inputs.src-folder }}/TestResults/**/*.trx
         retention-days: 7
+
+    - name: Run integration tests with GitHub reporting
+      id: tests
+      if: inputs.test-reporting == 'true'
+      uses: frasermolyneux/actions/dotnet-test@dotnet-test/v1
+      with:
+        suite: Integration
+        working-directory: ${{ inputs.src-folder }}
+        filter: FullyQualifiedName~IntegrationTests
+        artifact-name: test-results-${{ inputs.test-project }}

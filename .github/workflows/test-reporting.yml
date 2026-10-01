@@ -1,0 +1,52 @@
+name: Test reporting contracts
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+      - name: Test TRX parsing and PR publishing contracts
+        run: node --test dotnet-test-report/report.test.js test-results-summary/summary.test.js
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+      - name: Resolve sibling actions locally for pre-release smoke test
+        shell: pwsh
+        run: |
+          $path = 'dotnet-test/action.yml'
+          $content = [IO.File]::ReadAllText($path)
+          $content = $content.Replace('frasermolyneux/actions/dotnet-test-report@dotnet-test-report/v1.1', './dotnet-test-report')
+          [IO.File]::WriteAllText($path, $content)
+      - name: Exercise two projects and two frameworks
+        id: smoke
+        uses: ./dotnet-test
+        with:
+          working-directory: dotnet-test/fixtures
+          no-build: "false"
+          artifact-name: test-reporting-smoke-${{ matrix.os }}
+      - name: Verify all four executions were retained
+        shell: pwsh
+        env:
+          TEST_REPORT: ${{ steps.smoke.outputs.report }}
+        run: |
+          $report = $env:TEST_REPORT | ConvertFrom-Json
+          if ($report.status -ne 'passed' -or $report.total -ne 4 -or $report.passed -ne 4 -or -not $report.artifactId) {
+            throw 'The multi-project/multi-framework smoke report must contain all four passing executions and its artifact ID.'
+          }

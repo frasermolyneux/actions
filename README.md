@@ -9,7 +9,7 @@
 - [docs/action-versioning.md](docs/action-versioning.md) - Tagging strategy and guidance for selecting version pins.
 - [docs/codequality.md](docs/codequality.md) - Reusable workflow that wires SonarCloud, CodeQL, and composite builds.
 - [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.
-- [docs/dotnet-test-reporting.md](docs/dotnet-test-reporting.md) - `dotnet-node-setup` and `dotnet-test-report` composites for .NET + npm test environments and bounded TRX reporting.
+- [docs/dotnet-test-reporting.md](docs/dotnet-test-reporting.md) - Shared .NET test execution, multi-project TRX reporting, test-environment setup and owned PR result summaries.
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.
 
 ## Overview
