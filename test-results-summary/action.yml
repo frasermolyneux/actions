@@ -1,0 +1,32 @@
+name: "test-results-summary"
+description: "Summarizes bounded test reports and updates one owned PR comment without checking out PR code."
+
+inputs:
+  jobs:
+    description: "toJSON(needs) from test jobs exposing test_report or *_test_report outputs."
+    required: true
+  publish-comment:
+    description: "Update a comment on eligible same-repository pull_request events."
+    required: false
+    default: "true"
+
+outputs:
+  report:
+    description: "Sanitized JSON array of suite reports including authoritative job outcomes."
+    value: ${{ steps.summary.outputs.report }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Summarize test jobs
+      id: summary
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+      env:
+        TEST_SUMMARY_ACTION_PATH: ${{ github.action_path }}
+        TEST_SUMMARY_JOBS: ${{ inputs.jobs }}
+        TEST_SUMMARY_PUBLISH: ${{ inputs.publish-comment }}
+      with:
+        script: |
+          const path = require('node:path');
+          const reporting = require(path.join(process.env.TEST_SUMMARY_ACTION_PATH, 'summary.js'));
+          await reporting.publish({ github, core, context });

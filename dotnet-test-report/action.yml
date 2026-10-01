@@ -1,13 +1,17 @@
 name: "dotnet-test-report"
-description: "Parses a single TRX file into a bounded JSON test report, uploads the results as an artifact, writes a step summary, and emits failure annotations."
+description: "Parses TRX results into a bounded JSON test report, uploads an artifact, writes a step summary, and emits failure annotations."
 
 inputs:
   suite:
     description: "Label for the suite being reported (e.g. Unit, HttpIntegration, Browser)."
     required: true
   results-directory:
-    description: "Directory expected to contain exactly one *.trx file for this invocation."
+    description: "Directory containing TRX files for this invocation only."
     required: true
+  allow-multiple:
+    description: "Accept multiple project/framework TRX files from one isolated invocation. The default still requires exactly one TRX."
+    required: false
+    default: "false"
   run-outcome:
     description: "Outcome of the preceding test-run step (success, failure, cancelled, skipped, or unknown). A 'success' outcome that does not resolve to a passing report fails this action."
     required: false
@@ -62,11 +66,22 @@ runs:
       id: report
       if: always()
       shell: pwsh
+      env:
+        REPORT_ACTION_PATH: ${{ github.action_path }}
+        REPORT_SUITE: ${{ inputs.suite }}
+        REPORT_DIRECTORY: ${{ inputs.results-directory }}
+        REPORT_ALLOW_MULTIPLE: ${{ inputs.allow-multiple }}
+        REPORT_OUTCOME: ${{ inputs.run-outcome }}
+        REPORT_ARTIFACT_ID: ${{ inputs.artifact-id != '' && inputs.artifact-id || steps.artifact.outputs.artifact-id }}
+        REPORT_SOURCE_PATTERN: ${{ inputs.source-path-pattern }}
+        REPORT_REPOSITORY_ROOT: ${{ inputs.repository-root }}
       run: |
-        & '${{ github.action_path }}/report-test-results.ps1' `
-          -Suite '${{ inputs.suite }}' `
-          -ResultsDirectory '${{ inputs.results-directory }}' `
-          -RunOutcome '${{ inputs.run-outcome }}' `
-          -ArtifactId '${{ inputs.artifact-id != '' && inputs.artifact-id || steps.artifact.outputs.artifact-id }}' `
-          -SourcePathPattern '${{ inputs.source-path-pattern }}' `
-          -RepositoryRoot '${{ inputs.repository-root }}'
+        if ($env:REPORT_ALLOW_MULTIPLE -notin @('true', 'false')) { throw 'allow-multiple must be true or false.' }
+        & (Join-Path $env:REPORT_ACTION_PATH 'report-test-results.ps1') `
+          -Suite $env:REPORT_SUITE `
+          -ResultsDirectory $env:REPORT_DIRECTORY `
+          -AllowMultiple:($env:REPORT_ALLOW_MULTIPLE -eq 'true') `
+          -RunOutcome $env:REPORT_OUTCOME `
+          -ArtifactId $env:REPORT_ARTIFACT_ID `
+          -SourcePathPattern $env:REPORT_SOURCE_PATTERN `
+          -RepositoryRoot $env:REPORT_REPOSITORY_ROOT

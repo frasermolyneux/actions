@@ -41,8 +41,15 @@ inputs:
     description: "Optional space-separated list of .NET workloads to install (e.g. 'aspire')"
     required: false
     default: ""
+  test-reporting:
+    description: "Opt in to isolated multi-project TRX reporting; fails on missing, zero, or all-skipped tests."
+    required: false
+    default: "false"
 
 outputs:
+  test-report:
+    description: "Schema-1 Unit report when test-reporting is enabled."
+    value: ${{ steps.tests.outputs.report }}
   build_version:
     description: "NuGet package version resolved by Nerdbank.GitVersioning"
     value: ${{ steps.nbgv-metadata.outputs.build_version }}
@@ -111,18 +118,27 @@ runs:
           /p:SymbolPackageFormat=snupkg
 
     - name: Test
+      if: inputs.test-reporting != 'true'
       shell: bash
       run: |
         cd ${{ inputs.src-folder }}
         dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
 
     - name: Upload Test Results
-      if: always()
+      if: always() && inputs.test-reporting != 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: test-results-${{ inputs.dotnet-project }}
         path: ${{ inputs.src-folder }}/TestResults/**/*.trx
         retention-days: 7
+
+    - name: Test with GitHub reporting
+      id: tests
+      if: inputs.test-reporting == 'true'
+      uses: frasermolyneux/actions/dotnet-test@dotnet-test/v1
+      with:
+        working-directory: ${{ inputs.src-folder }}
+        artifact-name: test-results-${{ inputs.dotnet-project }}
 
     - name: Set project artifact path
       shell: pwsh

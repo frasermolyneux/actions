@@ -1,11 +1,7 @@
 {
     "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/master/src/NerdBank.GitVersioning/version.schema.json",
-    "version": "2.1",
+    "version": "1.0",
     "inherit": false,
-    "pathFilters": [
-        "dotnet-ci/**"
-    ],
-    "publicReleaseRefSpec": [
-        "^refs/heads/main$"
-    ]
+    "pathFilters": ["dotnet-test/**"],
+    "publicReleaseRefSpec": ["^refs/heads/main$"]
 }

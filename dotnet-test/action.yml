@@ -1,0 +1,87 @@
+name: "dotnet-test"
+description: "Runs an isolated .NET test invocation with TRX artifacts, bounded summaries, and failure annotations."
+
+inputs:
+  suite:
+    description: "Human-readable suite name."
+    required: false
+    default: "Unit"
+  working-directory:
+    description: "Directory containing the solution or project."
+    required: false
+    default: "src"
+  project:
+    description: "Solution or project path relative to working-directory."
+    required: false
+    default: "."
+  configuration:
+    description: "Build configuration."
+    required: false
+    default: "Release"
+  no-build:
+    description: "Reuse an existing build (also implies no restore)."
+    required: false
+    default: "true"
+  filter:
+    description: "VSTest filter. Empty runs all tests in the selected project."
+    required: false
+    default: "FullyQualifiedName!~IntegrationTests"
+  artifact-name:
+    description: "Unique artifact name within the workflow run."
+    required: false
+    default: "test-results-Unit"
+  source-path-pattern:
+    description: "Repository-relative source paths eligible for failure annotations."
+    required: false
+    default: '^src/.+\.(?:cs|fs|feature)$'
+
+outputs:
+  report:
+    description: "Bounded schema-1 aggregate report across this invocation's projects/frameworks."
+    value: ${{ steps.report.outputs.report }}
+  artifact-id:
+    description: "Uploaded TRX artifact ID."
+    value: ${{ steps.report.outputs.artifact-id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Allocate isolated test results directory
+      id: invocation
+      shell: pwsh
+      run: |
+        $directory = Join-Path $env:RUNNER_TEMP "dotnet-test/$([guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Path $directory -ErrorAction Stop | Out-Null
+        "results-directory=$directory" >> $env:GITHUB_OUTPUT
+
+    - name: Run ${{ inputs.suite }} tests
+      id: tests
+      shell: pwsh
+      env:
+        TEST_ACTION_PATH: ${{ github.action_path }}
+        TEST_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        TEST_PROJECT: ${{ inputs.project }}
+        TEST_CONFIGURATION: ${{ inputs.configuration }}
+        TEST_NO_BUILD: ${{ inputs.no-build }}
+        TEST_FILTER: ${{ inputs.filter }}
+        TEST_RESULTS_DIRECTORY: ${{ steps.invocation.outputs.results-directory }}
+      run: |
+        & (Join-Path $env:TEST_ACTION_PATH 'run-tests.ps1') `
+          -WorkingDirectory $env:TEST_WORKING_DIRECTORY `
+          -Project $env:TEST_PROJECT `
+          -Configuration $env:TEST_CONFIGURATION `
+          -NoBuild $env:TEST_NO_BUILD `
+          -Filter $env:TEST_FILTER `
+          -ResultsDirectory $env:TEST_RESULTS_DIRECTORY
+
+    - name: Report ${{ inputs.suite }} tests
+      id: report
+      if: always() && steps.invocation.outcome == 'success'
+      uses: frasermolyneux/actions/dotnet-test-report@dotnet-test-report/v1.1
+      with:
+        suite: ${{ inputs.suite }}
+        results-directory: ${{ steps.invocation.outputs.results-directory }}
+        allow-multiple: "true"
+        run-outcome: ${{ steps.tests.outcome }}
+        artifact-name: ${{ inputs.artifact-name }}
+        source-path-pattern: ${{ inputs.source-path-pattern }}

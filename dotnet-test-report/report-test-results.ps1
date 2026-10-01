@@ -1,7 +1,7 @@
 #requires -Version 7.2
 
 <#
-  Parses exactly one TRX file produced by a `dotnet test` run into a small, bounded JSON report
+  Parses TRX files produced by one `dotnet test` invocation into a small, bounded JSON report
   (schema 1), writes a step summary table, emits failure annotations (with optional source-file
   mapping), and enforces that a `success` run outcome only ever reports as `passed`.
 
@@ -18,6 +18,8 @@ param(
 
     [Parameter(Mandatory)]
     [string]$ResultsDirectory,
+
+    [switch]$AllowMultiple,
 
     [ValidateSet('success', 'failure', 'cancelled', 'skipped', 'unknown')]
     [string]$RunOutcome = 'unknown',
@@ -42,6 +44,9 @@ if (-not $RepositoryRoot) {
     $RepositoryRoot = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Get-Location).Path }
 }
 $RepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
+if (-not [IO.Path]::IsPathRooted($ResultsDirectory)) {
+    $ResultsDirectory = Join-Path $RepositoryRoot $ResultsDirectory
+}
 
 function Limit-ReportText {
     param([string]$Text, [int]$Length = 2000)
@@ -84,7 +89,8 @@ function Get-TestSource {
                 [IO.Path]::GetFullPath((Join-Path $RepositoryRoot $sourcePath))
             }
             $relative = [IO.Path]::GetRelativePath($RepositoryRoot, $path).Replace('\', '/')
-            if ($relative -notmatch $SourcePathPattern -or
+            if ($relative -eq '..' -or $relative.StartsWith('../', [StringComparison]::Ordinal) -or
+                [IO.Path]::IsPathRooted($relative) -or $relative -notmatch $SourcePathPattern -or
                 -not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
             $entry = Get-Item -LiteralPath $path
             $linked = $false
@@ -125,63 +131,76 @@ if ($RunOutcome -eq 'skipped') {
 else {
     try {
         $files = @(if (Test-Path -LiteralPath $ResultsDirectory -PathType Container) {
-            Get-ChildItem -LiteralPath $ResultsDirectory -Filter '*.trx' -File -Recurse | Select-Object -First 2
+            Get-ChildItem -LiteralPath $ResultsDirectory -Filter '*.trx' -File -Recurse | Select-Object -First 129
         })
-        if ($files.Count -ne 1) {
+        if ($files.Count -eq 0 -or (-not $AllowMultiple -and $files.Count -ne 1)) {
             if ($files.Count -gt 1) { $report.reason = 'multiple-reports' }
             throw [IO.InvalidDataException]::new('Expected exactly one TRX for this invocation.')
         }
         $report.reason = 'report-invalid'
-        if ($files[0].Length -gt 32MB -or $files[0].Length -eq 0 -or
-            ($files[0].Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-            throw [IO.InvalidDataException]::new('TRX is empty, oversized, or a symbolic link.')
+        if ($files.Count -gt 128 -or ($files | Measure-Object -Property Length -Sum).Sum -gt 128MB) {
+            throw [IO.InvalidDataException]::new('TRX collection exceeds its size limit.')
         }
-        $settings = [System.Xml.XmlReaderSettings]::new()
-        $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
-        $settings.XmlResolver = $null
-        $settings.MaxCharactersInDocument = 32MB
-        $settings.MaxCharactersFromEntities = 1024
-        $reader = [System.Xml.XmlReader]::Create($files[0].FullName, $settings)
-        try {
-            $document = [System.Xml.XmlDocument]::new()
-            $document.XmlResolver = $null
-            $document.Load($reader)
-        }
-        finally { $reader.Dispose() }
-
-        $summaries = $document.SelectNodes("/*[local-name()='TestRun']/*[local-name()='ResultSummary']")
-        $counters = $document.SelectNodes("/*[local-name()='TestRun']/*[local-name()='ResultSummary']/*[local-name()='Counters']")
-        if ($summaries.Count -ne 1 -or $counters.Count -ne 1) { throw [IO.InvalidDataException]::new('Missing or duplicate TRX summary.') }
-        foreach ($name in @('total', 'executed', 'passed', 'failed')) {
-            $number = 0
-            if (-not [int]::TryParse($counters[0].GetAttribute($name), [ref]$number) -or $number -lt 0 -or $number -gt 1000000) {
-                throw [IO.InvalidDataException]::new('Invalid TRX counters.')
+        $allCompleted = $true
+        foreach ($file in $files) {
+            if ($file.Length -gt 32MB -or $file.Length -eq 0 -or
+                ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw [IO.InvalidDataException]::new('TRX is empty, oversized, or a symbolic link.')
             }
-            $report[$name] = $number
+            $settings = [System.Xml.XmlReaderSettings]::new()
+            $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+            $settings.XmlResolver = $null
+            $settings.MaxCharactersInDocument = 32MB
+            $settings.MaxCharactersFromEntities = 1024
+            $reader = [System.Xml.XmlReader]::Create($file.FullName, $settings)
+            try {
+                $document = [System.Xml.XmlDocument]::new()
+                $document.XmlResolver = $null
+                $document.Load($reader)
+            }
+            finally { $reader.Dispose() }
+
+            $summaries = $document.SelectNodes("/*[local-name()='TestRun']/*[local-name()='ResultSummary']")
+            $counters = $document.SelectNodes("/*[local-name()='TestRun']/*[local-name()='ResultSummary']/*[local-name()='Counters']")
+            if ($summaries.Count -ne 1 -or $counters.Count -ne 1) { throw [IO.InvalidDataException]::new('Missing or duplicate TRX summary.') }
+            $counts = @{}
+            foreach ($name in @('total', 'executed', 'passed', 'failed')) {
+                $number = 0
+                if (-not [int]::TryParse($counters[0].GetAttribute($name), [ref]$number) -or $number -lt 0 -or $number -gt 1000000) {
+                    throw [IO.InvalidDataException]::new('Invalid TRX counters.')
+                }
+                $counts[$name] = $number
+            }
+            $results = $document.SelectNodes("/*[local-name()='TestRun']/*[local-name()='Results']/*[local-name()='UnitTestResult']")
+            $passed = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'Passed' }).Count
+            $skipped = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'NotExecuted' }).Count
+            $fileFailures = @($results | Where-Object { $_.GetAttribute('outcome') -notin @('Passed', 'NotExecuted') })
+            if ($results.Count -ne $counts.total -or $passed -ne $counts.passed -or
+                $counts.executed -ne ($counts.total - $skipped) -or $counts.failed -gt $fileFailures.Count) {
+                throw [IO.InvalidDataException]::new('TRX results do not match the counters.')
+            }
+            foreach ($name in @('total', 'executed', 'passed')) { $report[$name] += $counts[$name] }
+            $report.failed += $fileFailures.Count
+            $report.skipped += $skipped
+            $failures += @($fileFailures | Select-Object -First ([math]::Max(0, 8 - $failures.Count)))
+            if ($report.total -gt 1000000) { throw [IO.InvalidDataException]::new('Too many test results.') }
+            $times = $document.SelectSingleNode("/*[local-name()='TestRun']/*[local-name()='Times']")
+            $start = [DateTimeOffset]::MinValue
+            $finish = [DateTimeOffset]::MinValue
+            if ($null -eq $times -or
+                -not [DateTimeOffset]::TryParse($times.GetAttribute('start'), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$start) -or
+                -not [DateTimeOffset]::TryParse($times.GetAttribute('finish'), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$finish) -or
+                $finish -lt $start -or ($finish - $start).TotalDays -gt 366) { throw [IO.InvalidDataException]::new('Invalid TRX duration.') }
+            $report.durationSeconds += ($finish - $start).TotalSeconds
+            if ($summaries[0].GetAttribute('outcome') -notin @('Completed', 'Passed')) { $allCompleted = $false }
         }
-        $results = $document.SelectNodes("/*[local-name()='TestRun']/*[local-name()='Results']/*[local-name()='UnitTestResult']")
-        $passed = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'Passed' }).Count
-        $skipped = @($results | Where-Object { $_.GetAttribute('outcome') -eq 'NotExecuted' }).Count
-        $failures = @($results | Where-Object { $_.GetAttribute('outcome') -notin @('Passed', 'NotExecuted') })
-        if ($results.Count -ne $report.total -or $passed -ne $report.passed -or
-            $report.executed -ne ($report.total - $skipped) -or $report.failed -gt $failures.Count) {
-            throw [IO.InvalidDataException]::new('TRX results do not match the counters.')
-        }
-        $report.failed = $failures.Count
-        $report.skipped = $skipped
-        $times = $document.SelectSingleNode("/*[local-name()='TestRun']/*[local-name()='Times']")
-        $start = [DateTimeOffset]::MinValue
-        $finish = [DateTimeOffset]::MinValue
-        if ($null -eq $times -or
-            -not [DateTimeOffset]::TryParse($times.GetAttribute('start'), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$start) -or
-            -not [DateTimeOffset]::TryParse($times.GetAttribute('finish'), [cultureinfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$finish) -or
-            $finish -lt $start -or ($finish - $start).TotalDays -gt 366) { throw [IO.InvalidDataException]::new('Invalid TRX duration.') }
-        $report.durationSeconds = [math]::Round(($finish - $start).TotalSeconds, 3)
+        $report.durationSeconds = [math]::Round($report.durationSeconds, 3)
+        if ($report.durationSeconds -gt 366 * 86400) { throw [IO.InvalidDataException]::new('Invalid aggregate duration.') }
         $report.status = 'failed'
         $report.reason = 'test-failures'
         if ($report.total -eq 0) { $report.status = 'invalid'; $report.reason = 'zero-tests' }
         elseif ($report.executed -eq 0) { $report.status = 'invalid'; $report.reason = 'all-skipped' }
-        elseif ($report.failed -eq 0 -and $summaries[0].GetAttribute('outcome') -in @('Completed', 'Passed')) {
+        elseif ($report.failed -eq 0 -and $allCompleted) {
             $report.status = 'passed'
             $report.reason = 'completed'
         }
@@ -207,7 +226,7 @@ $reasons = @{
     'run-failed' = 'The test/build/setup command failed despite passing test results.'
     'report-missing' = 'No TRX was produced; tests may not have started.'
     'multiple-reports' = 'Multiple TRX files found; refusing to combine possibly stale invocations.'
-    'report-invalid' = 'The TRX is malformed, inconsistent, unsafe, or exceeds the 32 MiB limit.'
+    'report-invalid' = 'TRX results are malformed, inconsistent, unsafe, or exceed the size/count limits.'
     'zero-tests' = 'No tests were discovered.'
     'all-skipped' = 'Every discovered test was skipped.'
     'not-started' = 'The test action was not reached.'
@@ -221,6 +240,7 @@ $summary = [System.Text.StringBuilder]::new()
 [void]$summary.AppendLine('| Total | Executed | Passed | Failed | Skipped | TRX window |')
 [void]$summary.AppendLine('| ---: | ---: | ---: | ---: | ---: | ---: |')
 [void]$summary.AppendLine("| $($report.total) | $($report.executed) | $($report.passed) | $($report.failed) | $($report.skipped) | $($report.durationSeconds.ToString([cultureinfo]::InvariantCulture)) s |")
+if ($AllowMultiple) { [void]$summary.AppendLine("`nCounts include every project/framework execution; TRX windows are summed, not wall-clock time.") }
 
 $runUrl = $null
 if ($env:GITHUB_SERVER_URL -match '^https://[a-zA-Z0-9.-]+(?::[0-9]+)?$' -and
@@ -241,13 +261,17 @@ foreach ($failure in ($failures | Select-Object -First 8)) {
     [void]$summary.AppendLine("<details><summary>$(ConvertTo-ReportHtml $name 200)</summary>")
     [void]$summary.AppendLine("<pre>$(ConvertTo-ReportHtml "$messageText`n$stackText")</pre></details>")
     $source = Get-TestSource $stackText
-    if ($source -and $env:GITHUB_ACTIONS -eq 'true') {
-        $file = ConvertTo-AnnotationText $source.File -Property
+    if ($env:GITHUB_ACTIONS -eq 'true') {
         $annotationTitle = ConvertTo-AnnotationText "$Suite : $(Limit-ReportText $name 200)" -Property
-        Write-Host "::error file=$file,line=$($source.Line),title=$annotationTitle::$(ConvertTo-AnnotationText $messageText)"
+        $properties = "title=$annotationTitle"
+        if ($source) {
+            $file = ConvertTo-AnnotationText $source.File -Property
+            $properties += ",file=$file,line=$($source.Line)"
+        }
+        Write-Host "::error ${properties}::$(ConvertTo-AnnotationText $messageText)"
     }
 }
-if ($failures.Count -gt 8) { [void]$summary.AppendLine("Only the first 8 of $($failures.Count) failures are shown; see the artifact for complete results.") }
+if ($report.failed -gt 8) { [void]$summary.AppendLine("Only the first 8 of $($report.failed) failures are shown; see the artifact for complete results.") }
 if ($env:GITHUB_STEP_SUMMARY) { [IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, $summary.ToString(), [System.Text.UTF8Encoding]::new($false)) }
 else { Write-Host $summary.ToString() }
 $json = $report | ConvertTo-Json -Compress -Depth 6

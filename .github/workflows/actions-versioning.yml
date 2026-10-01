@@ -44,11 +44,13 @@ jobs:
             deploy-function-app
             deploy-logic-app
             deploy-sql-database
+            dotnet-test-report
+            dotnet-test
             dotnet-ci
             dotnet-func-ci
             dotnet-node-setup
             dotnet-playwright-tests
-            dotnet-test-report
+            test-results-summary
             dotnet-web-ci
             dotnet-sdk-setup
             logic-app-ci
