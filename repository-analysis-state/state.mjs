@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 export const RESULT_SCHEMA = "repository-analysis-result-v1";
 export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 export const RESULT_LIMIT = 128 * 1024;
+export const ASSESS_INPUT_LIMIT = 2 * RESULT_LIMIT + 32;
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 const SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^[a-f0-9]{64}$/;
@@ -156,8 +157,9 @@ function validateTool(result, selected, pin, source, run) {
   requireValue(["completed", "pending", "failed", "not-applicable"].includes(result.processing.status) &&
     (result.processing.id === null || (text(result.processing.id) && /^[A-Za-z0-9_.:-]+$/.test(result.processing.id))),
   "Invalid provider processing state");
-  requireValue(selected.destination !== "originating-repository-artifact" || result.processing.id === null,
-    "Artifact staging has no provider processing identity");
+  requireValue(selected.destination !== "originating-repository-artifact" ||
+    (result.processing.id === null && result.processing.status === "not-applicable"),
+    "Artifact staging has no provider processing identity or server-side state");
   const completed = result.status === "completed";
   validatePublication(result.publication, selected, completed);
   if (!completed) {
@@ -179,9 +181,6 @@ function validateTool(result, selected, pin, source, run) {
     if (selected.destination === "github-security") {
       requireValue(result.processing.status === "completed" && result.processing.id !== null,
         "Native SARIF processing needs its completed upload identity");
-    } else {
-      requireValue(result.processing.status === "not-applicable",
-        "Artifact staging has no server-side provider processing");
     }
   }
 }
@@ -288,6 +287,8 @@ export function assessFreshness(context, request, previous, now = Date.now()) {
   object(request, ["engine", "pins", "headSha", "expectedSha", "force"], "freshness request");
   validateEngine(request.engine);
   validatePins(request.pins, selected);
+  requireValue(Buffer.byteLength(JSON.stringify(request)) <= RESULT_LIMIT,
+    "Freshness request exceeds the bounded contract");
   requireValue((SHA.test(request.headSha ?? "") ||
     (context.profile.exemption?.kind === "empty" && request.headSha === null)) &&
     (request.expectedSha === null || SHA.test(request.expectedSha ?? "")) &&
@@ -329,7 +330,7 @@ export function aggregateStatus(result) {
   };
 }
 
-async function readInput(filename, temporaryRoot) {
+async function readInput(filename, temporaryRoot, limit) {
   const [resolved, root] = await Promise.all([realpath(filename), realpath(temporaryRoot)]);
   const relative = path.relative(root, resolved);
   requireValue(relative && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative),
@@ -337,10 +338,10 @@ async function readInput(filename, temporaryRoot) {
   const handle = await open(resolved, "r");
   try {
     const metadata = await handle.stat();
-    requireValue(metadata.isFile() && metadata.size <= RESULT_LIMIT, "Analysis input exceeds the bounded regular-file contract");
-    const buffer = Buffer.alloc(RESULT_LIMIT + 1);
+    requireValue(metadata.isFile() && metadata.size <= limit, "Analysis input exceeds the bounded regular-file contract");
+    const buffer = Buffer.alloc(limit + 1);
     const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    requireValue(bytesRead <= RESULT_LIMIT, "Analysis input exceeds the bounded contract");
+    requireValue(bytesRead <= limit, "Analysis input exceeds the bounded contract");
     return JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
   } finally {
     await handle.close();
@@ -352,7 +353,8 @@ export async function main(env = process.env) {
   const context = JSON.parse(env.ANALYSIS_CONTEXT ?? "");
   requireValue(context.repository === env.GITHUB_REPOSITORY &&
     context.repositoryId === Number(env.GITHUB_REPOSITORY_ID), "Live context does not match the immutable workflow repository");
-  const input = await readInput(env.ANALYSIS_INPUT, env.RUNNER_TEMP);
+  const input = await readInput(env.ANALYSIS_INPUT, env.RUNNER_TEMP,
+    env.ANALYSIS_MODE === "assess" ? ASSESS_INPUT_LIMIT : RESULT_LIMIT);
   let result;
   if (env.ANALYSIS_MODE === "assemble") {
     requireValue(input.run?.id === Number(env.GITHUB_RUN_ID) &&
@@ -370,7 +372,7 @@ export async function main(env = process.env) {
     throw new Error("Unsupported analysis state operation");
   }
   const directory = await mkdtemp(path.join(env.RUNNER_TEMP, "repository-analysis-state-"));
-  await writeFile(path.join(directory, "result.json"), JSON.stringify(result, null, 2) + "\n");
+  await writeFile(path.join(directory, "result.json"), JSON.stringify(result));
   const status = env.ANALYSIS_MODE === "assemble" ? result.completeness.status : result.action;
   await appendFile(env.GITHUB_OUTPUT, `status=${status}\nresult-directory=${directory}\n`);
   await appendFile(env.GITHUB_STEP_SUMMARY, [

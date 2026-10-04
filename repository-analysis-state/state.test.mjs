@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { selectAnalysis } from "../repository-analysis-context/policy.mjs";
 import {
-  aggregateStatus, assemble, assessFreshness, main, RESULT_LIMIT, selectedTools, validateResult, WEEK_MS,
+  aggregateStatus, assemble, assessFreshness, ASSESS_INPUT_LIMIT, main, RESULT_LIMIT, selectedTools, validateResult, WEEK_MS,
 } from "./state.mjs";
 
 const A = "a".repeat(40);
@@ -150,7 +150,13 @@ test("private artifact staging cannot claim a provider publication or processing
   }
   const input = bundle(policy);
   input.results[0].processing.status = "completed";
-  assert.throws(() => assemble(policy, input), /no server-side provider processing/);
+  assert.throws(() => assemble(policy, input), /no provider processing/);
+  for (const status of ["failed", "pending", "unavailable"]) {
+    const incomplete = bundle(policy);
+    Object.assign(incomplete.results[0], { status, findingCount: null, completedAt: null, reason: "Explicit tool failure" });
+    incomplete.results[0].processing.status = "completed";
+    assert.throws(() => assemble(policy, incomplete), /no provider processing/);
+  }
 });
 
 test("incomplete tools and unavailable coverage require non-whitespace explanations", () => {
@@ -361,8 +367,54 @@ test("CLI validates actual run identity and emits an originating-only cold fresh
     assert.equal((await main({ ...env, ANALYSIS_MODE: "assemble" })).completeness.status, "completed");
     await assert.rejects(main({ ...env, ANALYSIS_MODE: "assemble", GITHUB_RUN_ATTEMPT: "2" }), /different run/);
     await assert.rejects(main({ ...env, ANALYSIS_MODE: "assemble", GITHUB_WORKFLOW_SHA: C }), /workflow definition/);
-    await writeFile(input, " ".repeat(RESULT_LIMIT + 1));
+    await writeFile(input, " ".repeat(ASSESS_INPUT_LIMIT + 1));
     await assert.rejects(main(env), /bounded regular-file/);
+    await writeFile(input, " ".repeat(RESULT_LIMIT + 1));
+    await assert.rejects(main({ ...env, ANALYSIS_MODE: "assemble" }), /bounded regular-file/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("near-limit results stay bounded when emitted and fit the freshness envelope", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "analysis-state-boundary-"));
+  try {
+    const input = bundle();
+    input.run.startedAt = new Date(Date.now() - 2000).toISOString();
+    input.run.completedAt = new Date(Date.now() - 1000).toISOString();
+    for (const tool of input.results) tool.completedAt = input.run.completedAt;
+    input.coverage = [{
+      ...coverage(), reports: Array.from({ length: 210 }, (_, index) =>
+        ({ path: `coverage/${index}-${"x".repeat(455)}.xml`, sha256: D })),
+    }];
+    const expected = assemble(context(), input);
+    assert.ok(Buffer.byteLength(JSON.stringify(expected)) > RESULT_LIMIT - 16 * 1024);
+    assert.ok(Buffer.byteLength(JSON.stringify(expected, null, 2)) > RESULT_LIMIT);
+    const file = path.join(root, "input.json");
+    const output = path.join(root, "output");
+    const env = {
+      RUNNER_TEMP: root, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: path.join(root, "summary"),
+      GITHUB_REPOSITORY: "fixture/source", GITHUB_REPOSITORY_ID: "123",
+      GITHUB_RUN_ID: "456", GITHUB_RUN_ATTEMPT: "1", GITHUB_EVENT_NAME: "push",
+      GITHUB_WORKFLOW_REF: "fixture/source/.github/workflows/codequality.yml@refs/heads/main", GITHUB_WORKFLOW_SHA: B,
+      ANALYSIS_CONTEXT: JSON.stringify(context()), ANALYSIS_INPUT: file, ANALYSIS_MODE: "assemble",
+    };
+    await writeFile(file, JSON.stringify(input));
+    const result = await main(env);
+    const directory = (await readFile(output, "utf8")).split("\n")
+      .find((line) => line.startsWith("result-directory=")).slice("result-directory=".length);
+    const emitted = await readFile(path.join(directory, "result.json"), "utf8");
+    assert.ok(Buffer.byteLength(emitted) <= RESULT_LIMIT);
+    assert.deepEqual(JSON.parse(emitted), result);
+    const current = request(input);
+    current.engine = { ...current.engine, release: `${"x".repeat(12000)}/v1.0.0` };
+    const envelope = JSON.stringify({ request: current, previous: result });
+    assert.ok(Buffer.byteLength(envelope) > RESULT_LIMIT);
+    assert.ok(Buffer.byteLength(envelope) <= ASSESS_INPUT_LIMIT);
+    await writeFile(file, envelope);
+    assert.equal((await main({ ...env, ANALYSIS_MODE: "assess" })).action, "scan");
+    await writeFile(file, JSON.stringify({ request: request(input), previous: result }));
+    assert.equal((await main({ ...env, ANALYSIS_MODE: "assess" })).action, "current");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

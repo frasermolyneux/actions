@@ -26,6 +26,10 @@ The `assemble` operation accepts a bounded JSON file beneath `RUNNER_TEMP`, cont
 | `coverage` | Explicit suite/import/unavailability evidence for the analyzed source; absence is not zero coverage |
 | `finishedHeadSha` | Independently observed logical head after analysis; never relabel the actual analyzed source |
 
+Assembly inputs and emitted compact result files are bounded to 128 KiB. Freshness
+requests and previous results each have that same limit; the `assess` input permits
+256 KiB plus 32 bytes for their JSON envelope. Formatting does not enlarge emitted results.
+
 CodeQL IDs are `codeql/<language>` with `/language:<language>` categories. Local IDs are
 `local/<tool>` with `/tool:<tool>` categories. Sonar uses `sonar` and `quality`, not a
 fictional Sonar SARIF identity. The tool set is derived from live visibility and the catalog
