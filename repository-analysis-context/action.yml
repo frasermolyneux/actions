@@ -1,0 +1,44 @@
+name: Repository Analysis Context
+description: Select permitted scanners and publication from live repository visibility and catalog capabilities.
+inputs:
+  profile:
+    description: JSON catalog profile using the repository-analysis-v1 contract.
+    required: true
+  github-token:
+    description: Token with access to the target repository metadata; never a merge or cloud credential.
+    required: true
+outputs:
+  context:
+    description: Validated visibility-aware analysis plan, not completed scan evidence.
+    value: ${{ steps.context.outputs.context }}
+  codeql-languages:
+    description: Permitted CodeQL languages; always empty for private repositories under this contract.
+    value: ${{ steps.context.outputs.codeql-languages }}
+  local-tools:
+    description: JSON array of permitted local analyzers and their source capabilities.
+    value: ${{ steps.context.outputs.local-tools }}
+  sarif-publication:
+    description: github-security for applicable public repositories, otherwise not-available.
+    value: ${{ steps.context.outputs.sarif-publication }}
+  sonar-status:
+    description: eligible, not-applicable or unavailable; eligibility still requires verified provider configuration.
+    value: ${{ steps.context.outputs.sonar-status }}
+  policy-digest:
+    description: Cache/freshness identity including visibility and selected tools.
+    value: ${{ steps.context.outputs.policy-digest }}
+  exempt:
+    description: Whether an explicit catalog applicability exemption applies.
+    value: ${{ steps.context.outputs.exempt }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve live analysis capabilities
+      id: context
+      shell: bash
+      env:
+        ANALYSIS_PROFILE: ${{ inputs.profile }}
+        ANALYSIS_REPOSITORY: ${{ github.repository }}
+        ANALYSIS_REPOSITORY_ID: ${{ github.repository_id }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        CONTEXT_SCRIPT: ${{ github.action_path }}/policy.mjs
+      run: node "$CONTEXT_SCRIPT"

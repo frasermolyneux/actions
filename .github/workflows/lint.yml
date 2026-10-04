@@ -50,6 +50,15 @@ jobs:
           # so those are checked separately below.
           ./actionlint -color
 
+      - name: Test analysis capability selection
+        run: node --test repository-analysis-context/policy.test.mjs
+
+      - name: Exercise live repository analysis preflight
+        uses: ./repository-analysis-context
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript"],"sonar":false}'
+          github-token: ${{ github.token }}
+
       - name: Lint composite action scripts with ShellCheck
         shell: bash
         env:
@@ -59,7 +68,7 @@ jobs:
           # in the critical path across ~58 repos; extending this to every
           # action.yml in the repo is a reasonable follow-up but is a much
           # larger, separate cleanup (many pre-existing findings elsewhere).
-          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep"
+          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep repository-analysis-context"
         run: |
           set -euo pipefail
 
