@@ -25,17 +25,18 @@ source metadata. PR merge-ref differences never authorize publication.
 | Human `workflow_dispatch` or scheduled run, with the same write permission | Preserve existing behavior |
 | Same-repository Dependabot PR merged by the exact broker App or GitHub Actions identity | Hold publication; ordinary analysis still runs |
 | Pre-existing same-repository App-authored and App-merged automation | Only when explicitly declared by trusted policy |
-| Fork-source run, PR validation, unknown bot or ambiguous/mismatched bot merge | Hold for human attention |
+| Fork-source run, PR validation, unknown bot or ambiguous/mismatched merge | Hold for human attention |
 | Metadata transport/permission errors, invalid reports or changed execution identity | Fail explicitly; never authorize |
 
 Human merges of reviewed fork PRs remain human merges. A fork's own run cannot authorize
 publication. A human rerun does not replace the original bot actor. Actor names, branch names,
 commit messages, labels and uploaded flags are not authorization.
-Human push admission comes from the original run actor's immutable identity and current write
-permission, not the merger of an earlier PR associated with the same commit. This preserves
-release-manager tag pushes and authorized branch pushes of existing commits. Only an exact
-matching human merger receives the `human-merge` label; other verified human pushes remain
-`human-push`. Bot exceptions still require one exact PR and matching author/merge identities.
+Human tag pushes retain publication even when an earlier PR for that commit has a different
+merger. Direct pushes bind `GITHUB_REF`, the push payload reference and the live run branch.
+Downstream consumers independently resolve a matching lightweight/annotated tag to the actual
+source SHA and require no same-name branch; ambiguous, moved or missing tags never bypass the
+merge-actor check. Human branch merges and all bot exceptions retain their exact merge-actor
+binding. Annotation resolution is bounded to eight objects.
 
 `app-id` is the broker's immutable App ID. A bot's public App metadata must match it; the
 bot username alone is insufficient. `allow-app-authored-merges` defaults to `false` and must
@@ -157,6 +158,8 @@ do not substitute for it.
 Positive human fixture runs are identified from the trigger actor independently of the guard
 output and must authorize with the expected lineage and runtime/root SHA bindings. A successful
 hold cannot masquerade as positive acceptance; intentional bot holds have separate assertions.
+The chain first inspects the exact relay attempt's live job metadata. A skipped PR relay is
+reported as a no-op, not failed human acceptance or successful proof validation.
 
 This shared primitive alone does not mean estate routes are guarded. Install and verify
 every affected route, including downstream consumers and existing automation, before

@@ -25,9 +25,14 @@ test("independent versioning tracks the actual repository-root action subtree", 
   assert.deepEqual(version.pathFilters, [":/repository-publication-origin"]);
 });
 
+test("metadata runtime setup never depends on the caller's npm cache or root lockfile", async () => {
+  const wrapper = await readFile(new URL("./action.yml", import.meta.url), "utf8");
+  assert.match(wrapper, /uses: actions\/setup-node@[a-f0-9]{40}\s+with:\s+node-version: '22'\s+package-manager-cache: false/);
+});
+
 function run(overrides = {}) {
   return { id: 10, run_attempt: 1, repository: { id: repository.id },
-    head_repository: { id: repository.id }, head_sha: SOURCE, actor: human,
+    head_repository: { id: repository.id }, head_sha: SOURCE, head_branch: "main", actor: human,
     event: "push", path: ".github/workflows/quality.yml", status: "completed", conclusion: "success", ...overrides };
 }
 function pr(overrides = {}) {
@@ -40,7 +45,7 @@ function decision(overrides = {}) {
     permission: "write", policy, ...overrides });
 }
 function identity(value) {
-  return { id: value.id, attempt: value.run_attempt, sha: value.head_sha,
+  return { id: value.id, attempt: value.run_attempt, sha: value.head_sha, branch: value.head_branch,
     event: value.event, path: value.path, actor: value.actor };
 }
 function proof(root, producer, customPolicy) {
@@ -81,10 +86,11 @@ function apiFixture({ runs = [], artifacts = [], pullRequests = [], permission =
   return api;
 }
 function request(root, api, overrides = {}) {
+  const expectedRef = overrides.event?.ref ?? `refs/heads/${root.head_branch}`;
   return prepare({ api, repositoryName: repository.full_name, repositoryId: repository.id,
     runId: root.id, runAttempt: root.run_attempt, eventName: root.event, expectedSha: root.head_sha,
     workflowSha: root.head_sha,
-    event: {}, policy, engineDigest: ENGINE, ...overrides });
+    expectedRef, event: { ref: expectedRef }, policy, engineDigest: ENGINE, ...overrides });
 }
 
 test("verified write-authorized human pushes and merges retain publication", () => {
@@ -151,11 +157,11 @@ test("bot pushes without one exact merged PR are held", () => {
   }
 });
 
-test("ambiguous bot merges hold while human pushes are not misattributed to earlier merges", () => {
+test("ambiguous merges and mismatched branch merge actors hold without verified tag context", () => {
   assert.equal(decision({ run: run({ actor: app }),
     pullRequests: [pr({ merged_by: app }), pr({ number: 8, merged_by: app })] }).origin, "ambiguous-merge");
-  assert.equal(decision({ pullRequests: [pr({ merged_by: app })] }).origin, "human-push");
-  assert.equal(decision({ pullRequests: [pr(), pr({ number: 8 })] }).origin, "human-push");
+  assert.equal(decision({ pullRequests: [pr({ merged_by: app })] }).origin, "actor-mismatch");
+  assert.equal(decision({ pullRequests: [pr(), pr({ number: 8 })] }).origin, "ambiguous-merge");
 });
 
 test("PRs, dynamic events, unknown bots and foreign source repositories are held", () => {
@@ -218,6 +224,7 @@ test("metadata routes reject traversal, injected queries and unrelated API acces
     "/repos/owner/target/actions/runs/10/artifacts?per_page=100&page=1&redirect=evil",
     "/repos/owner/target/contents/.github/workflows/relay.yml?ref=main",
     "/repos/owner/target/contents/.github/workflows/relay.yml?ref=" + SOURCE + "&ref=" + LATER,
+    "/repos/owner/target/git/ref/tags/%2e%2e%2Foutside",
     "//external.invalid/path", "https://api.github.com/repos/owner/target",
   ]) await assert.rejects(api.get(endpoint), /Invalid/);
   assert.equal(requests, 0);
@@ -233,6 +240,8 @@ test("allowed metadata routes preserve encoded bot identities, exact revisions a
     "/users/dependabot%5Bbot%5D", "/users/github-actions%5Bbot%5D", "/apps/trusted-app",
     `/repos/owner/target/contents/.github/workflows/relay.yml?ref=${SOURCE}`,
     "/repos/owner/target/actions/runs/20/artifacts?per_page=100&page=20",
+    "/repos/owner/target/git/ref/tags/release%2Fv1.0.0",
+    `/repos/owner/target/git/tags/${BLOB}`,
   ]) {
     await api.get(endpoint);
     assert.equal(requests.at(-1).url, `https://api.github.com${endpoint}`);
@@ -257,9 +266,66 @@ test("a write-authorized release manager can tag a commit merged by another main
   const plan = await request(root, api, { event: { ref: "refs/tags/v1.0.0" } });
   const result = await finalize(plan, api);
   assert.equal(result.decision.allowed, true);
-  assert.equal(result.decision.origin, "human-push");
+  assert.equal(result.decision.origin, "human-tag");
   assert.equal(result.sourceSha, SOURCE);
   assert.equal((await finalize(plan, apiFixture({ runs: [root], permission: "read" }))).decision.allowed, false);
+});
+
+test("tag classification requires the push payload, runtime reference and live branch to agree", async () => {
+  const root = run();
+  const api = apiFixture({ runs: [root] });
+  await assert.rejects(request(root, api, { expectedRef: "refs/tags/v1.0.0",
+    event: { ref: "refs/tags/v1.0.0" } }), /Push event reference/);
+  await assert.rejects(request(root, api, { expectedRef: "refs/tags/main",
+    event: { ref: "refs/heads/main" } }), /Push event reference/);
+});
+
+function tagFixture() {
+  const source = run({ head_branch: "v1.0.0" });
+  const current = run({ id: 20, event: "workflow_run", head_sha: LATER });
+  const pullRequests = [pr({ merged_by: { ...human, id: 9, login: "maintainer" } })];
+  const tagPath = "/repos/owner/target/git/ref/tags/v1.0.0";
+  const branchPath = "/repos/owner/target/git/ref/heads/v1.0.0";
+  const files = { [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "commit", sha: SOURCE } },
+    [branchPath]: null };
+  return { source, current, pullRequests, tagPath, branchPath, files };
+}
+
+test("downstream consumers verify lightweight and annotated tags independently of the older merger", async () => {
+  const { source, current, pullRequests, tagPath, files } = tagFixture();
+  const annotated = { ...files,
+    [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "tag", sha: BLOB } },
+    [`/repos/owner/target/git/tags/${BLOB}`]: { sha: BLOB, object: { type: "commit", sha: SOURCE } } };
+  for (const definitions of [files, annotated]) {
+    const api = apiFixture({ runs: [source, current], pullRequests, files: definitions });
+    const plan = await request(current, api, { event: { workflow_run: source } });
+    const result = await finalize(plan, api);
+    assert.equal(result.decision.allowed, true);
+    assert.equal(result.decision.origin, "human-tag");
+    assert.equal(result.sourceSha, SOURCE);
+  }
+});
+
+test("missing, moved and same-name branch/tag origins cannot bypass human merger binding", async () => {
+  const { source, current, pullRequests, tagPath, branchPath, files } = tagFixture();
+  for (const definitions of [
+    { ...files, [tagPath]: null },
+    { ...files, [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "commit", sha: LATER } } },
+    { ...files, [branchPath]: { ref: "refs/heads/v1.0.0" } },
+  ]) {
+    const api = apiFixture({ runs: [source, current], pullRequests, files: definitions });
+    const plan = await request(current, api, { event: { workflow_run: source } });
+    assert.equal((await finalize(plan, api)).decision.origin, "actor-mismatch");
+  }
+});
+
+test("annotated tag cycles and mismatched objects fail explicitly within the resolution bound", async () => {
+  const { source, current, pullRequests, tagPath, files } = tagFixture();
+  const cyclic = { ...files,
+    [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "tag", sha: BLOB } },
+    [`/repos/owner/target/git/tags/${BLOB}`]: { sha: BLOB, object: { type: "tag", sha: BLOB } } };
+  await assert.rejects(request(current, apiFixture({ runs: [source, current], pullRequests, files: cyclic }),
+    { event: { workflow_run: source } }), /resolution bound/);
 });
 
 test("a direct App merge resolves the official App and bot identities before denial", async () => {
@@ -425,7 +491,7 @@ test("a reused login cannot substitute another human permission identity", async
 test("cancellation and reruns invalidate in-flight authorization", async () => {
   const root = run();
   const plan = await request(root, apiFixture({ runs: [root] }));
-  for (const changed of [run({ run_attempt: 2 }), run({ conclusion: "cancelled" })]) {
+  for (const changed of [run({ run_attempt: 2 }), run({ conclusion: "cancelled" }), run({ head_branch: "different" })]) {
     await assert.rejects(finalize(plan, apiFixture({ runs: [changed] })));
   }
 });

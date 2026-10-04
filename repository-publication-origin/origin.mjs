@@ -18,6 +18,8 @@ const METADATA_ROUTES = [
   new RegExp(`^${REPOSITORY_PATH}/commits/[a-f0-9]{40}/pulls$`),
   new RegExp(`^${REPOSITORY_PATH}/pulls/[1-9][0-9]*$`),
   new RegExp(`^${REPOSITORY_PATH}/contents/\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$`),
+  new RegExp(`^${REPOSITORY_PATH}/git/ref/(?:tags|heads)/(?:[A-Za-z0-9_.-]|%[A-Fa-f0-9]{2})+$`),
+  new RegExp(`^${REPOSITORY_PATH}/git/tags/[a-f0-9]{40}$`),
   /^\/users\/(?:dependabot|github-actions)%5Bbot%5D$/,
   /^\/apps\/[A-Za-z0-9_-]+$/,
 ];
@@ -94,11 +96,12 @@ export function validateRun(run, repository, expectedId) {
   id(run.run_attempt, "Run attempt");
   sha(run.head_sha, "Run source");
   actor(run.actor);
-  if (typeof run.event !== "string" || !WORKFLOW.test(run.path ?? "")) {
+  if (typeof run.event !== "string" || !WORKFLOW.test(run.path ?? "") ||
+      typeof run.head_branch !== "string" || !run.head_branch) {
     throw new Error("Workflow run has invalid event or workflow metadata");
   }
   return { id: run.id, run_attempt: run.run_attempt, repository: { id: repository.id },
-    head_repository: { id: run.head_repository?.id }, head_sha: run.head_sha,
+    head_repository: { id: run.head_repository?.id }, head_sha: run.head_sha, head_branch: run.head_branch,
     event: run.event, path: run.path, actor: actor(run.actor), status: run.status, conclusion: run.conclusion };
 }
 
@@ -110,7 +113,7 @@ function allowed(origin, reason) {
   return { allowed: true, origin, reason };
 }
 
-export function decideOrigin({ repository, run, pullRequests, identities, permission, policy }) {
+export function decideOrigin({ repository, run, pullRequests, identities, permission, policy, tagPush = false }) {
   validateRun(run, repository, run.id);
   policy = validatePolicy(policy);
   if (run.head_repository?.id !== repository.id) {
@@ -128,8 +131,12 @@ export function decideOrigin({ repository, run, pullRequests, identities, permis
       return denied("untrusted-human", "Publication requires a verified repository-write human actor");
     }
     if (run.event !== "push") return allowed(`human-${run.event}`, "Existing write-authorized manual or scheduled behavior");
-    const humanMerge = matching.length === 1 && matching[0].merged_by?.id === user.id;
-    return allowed(humanMerge ? "human-merge" : "human-push", "Verified repository-write human push or merge");
+    if (tagPush) return allowed("human-tag", "Verified repository-write human tag push");
+    if (matching.length > 1) return denied("ambiguous-merge", "Multiple merged pull requests claim this source commit");
+    if (matching[0] && matching[0].merged_by?.id !== user.id) {
+      return denied("actor-mismatch", "The push actor does not match the verified merge actor");
+    }
+    return allowed(matching.length ? "human-merge" : "human-push", "Verified repository-write human push or merge");
   }
   if (run.event !== "push") return denied("unknown-automation", "Bot-triggered manual or scheduled publication is not authorized");
   if (matching.length > 1) return denied("ambiguous-merge", "Multiple merged pull requests claim this source commit");
@@ -158,13 +165,13 @@ export function policyDigest(repository, policy) {
 }
 
 function runIdentity(run) {
-  return { id: run.id, attempt: run.run_attempt, sha: run.head_sha, event: run.event, path: run.path,
+  return { id: run.id, attempt: run.run_attempt, sha: run.head_sha, branch: run.head_branch, event: run.event, path: run.path,
     actor: actor(run.actor) };
 }
 
 function sameRun(expected, actual) {
   const observed = runIdentity(actual);
-  return ["id", "attempt", "sha", "event", "path"].every(key => expected?.[key] === observed[key]) &&
+  return ["id", "attempt", "sha", "branch", "event", "path"].every(key => expected?.[key] === observed[key]) &&
     ["id", "login", "type"].every(key => expected?.actor?.[key] === observed.actor[key]);
 }
 
@@ -203,7 +210,10 @@ function metadataUrl(endpoint) {
     throw new Error("Invalid GitHub metadata endpoint");
   }
   const url = new URL("https://api.github.com");
-  url.pathname = pathname.split("/").map(segment => encodeURIComponent(decodeURIComponent(segment))).join("/");
+  const segments = pathname.split("/").map(segment => decodeURIComponent(segment));
+  if (segments.some(segment => segment.split("/").some(part => part === "." || part === "..") ||
+      /[\u0000-\u0020\u007f\\#?]/.test(segment))) throw new Error("Invalid GitHub metadata path component");
+  url.pathname = segments.map(segment => encodeURIComponent(segment)).join("/");
   if (pathname.includes("/contents/")) {
     if (!/^ref=[a-f0-9]{40}$/.test(query ?? "")) throw new Error("Invalid workflow metadata revision");
   } else if (query !== undefined) {
@@ -249,7 +259,32 @@ export class GitHub {
   }
 }
 
-export async function readRootDecision(api, repository, run, policy) {
+async function verifiedTagPush(api, repository, run, pushRef) {
+  if (pushRef !== undefined) return pushRef === `refs/tags/${run.head_branch}`;
+  const endpoint = `/repos/${repository.full_name}/git/ref`;
+  const name = encodeURIComponent(run.head_branch);
+  const tag = await api.get(`${endpoint}/tags/${name}`, true);
+  if (!tag) return false;
+  if (tag.ref !== `refs/tags/${run.head_branch}`) throw new Error("Tag metadata does not match the run reference");
+  const branch = await api.get(`${endpoint}/heads/${name}`, true);
+  if (branch) {
+    if (branch.ref !== `refs/heads/${run.head_branch}`) throw new Error("Branch metadata does not match the run reference");
+    return false;
+  }
+  let target = tag.object;
+  for (let depth = 0; depth < 8; depth++) {
+    object(target, "Tag target");
+    sha(target.sha, "Tag target");
+    if (target.type === "commit") return target.sha === run.head_sha;
+    if (target.type !== "tag") throw new Error("Invalid tag target type");
+    const annotated = await api.get(`/repos/${repository.full_name}/git/tags/${target.sha}`);
+    if (annotated.sha !== target.sha) throw new Error("Annotated tag identity does not match the reference");
+    target = annotated.object;
+  }
+  throw new Error("Annotated tag exceeds the resolution bound");
+}
+
+export async function readRootDecision(api, repository, run, policy, pushRef) {
   validateRun(run, repository, run.id);
   if (run.head_repository?.id !== repository.id ||
       !["push", "workflow_dispatch", "schedule"].includes(run.event)) {
@@ -285,7 +320,10 @@ export async function readRootDecision(api, repository, run, policy) {
       pullRequests.push(await api.get(`/repos/${repository.full_name}/pulls/${candidate.number}`));
     }
   }
-  return decideOrigin({ repository, run, pullRequests, identities, permission, policy });
+  const tagPush = run.actor.type === "User" && run.event === "push" &&
+    (pushRef === `refs/tags/${run.head_branch}` || pullRequests.some(pr => pr.merged_by?.id !== run.actor.id))
+    ? await verifiedTagPush(api, repository, run, pushRef) : false;
+  return decideOrigin({ repository, run, pullRequests, identities, permission, policy, tagPush });
 }
 
 async function completedRun(api, repository, runId) {
@@ -304,7 +342,7 @@ export async function trustedProducer(api, repository, run, policy) {
   return true;
 }
 
-export async function prepare({ api, repositoryName, repositoryId, runId, runAttempt, eventName, expectedSha, workflowSha,
+export async function prepare({ api, repositoryName, repositoryId, runId, runAttempt, eventName, expectedSha, workflowSha, expectedRef,
   event, policy, engineDigest }) {
   policy = validatePolicy(policy);
   sha(workflowSha, "Executed workflow definition");
@@ -317,6 +355,11 @@ export async function prepare({ api, repositoryName, repositoryId, runId, runAtt
   }
   if (current.event === "workflow_run" && current.head_sha !== workflowSha) {
     throw new Error("Chained workflow metadata does not identify the executed workflow definition");
+  }
+  if (current.event === "push" &&
+      (![ `refs/heads/${current.head_branch}`, `refs/tags/${current.head_branch}` ].includes(expectedRef) ||
+       event?.ref !== expectedRef)) {
+    throw new Error("Push event reference does not match the frozen execution context");
   }
   if (current.status === "completed" && current.conclusion !== "success") {
     throw new Error("The current workflow was cancelled or completed unsuccessfully");
@@ -331,7 +374,8 @@ export async function prepare({ api, repositoryName, repositoryId, runId, runAtt
       throw new Error("The workflow_run event does not match the live producer metadata");
     }
   }
-  const plan = { contract: CONTRACT, repository, current, source, policy, engineDigest,
+  const pushRef = source.id === current.id && current.event === "push" ? expectedRef : undefined;
+  const plan = { contract: CONTRACT, repository, current, source, policy, engineDigest, pushRef,
     execution: { sourceSha: expectedSha, workflowSha }, proofRequired: false };
   if (source.id !== current.id && source.event === "workflow_run") {
     if (source.head_repository?.id !== repository.id || !await trustedProducer(api, repository, source, policy)) {
@@ -354,7 +398,7 @@ export async function prepare({ api, repositoryName, repositoryId, runId, runAtt
     }
     return { ...plan, proofRequired: true, artifactId: artifact.id };
   }
-  plan.decision = await readRootDecision(api, repository, source, policy);
+  plan.decision = await readRootDecision(api, repository, source, policy, pushRef);
   return plan;
 }
 
@@ -394,7 +438,7 @@ export async function finalize(plan, api, proof) {
     lineage = proof.lineage;
   } else {
     decision = source.event === "workflow_run" ? plan.decision
-      : await readRootDecision(api, repository, source, plan.policy);
+      : await readRootDecision(api, repository, source, plan.policy, plan.pushRef);
     lineage = [runIdentity(source)];
   }
   if (lineage.at(-1).id !== current.id) lineage = [...lineage, runIdentity(current)];
@@ -431,6 +475,7 @@ export async function main(mode, env = process.env) {
       runAttempt: id(Number(env.GITHUB_RUN_ATTEMPT), "Workflow attempt"),
       eventName: env.GITHUB_EVENT_NAME, expectedSha: sha(env.GITHUB_SHA, "Workflow source"),
       workflowSha: sha(env.GITHUB_WORKFLOW_SHA, "Executed workflow definition"),
+      expectedRef: env.GITHUB_REF,
       event: JSON.parse(await readFile(env.GITHUB_EVENT_PATH, "utf8")),
       policy: { appId: id(Number(env.ORIGIN_APP_ID), "Trusted App identity"),
         allowAppAuthoredMerges: env.ORIGIN_ALLOW_APP_AUTHORED === "true",

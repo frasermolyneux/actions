@@ -25,12 +25,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TARGET: ${{ github.repository }}
           WORKFLOW_SHA: ${{ github.workflow_sha }}
+          PRODUCER_RUN: ${{ github.event.workflow_run.id }}
+          PRODUCER_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
         run: |
           set -euo pipefail
+          [[ "$PRODUCER_RUN" =~ ^[1-9][0-9]*$ && "$PRODUCER_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          jobs="$(gh api "repos/${TARGET}/actions/runs/${PRODUCER_RUN}/attempts/${PRODUCER_ATTEMPT}/jobs?per_page=100")"
+          conclusion="$(jq -er '
+            if .total_count != 1 or .jobs[0].name != "relay" or .jobs[0].status != "completed"
+            then error("Unexpected relay attempt jobs")
+            else .jobs[0].conclusion end' <<< "$jobs")"
+          if [[ "$conclusion" == 'skipped' ]]; then
+            echo 'executed=false' >> "$GITHUB_OUTPUT"
+            echo 'Relay job was skipped; no positive chain acceptance was exercised.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [[ "$conclusion" == 'success' ]]
+          echo 'executed=true' >> "$GITHUB_OUTPUT"
           blob="$(gh api "repos/${TARGET}/contents/.github/workflows/publication-origin-relay.yml?ref=${WORKFLOW_SHA}" --jq '.sha')"
           [[ "$blob" =~ ^[a-f0-9]{40}$ ]]
           echo "policy=[{\"path\":\".github/workflows/publication-origin-relay.yml\",\"blobSha\":\"${blob}\"}]" >> "$GITHUB_OUTPUT"
       - name: Verify a real two-hop workflow_run lineage
+        if: steps.producer.outputs.executed == 'true'
         id: origin
         uses: ./repository-publication-origin
         with:
@@ -38,6 +54,7 @@ jobs:
           app-id: '1'
           trusted-producers: ${{ steps.producer.outputs.policy }}
       - name: Assert positive acceptance and intentional holds independently
+        if: steps.producer.outputs.executed == 'true'
         shell: bash
         env:
           EXPECTED_POSITIVE: ${{ github.event.workflow_run.actor.type == 'User' }}
@@ -61,6 +78,7 @@ jobs:
             }
           '
       - name: Retain the complete hosted lineage
+        if: steps.producer.outputs.executed == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: publication-origin-chain-evidence
