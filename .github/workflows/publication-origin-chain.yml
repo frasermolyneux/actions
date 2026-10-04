@@ -1,0 +1,62 @@
+name: Publication Origin Chain
+on:
+  workflow_run:
+    workflows: [Publication Origin Relay]
+    types: [completed]
+permissions: {}
+jobs:
+  chain:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.id == github.repository_id
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Bind the fixture to its reviewed default-branch producer definition
+        id: producer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.repository }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          blob="$(gh api "repos/${TARGET}/contents/.github/workflows/publication-origin-relay.yml?ref=${WORKFLOW_SHA}" --jq '.sha')"
+          [[ "$blob" =~ ^[a-f0-9]{40}$ ]]
+          echo "policy=[{\"path\":\".github/workflows/publication-origin-relay.yml\",\"blobSha\":\"${blob}\"}]" >> "$GITHUB_OUTPUT"
+      - name: Verify a real two-hop workflow_run lineage
+        id: origin
+        uses: ./repository-publication-origin
+        with:
+          github-token: ${{ github.token }}
+          app-id: '1'
+          trusted-producers: ${{ steps.producer.outputs.policy }}
+      - name: Assert actual origin is preserved through both hops
+        if: steps.origin.outputs.publication-allowed == 'true'
+        shell: bash
+        env:
+          REPORT: ${{ steps.origin.outputs.report-directory }}/origin.json
+        run: |
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            import assert from "node:assert/strict";
+            const proof = JSON.parse(await readFile(process.env.REPORT, "utf8"));
+            assert.equal(proof.lineage.length, 3);
+            assert.equal(proof.sourceSha, proof.lineage[0].sha);
+            assert.equal(proof.decision.allowed, true);
+            assert.equal(proof.execution.sourceSha, proof.lineage.at(-1).sha);
+            assert.equal(proof.execution.workflowSha, proof.lineage.at(-1).sha);
+          '
+      - name: Retain the complete hosted lineage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: publication-origin-chain-evidence
+          path: ${{ steps.origin.outputs.report-directory }}/origin.json
+          if-no-files-found: error
+          retention-days: 7

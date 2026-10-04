@@ -1,0 +1,58 @@
+name: Publication Origin Contracts
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22'
+      - name: Exercise publication origin, lineage and credential boundaries
+        shell: bash
+        run: node --test repository-publication-origin/origin.test.mjs
+
+  live-origin:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Exercise the actual composite with live read-only run metadata
+        id: origin
+        uses: ./repository-publication-origin
+        with:
+          github-token: ${{ github.token }}
+          app-id: '1'
+      - name: Confirm PR validation never authorizes publication
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          ALLOWED: ${{ steps.origin.outputs.publication-allowed }}
+        run: test "$ALLOWED" = 'false'
+      - name: Retain live source-origin metadata in this repository
+        if: steps.origin.outputs.publication-allowed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repository-publication-origin
+          path: ${{ steps.origin.outputs.report-directory }}/origin.json
+          if-no-files-found: error
+          retention-days: 1
