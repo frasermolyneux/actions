@@ -57,6 +57,7 @@ jobs:
             nbgv-metadata
             publish-nuget-packages
             run-api-integration-tests
+            repository-analysis-context
             stale-branch-sweep
             terraform-apply
             terraform-destroy
