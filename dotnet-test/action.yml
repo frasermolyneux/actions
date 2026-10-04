@@ -61,13 +61,14 @@ runs:
       shell: pwsh
       env:
         TEST_COVERAGE: ${{ inputs.coverage }}
+        TEST_WORKING_DIRECTORY: ${{ inputs.working-directory }}
       run: |
         if ($env:TEST_COVERAGE -notin @('true', 'false')) { throw 'coverage must be exactly true or false.' }
         $directory = Join-Path $env:RUNNER_TEMP "dotnet-test/$([guid]::NewGuid().ToString('N'))"
         New-Item -ItemType Directory -Path $directory -ErrorAction Stop | Out-Null
         "results-directory=$directory" >> $env:GITHUB_OUTPUT
         if ($env:TEST_COVERAGE -eq 'true') {
-          $sha = git rev-parse HEAD
+          $sha = git -C $env:TEST_WORKING_DIRECTORY rev-parse HEAD
           if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[a-f0-9]{40}$') { throw 'Cannot freeze coverage source revision.' }
           "source-sha=$sha" >> $env:GITHUB_OUTPUT
         }
@@ -137,8 +138,9 @@ runs:
         TEST_RESULTS_DIRECTORY: ${{ steps.invocation.outputs.results-directory }}
         TEST_SOURCE_SHA: ${{ steps.invocation.outputs.source-sha }}
         TEST_COVERAGE_VERSION: ${{ steps.collector.outputs.version }}
+        TEST_WORKING_DIRECTORY: ${{ inputs.working-directory }}
       run: |
-        $sha = git rev-parse HEAD
+        $sha = git -C $env:TEST_WORKING_DIRECTORY rev-parse HEAD
         if ($LASTEXITCODE -ne 0 -or $sha -ne $env:TEST_SOURCE_SHA) { throw 'Coverage source revision changed during testing.' }
         & (Join-Path $env:TEST_ACTION_PATH 'report-coverage.ps1') `
           -CoverageFile (Join-Path $env:TEST_RESULTS_DIRECTORY 'coverage.cobertura.xml') `

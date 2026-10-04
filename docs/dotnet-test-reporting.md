@@ -118,6 +118,8 @@ with the originating test artifact; `results-directory` allows same-job Sonar im
 `coverage.cobertura.xml`. Missing/empty/malformed instrumentation fails rather than emitting
 zero coverage. `coverage-report` contains collection state, actual checkout revision, tool
 version, XML hash and deduplicated instrumented/covered line counts without source filenames.
+Revision checks resolve Git from the configured test directory, including custom-path or
+independent checkouts; the caller workspace's revision is not substituted for tested source.
 These raw counts may include test assemblies; they are not production-only Sonar metrics.
 Collection is **not** a claim of provider import. The analysis engine must separately verify
 source integrity, the provider's actual import, passing tests and the completed analysis ID.
@@ -191,3 +193,5 @@ failure propagation, source annotations, and comment ownership/write-context/sta
 The `Test reporting contracts` workflow additionally runs two real xUnit projects on both .NET 9
 and .NET 10 on Linux and Windows, and asserts that all four executions, the artifact ID and
 real native coverage instrumentation survive.
+The coverage smoke uses an independently checked out reviewed revision different from its
+caller definition, proving that actual tested-source provenance is preserved.

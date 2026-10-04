@@ -83,4 +83,5 @@ test('coverage is disabled by default and independently pinned', () => {
   assert.match(action, /coverage:\s+description: [^\n]+\s+required: false\s+default: "false"/);
   const pin = JSON.parse(fs.readFileSync(path.join(__dirname, 'coverage-tools.json'), 'utf8'));
   assert.deepEqual(pin, { package: 'dotnet-coverage', version: '18.11.2', format: 'cobertura' });
+  assert.equal((action.match(/git -C \$env:TEST_WORKING_DIRECTORY rev-parse HEAD/g) || []).length, 2);
 });
