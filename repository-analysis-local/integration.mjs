@@ -15,12 +15,17 @@ const files = {
   "Main.cs": "using System.Diagnostics;\nclass Fixture {\n public static void Run(string value) { Process.Start(value); }\n}\n",
   "main.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
   "main.ps1": "Write-Host 'fixture'\n",
-  "scripts/health": "#!/bin/sh\necho $FIXTURE_VALUE\n",
+  "automation/check": "#!/usr/bin/env pwsh\nWrite-Host 'extensionless fixture'\n",
+  "operations/health": "#!/bin/sh\necho $FIXTURE_VALUE\n",
   "main.tf": "resource \"azurerm_storage_account\" \"fixture\" {\n  name = \"fixture\"\n  resource_group_name = \"fixture\"\n  location = \"uksouth\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  min_tls_version = \"TLS1_0\"\n}\n",
+  "json/main.tf.json": JSON.stringify({ resource: { azurerm_storage_account: { fixture: {
+    name: "jsonfixture", resource_group_name: "fixture", location: "uksouth",
+    account_tier: "Standard", account_replication_type: "LRS", min_tls_version: "TLS1_0",
+  } } } }),
   "Dockerfile": "FROM alpine:3.23\nRUN echo fixture\n",
   "main.bicep": "param location string = resourceGroup().location\nresource fixture 'Microsoft.Storage/storageAccounts@2023-05-01' = {\n  name: 'fixturestorage'\n  location: location\n  kind: 'StorageV2'\n  sku: { name: 'Standard_LRS' }\n  properties: { supportsHttpsTrafficOnly: false }\n}\n",
-  "roles/fixture/tasks/main.yml": "- name: Run a fixture command\n  ansible.builtin.shell: echo fixture\n",
-  "ansible/playbook.yml": "- name: Fixture playbook\n  hosts: all\n  tasks:\n    - name: Run a fixture command\n      shell: echo fixture\n",
+  "roles/fixture/tasks/main.yml": "- name: Install a fixture package\n  yum:\n    name: fixture\n    state: present\n    validate_certs: false\n",
+  "ansible/playbook.yml": "- name: Fixture playbook\n  hosts: all\n  tasks:\n    - name: Install a fixture package\n      yum:\n        name: fixture\n        state: present\n        validate_certs: false\n",
 };
 await Promise.all(Object.entries(files).map(async ([filename, content]) => {
   const destination = path.join(root, filename);
@@ -61,6 +66,7 @@ try {
   const diagnostics = output.split("\n").find((line) => line.startsWith("diagnostic-directory="));
   if (diagnostics) {
     const location = diagnostics.slice("diagnostic-directory=".length);
+    console.error(await readFile(path.join(location, "execution.json"), "utf8"));
     console.error(await readFile(path.join(location, "stdout.txt"), "utf8"));
     console.error(await readFile(path.join(location, "stderr.txt"), "utf8"));
   }
@@ -71,6 +77,16 @@ assert.equal(report.sourceSha, sha);
 assert.equal(report.visibility, "private");
 assert.ok(Object.values(report.sourceCoverage).every((count) => count > 0));
 assert.ok(report.findingCount > 0, "The deliberately insecure fixture must produce a real finding");
+const outputs = await readFile(environment.GITHUB_OUTPUT, "utf8");
+const result = outputs.split("\n").find((line) => line.startsWith("report-directory="));
+const native = JSON.parse(await readFile(path.join(result.slice("report-directory=".length), "native.json"), "utf8"));
+if (tool === "checkov") {
+  assert.ok(native.every((entry) => entry.summary.failed > 0), "Each IaC framework fixture must detect a real finding");
+}
+if (tool === "psscriptanalyzer") {
+  assert.ok(native.results.some((entry) => entry.ScriptPath.endsWith("/automation/check")),
+    "The extensionless PowerShell fixture must actually be analyzed");
+}
 assert.doesNotMatch(JSON.stringify(report), /fixture-credential/);
 assert.doesNotMatch(await readFile(environment.GITHUB_STEP_SUMMARY, "utf8"), /fixture-credential/);
 console.log(JSON.stringify({ tool, fixture: true, sourceCoverage: report.sourceCoverage, findings: report.findingCount }));

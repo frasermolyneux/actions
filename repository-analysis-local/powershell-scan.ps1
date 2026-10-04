@@ -6,8 +6,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $ModuleRoot "PSScriptAnalyzer/$Version/PSScriptAnalyzer.psd1")
-$files = @(Get-ChildItem -LiteralPath $Source -Recurse -File |
-    Where-Object { $_.Extension -in '.ps1', '.psm1', '.psd1' })
+$root = (Resolve-Path -LiteralPath $Source).Path
+$files = @(Get-ChildItem -LiteralPath $root -Recurse -File)
 $diagnostics = @()
 $parseErrors = @()
 foreach ($file in $files) {
@@ -15,13 +15,21 @@ foreach ($file in $files) {
     $errors = $null
     $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors)
     $parseErrors += @($errors | ForEach-Object { $_.ErrorId })
-    $diagnostics += @(Invoke-ScriptAnalyzer -Path $file.FullName -Settings @{
-        IncludeDefaultRules = $true
-    } | Select-Object RuleName, Severity, Message, Line, Column, ScriptPath)
+    $parameters = @{ Settings = @{ IncludeDefaultRules = $true } }
+    if ($file.Extension) {
+        $parameters.Path = $file.FullName
+    } else {
+        $parameters.ScriptDefinition = Get-Content -LiteralPath $file.FullName -Raw
+    }
+    $diagnostics += @(Invoke-ScriptAnalyzer @parameters |
+        Select-Object RuleName, Severity, Message, Line, Column,
+            @{ Name = 'ScriptPath'; Expression = { $file.FullName } })
 }
 @{
     version = (Get-Module PSScriptAnalyzer).Version.ToString()
-    scanned = @($files.FullName)
+    scanned = @($files | ForEach-Object {
+        [System.IO.Path]::GetRelativePath($root, $_.FullName).Replace('\', '/')
+    })
     errors = $parseErrors
     results = $diagnostics
 } | ConvertTo-Json -Depth 8 -Compress

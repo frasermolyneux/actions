@@ -5,7 +5,7 @@
     "version": "1.179.0",
     "command": "semgrep",
     "rulesRepository": "https://github.com/semgrep/semgrep-rules.git",
-    "rulesRevision": "311ca4e9ba59d700624539bf658e3d29b134ee77"
+    "rulesRevision": "a84ff9cc2453ca91d581380de4b8b3f272f6f4be"
   },
   "checkov": { "package": "checkov", "version": "3.3.22", "command": "checkov" },
   "bandit": { "package": "bandit", "version": "1.9.4", "command": "bandit" },

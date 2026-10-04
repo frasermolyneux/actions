@@ -16,7 +16,12 @@ repository's executable search path.
 
 The six backends and versions are owned by `repository-analysis-local/tools.json`.
 Semgrep CE uses the pinned community security rules, metrics/version checks disabled,
-without login, cloud publication, local builds or autofix. zizmor runs offline with strict
+without login, cloud publication, local builds or autofix. The current upstream rules use
+the [Semgrep Rules License](https://semgrep.dev/legal/rules-license): internal use only,
+not rule redistribution or providing a scanning service to others. Each runner downloads
+its own immutable upstream revision; the action does not redistribute the rules.
+TypeScript selects the shared JavaScript/TypeScript rules directory.
+zizmor runs offline with strict
 collection. Checkov runs only the selected IaC frameworks, without platform authentication
 or external module downloads. Bandit, ShellCheck and PSScriptAnalyzer parse source locally.
 These alternatives are not claimed to be CodeQL-equivalent.
@@ -27,7 +32,13 @@ The actual Git checkout must match `expected-sha` and the immutable workflow rep
 identity. Tracked changes are rejected. Selected maintained source is copied into an
 isolated snapshot; no target analyzer configuration, ignored untracked file, user credential
 configuration or dependency/vendor/build-output/fixture directory is used. Extensionless
-supported scripts are included. Every selected capability needs nonempty source.
+supported-shebang scripts are included regardless of their maintained-source location,
+subject to the same vendor/build-output exclusions. Terraform includes `.tf`, `.tf.json`,
+`.tfvars` and `.tfvars.json`; JSON resource definitions require the native `terraform_json`
+Checkov framework, not merely the Terraform source-inventory count.
+Extensionless PowerShell is analyzed as script text with its originating source path;
+completed PowerShell reports must identify every selected file, not just match a count.
+Every selected capability needs nonempty source.
 
 The runner verifies actual engine versions and native report structure, counts, parsing
 errors, selected framework completeness and available per-file evidence. A second checkout
@@ -61,7 +72,8 @@ keep them private when the originating repository is private.
 ```
 
 The `Local analysis contracts` workflow executes all six real pinned tools against synthetic
-private-policy fixtures with deliberately detectable findings. Those fixtures do not contain
+private-policy fixtures with deliberately detectable findings, including both Terraform
+representations and supported Ansible certificate-validation policies. Those fixtures do not contain
 private repository source and are not evidence that the estate callers have been migrated.
 Negative contract tests cover invalid selection, credential isolation and malformed,
 incomplete or parsing-error reports. Actual private-repository execution remains a rollout

@@ -10,12 +10,27 @@ const tools = JSON.parse(await readFile(path.join(directory, "tools.json"), "utf
 const EXTENSIONS = new Map([
   ["csharp", /\.cs$/i], ["cpp", /\.(?:c|cc|cpp|cxx|h|hpp)$/i],
   ["javascript", /\.[cm]?jsx?$/i], ["typescript", /\.tsx?$/i],
-  ["python", /\.py$/i], ["php", /\.php$/i], ["terraform", /\.tf(?:vars(?:\.json)?)?$/i],
+  ["python", /\.py$/i], ["php", /\.php$/i], ["terraform", /\.tf(?:\.json|vars(?:\.json)?)?$/i],
   ["bicep", /\.bicep$/i], ["powershell", /\.ps(?:1|m1|d1)$/i],
   ["shell", /\.sh$/i], ["dockerfile", /(^|\/)Dockerfile(?:\.[^/]+)?$/i],
   ["actions", /^\.github\/workflows\/[^/]+\.ya?ml$|(^|\/)action\.ya?ml$|^templates\/workflows\/.*\.ya?ml$/],
   ["ansible", /^(?:ansible|playbooks|roles)\/.*\.ya?ml$|(^|\/)playbook\.ya?ml$/],
 ]);
+const INTERPRETERS = {
+  shell: /^#!.*\b(?:ba|da|k)?sh(?:\s|$)/, python: /^#!.*\bpython[\d.]*(?:\s|$)/,
+  php: /^#!.*\bphp(?:\s|$)/, javascript: /^#!.*\bnode(?:\s|$)/,
+  powershell: /^#!.*\bpwsh(?:\s|$)/,
+};
+
+export function checkovFrameworks(languages, files) {
+  return languages.flatMap((language) => {
+    if (language !== "terraform") return [language];
+    const frameworks = [];
+    if (files.some((file) => /\.tf$/i.test(file))) frameworks.push("terraform");
+    if (files.some((file) => /\.tf\.json$/i.test(file))) frameworks.push("terraform_json");
+    return frameworks.length ? frameworks : ["terraform"];
+  });
+}
 
 export function scannerEnvironment(environment, home) {
   const allowed = ["PATH", "Path", "SYSTEMROOT", "SystemRoot", "WINDIR", "TEMP", "TMP", "LANG", "LC_ALL"];
@@ -36,7 +51,7 @@ export function command(tool, version, files, rules, source, moduleRoot, bin = "
         "--strict", "--scan-unknown-extensions", "--max-target-bytes=0", "--json",
         ...rules.flatMap((rule) => ["--config", rule]), ...files]];
     case "checkov":
-      return [path.join(bin, "checkov"), ["--directory", ".", "--framework", ...source.languages,
+      return [path.join(bin, "checkov"), ["--directory", ".", "--framework", ...checkovFrameworks(source.languages, files),
         "--skip-download", "--download-external-modules", "false", "--output", "json"]];
     case "bandit":
       return [path.join(bin, "bandit"), ["--format", "json", "--quiet", ...files]];
@@ -77,12 +92,7 @@ function classify(filename, firstLine, languages) {
   return languages.filter((language) => {
     if (EXTENSIONS.get(language).test(filename)) return true;
     if (path.posix.extname(filename)) return false;
-    const interpreters = {
-      shell: /^#!.*\b(?:ba|da|k)?sh(?:\s|$)/, python: /^#!.*\bpython[\d.]*(?:\s|$)/,
-      php: /^#!.*\bphp(?:\s|$)/, javascript: /^#!.*\bnode(?:\s|$)/,
-      powershell: /^#!.*\bpwsh(?:\s|$)/,
-    };
-    return Boolean(interpreters[language]?.test(firstLine));
+    return Boolean(INTERPRETERS[language]?.test(firstLine));
   });
 }
 
@@ -90,11 +100,10 @@ function eligibleFile(filename, languages) {
   if (/(^|\/)(?:node_modules|vendor|bin|obj|packages|fixtures)\//i.test(filename) ||
       /\/wwwroot\/lib\//i.test(filename)) return false;
   if (languages.some((language) => EXTENSIONS.get(language).test(filename))) return true;
-  return !path.posix.extname(filename) &&
-    (filename.startsWith("scripts/") || filename.endsWith("/container-healthcheck"));
+  return !path.posix.extname(filename) && languages.some((language) => INTERPRETERS[language]);
 }
 
-async function copySource(root, destination, filename, languages) {
+export async function copySource(root, destination, filename, languages) {
   if (!eligibleFile(filename, languages)) return [];
   const location = path.join(root, filename);
   const info = await lstat(location);
@@ -150,7 +159,8 @@ async function rulesFor(selected, rulesRoot, environment) {
   if (head.status || clean.status || head.stdout.trim() !== tools["semgrep-ce"].rulesRevision) {
     throw new Error("Semgrep rules do not match the pinned immutable revision");
   }
-  const languageDirectories = new Set(selected.languages.map((language) => language === "cpp" ? "c" : language));
+  const ruleDirectories = { cpp: "c", typescript: "javascript" };
+  const languageDirectories = new Set(selected.languages.map((language) => ruleDirectories[language] ?? language));
   const tracked = run("/usr/bin/git", ["ls-files", "-z"], rulesRoot, environment);
   if (tracked.status) throw new Error("Cannot inventory pinned Semgrep rules");
   const configs = tracked.stdout.split("\0").filter((file) =>
@@ -249,11 +259,16 @@ export async function scan(environment = process.env) {
   const rules = tool === "semgrep-ce" ? await rulesFor(selected, environment.ANALYSIS_RULES, safeEnvironment) : [];
   const [executable, args] = command(tool, pin.version, inventory.files,
     rules, selected, environment.ANALYSIS_PS_MODULE_ROOT, environment.ANALYSIS_SCANNER_BIN);
+  const frameworks = tool === "checkov" ? checkovFrameworks(selected.languages, inventory.files) : selected.languages;
   const execution = run(executable, args, source, safeEnvironment);
   const diagnostics = path.join(scratch, "diagnostics");
   await mkdir(diagnostics);
   await writeFile(path.join(diagnostics, "stdout.txt"), execution.stdout);
   await writeFile(path.join(diagnostics, "stderr.txt"), execution.stderr);
+  await writeFile(path.join(diagnostics, "execution.json"), JSON.stringify({
+    kind: "diagnostic-not-completed-analysis", tool, exit: execution.status,
+    sourceSha: head.stdout.trim(), sourceCoverage: inventory.counts, frameworks, executable, args,
+  }, null, 2));
   await appendFile(environment.GITHUB_OUTPUT, `diagnostic-directory=${diagnostics}\n`);
   validateExit(tool, execution.status);
   let native;
@@ -262,7 +277,7 @@ export async function scan(environment = process.env) {
   } catch (error) {
     throw new Error("Analyzer did not produce a valid JSON report", { cause: error });
   }
-  const findings = validateReport(tool, native, pin.version, inventory.files, selected.languages);
+  const findings = validateReport(tool, native, pin.version, inventory.files, frameworks);
   const finalHead = run("/usr/bin/git", ["rev-parse", "HEAD"], root, safeEnvironment);
   const finalClean = run("/usr/bin/git", ["diff", "--exit-code", "HEAD", "--"], root, safeEnvironment);
   if (finalHead.status || finalClean.status || finalHead.stdout.trim() !== head.stdout.trim()) {

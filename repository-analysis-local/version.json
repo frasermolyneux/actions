@@ -2,5 +2,6 @@
   "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
   "version": "1.0",
   "inherit": false,
+  "pathFilters": ["repository-analysis-local/**"],
   "publicReleaseRefSpec": ["^refs/heads/main$"]
 }

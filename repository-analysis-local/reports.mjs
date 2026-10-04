@@ -35,8 +35,9 @@ function semgrep(report, version, inputs) {
 function checkov(report, languages) {
   const frameworks = Array.isArray(report) ? report : [report];
   if (!frameworks.length) throw new Error("Missing Checkov frameworks");
-  if (languages.some((language) => !frameworks.some((entry) => entry.check_type === language))) {
-    throw new Error("Checkov did not report every selected framework");
+  const missing = languages.filter((language) => !frameworks.some((entry) => entry.check_type === language));
+  if (missing.length) {
+    throw new Error(`Checkov did not report every selected framework: ${missing.join(", ")}`);
   }
   return frameworks.flatMap((entry) => {
     if (!entry?.check_type) throw new Error("Malformed Checkov framework");
@@ -76,8 +77,10 @@ function shellcheck(report) {
 function powershell(report, version, inputs) {
   if (report?.version !== version) throw new Error("Unexpected PSScriptAnalyzer version");
   noErrors(report.errors, "PowerShell parsing errors");
-  const scanned = array(report.scanned, "PowerShell scanned paths");
-  if (scanned.length !== inputs.length) throw new Error("PSScriptAnalyzer source coverage is incomplete");
+  const scanned = new Set(array(report.scanned, "PowerShell scanned paths"));
+  if (scanned.size !== inputs.length || inputs.some((file) => !scanned.has(file))) {
+    throw new Error("PSScriptAnalyzer source coverage is incomplete");
+  }
   return array(report.results, "PSScriptAnalyzer results");
 }
 
