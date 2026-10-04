@@ -15,6 +15,7 @@ const CODEQL = new Map([
 const SEMGREP = new Set(["csharp", "cpp", "javascript", "typescript", "python", "php"]);
 const IAC = new Set(["terraform", "bicep", "dockerfile", "ansible"]);
 const EXEMPTIONS = new Set(["documentation-only", "empty", "archived", "upstream-fork"]);
+const compareLanguages = (left, right) => left.localeCompare(right, "en");
 
 function object(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -54,7 +55,7 @@ export function validateProfile(profile) {
   }
   return {
     version: profile.version,
-    languages: [...profile.languages].sort(),
+    languages: [...profile.languages].sort(compareLanguages),
     sonar: profile.sonar,
     ...(profile.exemption ? { exemption: {
       kind: profile.exemption.kind,
@@ -79,19 +80,34 @@ function validateRepository(repository, expectedRepository) {
   }
 }
 
-export function selectAnalysis(profileInput, repository, expectedRepository) {
-  const profile = validateProfile(profileInput);
-  validateRepository(repository, expectedRepository);
+function validateApplicability(profile, repository) {
   if ((repository.archived && profile.exemption?.kind !== "archived") ||
       (repository.fork && profile.exemption?.kind !== "upstream-fork") ||
       (!repository.archived && profile.exemption?.kind === "archived") ||
       (!repository.fork && profile.exemption?.kind === "upstream-fork")) {
     throw new Error("Repository applicability changed; review the catalog profile");
   }
-  const publicRepository = repository.visibility === "public";
+}
+
+function selectCodeql(profile, publicRepository) {
+  if (profile.exemption) {
+    return { languages: [], status: "not-applicable", reason: "Catalog applicability exemption" };
+  }
   const supportedCodeqlSource = profile.languages.some((language) => CODEQL.has(language));
-  const codeqlLanguages = profile.exemption || !publicRepository
-    ? [] : [...new Set(profile.languages.flatMap((language) => CODEQL.get(language) ?? []))].sort();
+  if (!supportedCodeqlSource) {
+    return { languages: [], status: "not-applicable", reason: "No supported CodeQL source capabilities" };
+  }
+  if (!publicRepository) {
+    return { languages: [], status: "unavailable",
+      reason: "Private code scanning is not licensed under the current estate contract; do not execute CodeQL" };
+  }
+  return {
+    languages: [...new Set(profile.languages.flatMap((language) => CODEQL.get(language) ?? []))].sort(compareLanguages),
+    status: "eligible", reason: "Public repository with supported source capabilities",
+  };
+}
+
+function selectLocalTools(profile, publicRepository) {
   const semgrepLanguages = profile.languages.filter((language) =>
     SEMGREP.has(language) && (!publicRepository || !CODEQL.has(language)));
   const localTools = [];
@@ -102,23 +118,34 @@ export function selectAnalysis(profileInput, repository, expectedRepository) {
   if (profile.languages.includes("python")) localTools.push({ tool: "bandit", languages: ["python"] });
   if (profile.languages.includes("powershell")) localTools.push({ tool: "psscriptanalyzer", languages: ["powershell"] });
   if (profile.languages.includes("shell")) localTools.push({ tool: "shellcheck", languages: ["shell"] });
-  const sonar = !profile.sonar
-    ? { status: "not-applicable", reason: "Not selected by the catalog source profile" }
-    : publicRepository
-      ? { status: "eligible", reason: "Verify the public project and CI configuration before execution" }
-      : { status: "unavailable", reason: "Private Sonar execution is not approved by the current estate contract" };
+  return localTools;
+}
+
+function selectSonar(profile, publicRepository) {
+  if (!profile.sonar) return { status: "not-applicable", reason: "Not selected by the catalog source profile" };
+  if (!publicRepository) {
+    return { status: "unavailable", reason: "Private Sonar execution is not approved by the current estate contract" };
+  }
+  return { status: "eligible", reason: "Verify the public project and CI configuration before execution" };
+}
+
+export function selectAnalysis(profileInput, repository, expectedRepository) {
+  const profile = validateProfile(profileInput);
+  validateRepository(repository, expectedRepository);
+  validateApplicability(profile, repository);
+  const publicRepository = repository.visibility === "public";
+  const codeql = selectCodeql(profile, publicRepository);
+  const localTools = selectLocalTools(profile, publicRepository);
+  const sonar = selectSonar(profile, publicRepository);
+  const limitations = [];
+  if (!publicRepository && localTools.some(({ tool }) => tool === "semgrep-ce")) {
+    limitations.push("Semgrep CE is local-only and does not provide CodeQL-equivalent analysis");
+  }
+  if (sonar.status === "unavailable") limitations.push("Sonar quality findings are unavailable; never report them as clean");
   const context = {
     contract: CONTRACT_VERSION, repository: repository.full_name, repositoryId: repository.id,
     visibility: repository.visibility, ownerType: repository.owner.type, profile,
-    codeql: {
-      languages: codeqlLanguages,
-      status: codeqlLanguages.length ? "eligible" : profile.exemption || !supportedCodeqlSource
-        ? "not-applicable" : "unavailable",
-      reason: codeqlLanguages.length ? "Public repository with supported source capabilities" :
-        profile.exemption ? "Catalog applicability exemption" :
-          !supportedCodeqlSource ? "No supported CodeQL source capabilities" :
-            "Private code scanning is not licensed under the current estate contract; do not execute CodeQL",
-    },
+    codeql,
     localTools,
     publication: {
       sarif: !profile.exemption && publicRepository ? "github-security" : "not-available",
@@ -127,11 +154,7 @@ export function selectAnalysis(profileInput, repository, expectedRepository) {
       estateSummary: "aggregate-status-only",
     },
     sonar,
-    limitations: [
-      ...(!publicRepository && semgrepLanguages.length
-        ? ["Semgrep CE is local-only and does not provide CodeQL-equivalent analysis"] : []),
-      ...(sonar.status === "unavailable" ? ["Sonar quality findings are unavailable; never report them as clean"] : []),
-    ],
+    limitations,
   };
   context.policyDigest = createHash("sha256").update(JSON.stringify(context)).digest("hex");
   return context;
@@ -164,7 +187,7 @@ export async function resolveAnalysis(profile, expectedRepository, token, reques
 
 export async function main(env = process.env) {
   if (!env.GITHUB_OUTPUT || !env.GITHUB_STEP_SUMMARY) throw new Error("GitHub output and summary paths are required");
-  if (!/^[1-9][0-9]*$/.test(env.ANALYSIS_REPOSITORY_ID ?? "") ||
+  if (!/^[1-9]\d*$/.test(env.ANALYSIS_REPOSITORY_ID ?? "") ||
       !Number.isSafeInteger(Number(env.ANALYSIS_REPOSITORY_ID))) {
     throw new Error("The immutable workflow repository identity is required");
   }
@@ -183,11 +206,12 @@ export async function main(env = process.env) {
     `exempt=${Boolean(context.profile.exemption)}`,
     "",
   ].join("\n"));
+  const toolNames = context.localTools.map(({ tool }) => "`" + tool + "`").join(", ");
   await appendFile(env.GITHUB_STEP_SUMMARY, [
     "### Analysis capability selection", "",
     `Repository visibility: **${context.visibility}**. Contract: \`${context.contract}\`.`,
     `CodeQL: **${context.codeql.status}**. ${context.codeql.reason}.`,
-    `Local tools: ${context.localTools.map(({ tool }) => `\`${tool}\``).join(", ") || "none (applicability exemption)"}.`,
+    `Local tools: ${toolNames || "none (applicability exemption)"}.`,
     `Sonar: **${context.sonar.status}**. ${context.sonar.reason}.`,
     `SARIF destination: **${context.publication.sarif}**; artifacts remain **${context.publication.artifacts}**.`,
     "Capability selection is not scanner execution or evidence of zero findings.",
@@ -197,8 +221,10 @@ export async function main(env = process.env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().catch((error) => {
+  try {
+    await main();
+  } catch (error) {
     console.error(`::error::${error instanceof SyntaxError ? "Malformed analysis JSON" : error.message}`);
     process.exitCode = 1;
-  });
+  }
 }
