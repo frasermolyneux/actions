@@ -22,14 +22,14 @@ test("public supported source uses CodeQL and GitHub SARIF, with de-duplicated J
   assert.equal(context.sonar.status, "eligible");
 });
 
-test("every private supported language has a permitted local alternative, never licensed CodeQL", () => {
+test("private supported languages select permitted local tools, never licensed CodeQL or invented C++ coverage", () => {
   const context = select(["csharp", "cpp", "javascript", "typescript", "python", "php", "actions",
     "terraform", "bicep", "dockerfile", "ansible", "powershell", "shell"], "private");
   assert.deepEqual(context.codeql.languages, []);
   assert.equal(context.codeql.status, "unavailable");
   assert.deepEqual(context.localTools, [
     { tool: "zizmor", languages: ["actions"] },
-    { tool: "semgrep-ce", languages: ["cpp", "csharp", "javascript", "php", "python", "typescript"] },
+    { tool: "semgrep-ce", languages: ["csharp", "javascript", "php", "python", "typescript"] },
     { tool: "checkov", languages: ["ansible", "bicep", "dockerfile", "terraform"] },
     { tool: "bandit", languages: ["python"] },
     { tool: "psscriptanalyzer", languages: ["powershell"] },
@@ -40,8 +40,21 @@ test("every private supported language has a permitted local alternative, never 
   assert.equal(context.publication.summary, "originating-repository-only");
   assert.equal(context.publication.estateSummary, "aggregate-status-only");
   assert.match(context.limitations[0], /not provide CodeQL-equivalent/);
+  assert.match(context.limitations.join(" "), /Local C\+\+ analysis is unavailable/);
 });
 
+test("private C++ is explicitly unavailable while public C++ remains eligible for CodeQL", () => {
+  const privateContext = select(["cpp"], "private");
+  assert.equal(privateContext.codeql.status, "unavailable");
+  assert.deepEqual(privateContext.codeql.languages, []);
+  assert.deepEqual(privateContext.localTools, []);
+  assert.match(privateContext.limitations.join(" "), /Local C\+\+ analysis is unavailable.*never report it as clean/);
+  assert.equal(privateContext.publication.sarif, "not-available");
+  const publicContext = select(["cpp"]);
+  assert.equal(publicContext.codeql.status, "eligible");
+  assert.deepEqual(publicContext.codeql.languages, ["cpp"]);
+  assert.deepEqual(publicContext.localTools, []);
+});
 test("private visibility overrides a public-oriented Sonar source profile", () => {
   const context = select(["csharp"], "private", true);
   assert.equal(context.sonar.status, "unavailable");
