@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   ARTIFACT, CONTRACT, GitHub, decideOrigin, finalize, policyDigest, prepare,
@@ -17,6 +18,12 @@ const actions = { id: 3, login: "github-actions[bot]", type: "Bot" };
 const dependabot = { id: 4, login: "dependabot[bot]", type: "Bot" };
 const identities = { app: { id: 50, actorId: app.id }, actions, dependabot };
 const policy = { appId: 50, allowAppAuthoredMerges: false, trustedProducers: [] };
+
+test("independent versioning tracks the actual repository-root action subtree", async () => {
+  const version = JSON.parse(await readFile(new URL("./version.json", import.meta.url), "utf8"));
+  assert.equal(version.inherit, false);
+  assert.deepEqual(version.pathFilters, [":/repository-publication-origin"]);
+});
 
 function run(overrides = {}) {
   return { id: 10, run_attempt: 1, repository: { id: repository.id },
