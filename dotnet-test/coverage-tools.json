@@ -1,0 +1,5 @@
+{
+  "package": "dotnet-coverage",
+  "version": "18.11.2",
+  "format": "cobertura"
+}

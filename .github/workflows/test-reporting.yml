@@ -12,6 +12,7 @@ permissions:
 jobs:
   contracts:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
@@ -21,7 +22,7 @@ jobs:
         with:
           node-version: "22"
       - name: Test TRX parsing and PR publishing contracts
-        run: node --test dotnet-test/action.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
+        run: node --test dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
       - name: Test analysis capability selection
         shell: pwsh
         run: node --test repository-analysis-context/policy.test.mjs
@@ -44,12 +45,31 @@ jobs:
           working-directory: dotnet-test/fixtures
           no-build: "false"
           artifact-name: test-reporting-smoke-${{ matrix.os }}
+
+      - name: Collect native coverage from the same built fixtures
+        id: coverage-smoke
+        uses: ./dotnet-test
+        with:
+          working-directory: dotnet-test/fixtures
+          artifact-name: test-coverage-smoke-${{ matrix.os }}
+          coverage: "true"
       - name: Verify all four executions were retained
         shell: pwsh
         env:
           TEST_REPORT: ${{ steps.smoke.outputs.report }}
+          COVERAGE_TEST_REPORT: ${{ steps.coverage-smoke.outputs.report }}
+          COVERAGE_REPORT: ${{ steps.coverage-smoke.outputs.coverage-report }}
         run: |
           $report = $env:TEST_REPORT | ConvertFrom-Json
           if ($report.status -ne 'passed' -or $report.total -ne 4 -or $report.passed -ne 4 -or -not $report.artifactId) {
             throw 'The multi-project/multi-framework smoke report must contain all four passing executions and its artifact ID.'
+          }
+          $coveredTests = $env:COVERAGE_TEST_REPORT | ConvertFrom-Json
+          if ($coveredTests.status -ne 'passed' -or $coveredTests.total -ne 4 -or $coveredTests.passed -ne 4 -or
+              -not $coveredTests.artifactId) { throw 'Coverage collection must preserve all four passing test executions.' }
+          $coverage = $env:COVERAGE_REPORT | ConvertFrom-Json
+          if ($coverage.status -ne 'collected' -or $coverage.toolVersion -notmatch '^18\.11\.2(\+[A-Za-z0-9.-]+)?$' -or
+              $coverage.lines.total -le 0 -or $coverage.lines.covered -le 0 -or
+              $coverage.sha256 -notmatch '^[a-f0-9]{64}$' -or $coverage.sourceSha -ne $env:GITHUB_SHA) {
+            throw 'Real native coverage must retain nonempty instrumentation and the hashed report.'
           }

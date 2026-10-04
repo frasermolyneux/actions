@@ -17,7 +17,7 @@
 - [docs/repository-publication-origin.md](docs/repository-publication-origin.md) - Metadata-only
   publication admission and verified downstream workflow lineage before App merge cutover.
 - [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.
-- [docs/dotnet-test-reporting.md](docs/dotnet-test-reporting.md) - Shared .NET test execution, multi-project TRX reporting, test-environment setup and owned PR result summaries.
+- [docs/dotnet-test-reporting.md](docs/dotnet-test-reporting.md) - Shared .NET test execution, optional pinned native coverage, multi-project TRX reporting, test-environment setup and owned PR result summaries.
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.
 
 ## Overview
