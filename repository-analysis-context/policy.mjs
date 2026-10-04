@@ -111,7 +111,7 @@ function selectCodeql(profile, publicRepository) {
 
 function selectLocalTools(profile, publicRepository) {
   const semgrepLanguages = profile.languages.filter((language) =>
-    SEMGREP.has(language) && (!publicRepository || !CODEQL.has(language)));
+    SEMGREP.has(language) && language !== "cpp" && (!publicRepository || !CODEQL.has(language)));
   const localTools = [];
   if (profile.languages.includes("actions")) localTools.push({ tool: "zizmor", languages: ["actions"] });
   if (semgrepLanguages.length) localTools.push({ tool: "semgrep-ce", languages: semgrepLanguages });
@@ -142,6 +142,9 @@ export function selectAnalysis(profileInput, repository, expectedRepository) {
   const limitations = [];
   if (!publicRepository && localTools.some(({ tool }) => tool === "semgrep-ce")) {
     limitations.push("Semgrep CE is local-only and does not provide CodeQL-equivalent analysis");
+  }
+  if (!publicRepository && profile.languages.includes("cpp")) {
+    limitations.push("Local C++ analysis is unavailable under the current estate contract; never report it as clean");
   }
   if (sonar.status === "unavailable") limitations.push("Sonar quality findings are unavailable; never report them as clean");
   const context = {
