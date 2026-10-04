@@ -321,7 +321,8 @@ export async function readRootDecision(api, repository, run, policy, pushRef) {
     }
   }
   const tagPush = run.actor.type === "User" && run.event === "push" &&
-    (pushRef === `refs/tags/${run.head_branch}` || pullRequests.some(pr => pr.merged_by?.id !== run.actor.id))
+    (pushRef === `refs/tags/${run.head_branch}` || pullRequests.length > 1 ||
+     pullRequests.some(pr => pr.merged_by?.id !== run.actor.id))
     ? await verifiedTagPush(api, repository, run, pushRef) : false;
   return decideOrigin({ repository, run, pullRequests, identities, permission, policy, tagPush });
 }

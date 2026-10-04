@@ -306,6 +306,20 @@ test("downstream consumers verify lightweight and annotated tags independently o
   }
 });
 
+test("direct and downstream tags remain consistent when multiple PRs share the same human merger", async () => {
+  const { source, current, files } = tagFixture();
+  const pullRequests = [pr(), pr({ number: 8 })];
+  const api = apiFixture({ runs: [source, current], pullRequests, files });
+  const direct = await request(source, api, { event: { ref: "refs/tags/v1.0.0" } });
+  const downstream = await request(current, api, { event: { workflow_run: source } });
+  for (const plan of [direct, downstream]) {
+    const result = await finalize(plan, api);
+    assert.equal(result.decision.origin, "human-tag");
+    assert.equal(result.decision.allowed, true);
+    assert.equal(result.sourceSha, SOURCE);
+  }
+});
+
 test("missing, moved and same-name branch/tag origins cannot bypass human merger binding", async () => {
   const { source, current, pullRequests, tagPath, branchPath, files } = tagFixture();
   for (const definitions of [
