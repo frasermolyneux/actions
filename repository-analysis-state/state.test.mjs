@@ -187,6 +187,27 @@ test("failed coverage collection is an incomplete result, not unavailable succes
   assert.equal(assemble(context(), input).completeness.status, "incomplete");
 });
 
+test("active profiles cannot omit coverage instead of declaring the actual gap", () => {
+  for (const policy of [context(), context("public", ["actions"], false), context("private", ["actions", "csharp"], false)]) {
+    const input = bundle(policy);
+    input.coverage = [];
+    assert.throws(() => assemble(policy, input), /Explicit bounded coverage suite/);
+    input.coverage = [{
+      ...bundle(policy).coverage[0], status: "not-applicable", reason: "No existing supported coverage provider for this profile",
+    }];
+    assert.equal(assemble(policy, input).completeness.status, "completed");
+  }
+});
+
+test("explicit applicability exemptions do not invent a test or coverage suite", () => {
+  const policy = context("public", [], false, {
+    kind: "documentation-only", reason: "No executable source", reevaluate: "Executable content is added",
+  });
+  const input = bundle(policy);
+  input.coverage = [];
+  assert.equal(assemble(policy, input).completeness.status, "not-applicable");
+});
+
 test("source supersession preserves actual checkout and historical findings", () => {
   const input = bundle();
   input.finishedHeadSha = B;

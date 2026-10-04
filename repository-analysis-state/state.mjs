@@ -179,8 +179,9 @@ function validateTool(result, selected, pin, source, run) {
   }
 }
 
-function validateCoverage(coverage, source) {
-  requireValue(Array.isArray(coverage) && coverage.length <= 32, "Bounded coverage evidence is required");
+function validateCoverage(coverage, source, exempt) {
+  requireValue(Array.isArray(coverage) && coverage.length <= 32 && (exempt || coverage.length > 0),
+    "Explicit bounded coverage suite evidence is required");
   const suites = new Set();
   for (const entry of coverage) {
     object(entry, ["suite", "status", "format", "sourceSha", "reports", "lines", "tests", "analysisId", "reason"], "coverage evidence");
@@ -238,7 +239,7 @@ export function assemble(context, input) {
     ids.add(result.id);
     validateTool(result, tool, input.pins.find(({ id }) => id === result.id), input.source, input.run);
   }
-  validateCoverage(input.coverage, input.source);
+  validateCoverage(input.coverage, input.source, Boolean(context.profile.exemption));
   for (const entry of input.coverage.filter(({ status }) => status === "imported")) {
     requireValue(input.results.some((tool) => tool.id === "sonar" && tool.status === "completed" &&
       tool.publication.id === entry.analysisId), "Coverage import is not bound to this completed Sonar analysis");

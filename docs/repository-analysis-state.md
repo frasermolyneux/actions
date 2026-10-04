@@ -65,6 +65,11 @@ analysis ID. Zero covered lines is a legitimate measurable result; zero instrume
 or all-skipped tests is not evidence of an import. Scanner engines must validate the real
 report contents, passing test invocation and actual provider import.
 
+Every active profile needs at least one explicit suite entry, including workflow-only and
+private profiles with a documented inapplicable/unavailable coverage provider. Omitting
+the coverage array is not a way to hide that gap. Only an explicit applicability exemption
+may omit suites without fabricating a test or import.
+
 Unavailable/inapplicable coverage needs an explicit reason and null metrics/provider
 identity, not manufactured zeroes. Failed collection leaves the overall result incomplete.
 Existing integration/browser suites retain their original execution responsibilities.
