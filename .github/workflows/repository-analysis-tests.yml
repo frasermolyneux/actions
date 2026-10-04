@@ -1,0 +1,33 @@
+name: Local analysis contracts
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  local-analyzer:
+    strategy:
+      fail-fast: false
+      matrix:
+        tool: [zizmor, semgrep-ce, checkov, bandit, shellcheck, psscriptanalyzer]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Check source, credential and report boundaries
+        shell: bash
+        run: node --test repository-analysis-local/scan.test.mjs
+      - name: Exercise actual pinned analyzer against synthetic private-policy fixtures
+        shell: bash
+        env:
+          FIXTURE_TOOL: ${{ matrix.tool }}
+        run: node repository-analysis-local/integration.mjs "$FIXTURE_TOOL"

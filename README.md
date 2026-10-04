@@ -10,6 +10,8 @@
 - [docs/codequality.md](docs/codequality.md) - Reusable workflow that wires SonarCloud, CodeQL, and composite builds.
 - [docs/repository-analysis.md](docs/repository-analysis.md) - Visibility-aware scanner selection
   and private result boundaries for the estate analysis migration.
+- [docs/repository-analysis-local.md](docs/repository-analysis-local.md) - Pinned local
+  analyzers, isolated source execution and truthful native result validation.
 - [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.
 - [docs/dotnet-test-reporting.md](docs/dotnet-test-reporting.md) - Shared .NET test execution, multi-project TRX reporting, test-environment setup and owned PR result summaries.
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.

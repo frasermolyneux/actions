@@ -58,6 +58,7 @@ jobs:
             publish-nuget-packages
             run-api-integration-tests
             repository-analysis-context
+            repository-analysis-local
             stale-branch-sweep
             terraform-apply
             terraform-destroy

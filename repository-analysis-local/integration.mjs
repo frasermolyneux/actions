@@ -1,0 +1,58 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { install, scan } from "./scan.mjs";
+import { selectAnalysis } from "../repository-analysis-context/policy.mjs";
+
+const tool = process.argv[2];
+const root = await mkdtemp(path.join(process.env.RUNNER_TEMP, "local-scan-fixture-"));
+const files = {
+  ".github/workflows/ci.yml": "on: pull_request\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"${{ github.event.pull_request.title }}\"\n",
+  "main.php": "<?php\nfunction run_command($value) { return shell_exec($value); }\n",
+  "main.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
+  "main.ps1": "Write-Host 'fixture'\n",
+  "scripts/health": "#!/bin/sh\necho $FIXTURE_VALUE\n",
+  "main.tf": "resource \"azurerm_storage_account\" \"fixture\" {\n  name = \"fixture\"\n  resource_group_name = \"fixture\"\n  location = \"uksouth\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  min_tls_version = \"TLS1_0\"\n}\n",
+  "Dockerfile": "FROM alpine:3.23\nRUN echo fixture\n",
+  "main.bicep": "param location string = resourceGroup().location\nresource fixture 'Microsoft.Storage/storageAccounts@2023-05-01' = {\n  name: 'fixturestorage'\n  location: location\n  kind: 'StorageV2'\n  sku: { name: 'Standard_LRS' }\n  properties: { supportsHttpsTrafficOnly: false }\n}\n",
+  "roles/fixture/tasks/main.yml": "- name: Run a fixture command\n  ansible.builtin.shell: echo fixture\n",
+};
+for (const [filename, content] of Object.entries(files)) {
+  const destination = path.join(root, filename);
+  await mkdir(path.dirname(destination), { recursive: true });
+  await writeFile(destination, content);
+}
+execFileSync("git", ["init", "--quiet", root]);
+execFileSync("git", ["-C", root, "add", "."]);
+execFileSync("git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c", "user.email=fixture@example.invalid",
+  "commit", "--quiet", "-m", "Scanner fixtures"]);
+const sha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const context = selectAnalysis({
+  version: "repository-analysis-v1",
+  languages: ["actions", "php", "python", "powershell", "shell", "terraform", "bicep", "dockerfile", "ansible"],
+  sonar: false,
+}, {
+  id: 123, full_name: "fixture/sandbox", visibility: "private", private: true,
+  archived: false, fork: false, owner: { type: "User" },
+}, "fixture/sandbox");
+const environment = {
+  ...process.env, GITHUB_WORKSPACE: root, GITHUB_REPOSITORY: "fixture/sandbox", GITHUB_REPOSITORY_ID: "123",
+  ANALYSIS_CONTEXT: JSON.stringify(context), ANALYSIS_TOOL: tool, ANALYSIS_EXPECTED_SHA: sha,
+  GITHUB_OUTPUT: path.join(root, "outputs"), GITHUB_STEP_SUMMARY: path.join(root, "summary"),
+  GH_TOKEN: "fixture-credential-must-never-reach-scanners",
+};
+const installed = await install(environment);
+const report = await scan({
+  ...environment,
+  PATH: installed.bin ? installed.bin + path.delimiter + process.env.PATH : process.env.PATH,
+  ANALYSIS_RULES: installed.rules, ANALYSIS_PS_MODULE_ROOT: installed.modules,
+});
+assert.equal(report.status, "completed");
+assert.equal(report.sourceSha, sha);
+assert.equal(report.visibility, "private");
+assert.ok(Object.values(report.sourceCoverage).every((count) => count > 0));
+assert.ok(report.findingCount > 0, "The deliberately insecure fixture must produce a real finding");
+assert.doesNotMatch(JSON.stringify(report), /fixture-credential/);
+assert.doesNotMatch(await readFile(environment.GITHUB_STEP_SUMMARY, "utf8"), /fixture-credential/);
+console.log(JSON.stringify({ tool, fixture: true, sourceCoverage: report.sourceCoverage, findings: report.findingCount }));

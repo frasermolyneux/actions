@@ -1,0 +1,14 @@
+{
+  "zizmor": { "package": "zizmor", "version": "1.30.1", "command": "zizmor" },
+  "semgrep-ce": {
+    "package": "semgrep",
+    "version": "1.179.0",
+    "command": "semgrep",
+    "rulesRepository": "https://github.com/semgrep/semgrep-rules.git",
+    "rulesRevision": "311ca4e9ba59d700624539bf658e3d29b134ee77"
+  },
+  "checkov": { "package": "checkov", "version": "3.3.22", "command": "checkov" },
+  "bandit": { "package": "bandit", "version": "1.9.4", "command": "bandit" },
+  "shellcheck": { "package": "shellcheck-py", "version": "0.11.0.1", "engineVersion": "0.11.0", "command": "shellcheck" },
+  "psscriptanalyzer": { "module": "PSScriptAnalyzer", "version": "1.25.0", "command": "pwsh" }
+}

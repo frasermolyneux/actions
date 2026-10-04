@@ -38,6 +38,8 @@ Documentation-only Copilot configuration changes do not require action integrati
 - [`docs/codequality.md`](docs/codequality.md) - reusable code-quality workflow contract.
 - [`docs/repository-analysis.md`](docs/repository-analysis.md) - visibility-aware scanner
   selection and private execution/publication boundaries for the estate migration.
+- [`docs/repository-analysis-local.md`](docs/repository-analysis-local.md) - Pinned local
+  scanner execution, source isolation and native-report validation.
 - [`docs/dotnet-test-reporting.md`](docs/dotnet-test-reporting.md) - .NET test setup/execution, bounded TRX reporting and isolated PR summary publishing.
 
 ## Do not
