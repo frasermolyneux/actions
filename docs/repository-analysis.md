@@ -74,7 +74,8 @@ must invalidate old decisions even when source SHA is unchanged.
 Use a reviewed immutable `repository-analysis-context/v1.X.Y` release (or the exact reviewed
 commit) from a pinned scanner workflow. Pass only the profile and repository metadata-read
 token, never an App private key, merge token, cloud credential or blanket inherited secrets.
-The helper needs Node.js 22 or later and fails before emitting outputs if metadata is invalid.
+The action installs Node.js 22 before running the helper; standalone use needs Node.js 22
+or later. It fails before emitting outputs if metadata is invalid.
 Do not execute the target repository's copy of the helper as trusted preflight code.
 
 ```powershell

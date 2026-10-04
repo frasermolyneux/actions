@@ -32,6 +32,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      with:
+        node-version: "22"
+
     - name: Resolve live analysis capabilities
       id: context
       shell: bash

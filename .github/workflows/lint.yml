@@ -50,6 +50,11 @@ jobs:
           # so those are checked separately below.
           ./actionlint -color
 
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+
       - name: Test analysis capability selection
         run: node --test repository-analysis-context/policy.test.mjs
 
