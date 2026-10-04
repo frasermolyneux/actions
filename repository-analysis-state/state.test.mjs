@@ -141,6 +141,29 @@ test("private publication cannot be replaced with GitHub Security or Sonar", () 
   assert.throws(() => assemble(policy, input), /live visibility/);
 });
 
+test("private artifact staging cannot claim a provider publication or processing identity", () => {
+  const policy = context("private", ["actions", "csharp"], false);
+  for (const field of ["publication", "processing"]) {
+    const input = bundle(policy);
+    input.results[0][field].id = "fabricated-provider-id";
+    assert.throws(() => assemble(policy, input), /Artifact staging has no provider/);
+  }
+  const input = bundle(policy);
+  input.results[0].processing.status = "completed";
+  assert.throws(() => assemble(policy, input), /no server-side provider processing/);
+});
+
+test("incomplete tools and unavailable coverage require non-whitespace explanations", () => {
+  for (const reason of ["", "   ", "\t\r\n"]) {
+    const input = bundle();
+    Object.assign(input.results[0], { status: "failed", findingCount: null, completedAt: null, reason });
+    assert.throws(() => assemble(context(), input), /explicit reason/);
+    const missingCoverage = bundle();
+    missingCoverage.coverage[0].reason = reason;
+    assert.throws(() => assemble(context(), missingCoverage), /Unavailable coverage/);
+  }
+});
+
 test("private C++ unavailable coverage and requested unavailable Sonar remain incomplete", () => {
   for (const policy of [context("private", ["actions", "cpp"], false), context("private", ["actions", "javascript"], true)]) {
     const result = assemble(policy, bundle(policy));

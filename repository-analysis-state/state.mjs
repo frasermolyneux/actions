@@ -16,7 +16,7 @@ const LOCAL = ["zizmor", "semgrep-ce", "checkov", "bandit", "shellcheck", "psscr
 const CODEQL = ["actions", "csharp", "cpp", "javascript-typescript", "python"];
 const SONAR = ["csharp", "cpp", "javascript", "typescript", "python", "php"];
 const EVENTS = ["push", "pull_request", "schedule", "workflow_dispatch"];
-const text = (value) => typeof value === "string" && value.length > 0 && value.length <= 600;
+const text = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= 600;
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
 const count = (value) => Number.isSafeInteger(value) && value >= 0;
 const hash = (value) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -134,6 +134,8 @@ function validatePublication(publication, selected, completed) {
   "Tool publication does not match live visibility/capability");
   requireValue(publication.id === null || (text(publication.id) && /^[A-Za-z0-9_.:-]+$/.test(publication.id)),
     "Invalid native publication identity");
+  requireValue(selected.destination !== "originating-repository-artifact" || publication.id === null,
+    "Artifact staging has no provider identity before verified upload/run binding");
   if (completed) {
     requireValue(publication.status === "completed", "Pending/failed publication cannot be completed analysis");
     requireValue(selected.destination === "originating-repository-artifact" || publication.id !== null,
@@ -154,6 +156,8 @@ function validateTool(result, selected, pin, source, run) {
   requireValue(["completed", "pending", "failed", "not-applicable"].includes(result.processing.status) &&
     (result.processing.id === null || (text(result.processing.id) && /^[A-Za-z0-9_.:-]+$/.test(result.processing.id))),
   "Invalid provider processing state");
+  requireValue(selected.destination !== "originating-repository-artifact" || result.processing.id === null,
+    "Artifact staging has no provider processing identity");
   const completed = result.status === "completed";
   validatePublication(result.publication, selected, completed);
   if (!completed) {
@@ -175,6 +179,9 @@ function validateTool(result, selected, pin, source, run) {
     if (selected.destination === "github-security") {
       requireValue(result.processing.status === "completed" && result.processing.id !== null,
         "Native SARIF processing needs its completed upload identity");
+    } else {
+      requireValue(result.processing.status === "not-applicable",
+        "Artifact staging has no server-side provider processing");
     }
   }
 }

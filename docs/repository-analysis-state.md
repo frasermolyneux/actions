@@ -33,7 +33,7 @@ profile, not a caller's arbitrary list. Tool pin order and validated engine/pin 
 property ordering do not affect freshness.
 
 Tool `status` is `completed`, `failed`, `pending` or `unavailable`. Incomplete tools need
-an explicit `reason`, null `findingCount` and null `completedAt`; they cannot use a
+an explicit non-whitespace `reason`, null `findingCount` and null `completedAt`; they cannot use a
 zero-finding fallback. Completed tools need positive actual source coverage for every
 selected capability and a nonnegative raw finding count. Findings themselves do not
 make execution incomplete or introduce a gate on the historical backlog.
@@ -47,7 +47,9 @@ those API facts and their source/project bindings before supplying them.
 Public selected tools publish to `github-security`, or `sonar-public` for Sonar. Private
 local tools use `originating-repository-artifact`; CodeQL/private native SARIF/private
 Sonar execution remain prohibited. For local private results, artifact staging has no
-provider ID: actual successful artifact upload/run binding is a separate consumer check.
+provider ID: publication and processing IDs must remain null, and completed staging
+declares processing `not-applicable`. Actual successful artifact upload/run binding is
+a separate consumer check.
 Explicit unavailable private C++ or requested private Sonar stays incomplete, not clean.
 Locally completed Semgrep is not asserted to be equivalent to CodeQL.
 
