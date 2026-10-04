@@ -23,6 +23,7 @@ jobs:
       - name: Test TRX parsing and PR publishing contracts
         run: node --test dotnet-test/action.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
       - name: Test analysis capability selection
+        shell: pwsh
         run: node --test repository-analysis-context/policy.test.mjs
       - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
         with:
