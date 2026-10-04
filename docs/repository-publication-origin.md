@@ -25,18 +25,25 @@ source metadata. PR merge-ref differences never authorize publication.
 | Human `workflow_dispatch` or scheduled run, with the same write permission | Preserve existing behavior |
 | Same-repository Dependabot PR merged by the exact broker App or GitHub Actions identity | Hold publication; ordinary analysis still runs |
 | Pre-existing same-repository App-authored and App-merged automation | Only when explicitly declared by trusted policy |
-| Fork-source run, PR validation, unknown bot or ambiguous/mismatched merge | Hold for human attention |
+| Fork-source run, PR validation, unknown bot or ambiguous/mismatched bot merge | Hold for human attention |
 | Metadata transport/permission errors, invalid reports or changed execution identity | Fail explicitly; never authorize |
 
 Human merges of reviewed fork PRs remain human merges. A fork's own run cannot authorize
 publication. A human rerun does not replace the original bot actor. Actor names, branch names,
 commit messages, labels and uploaded flags are not authorization.
-Human tag pushes retain publication even when an earlier PR for that commit has a different
-merger. Direct pushes bind `GITHUB_REF`, the push payload reference and the live run branch.
-Downstream consumers independently resolve a matching lightweight/annotated tag to the actual
-source SHA and require no same-name branch; ambiguous, moved or missing tags never bypass the
-merge-actor check. Human branch merges and all bot exceptions retain their exact merge-actor
-binding. Annotation resolution is bounded to eight objects.
+The approved human policy trusts the **original push actor** when their immutable identity
+has current repository write/maintain/admin permission. A historical PR's merger is not an
+additional human authorization gate: release-manager tags and authorized pushes of previously
+merged commits remain eligible. Bot exceptions still require exact PR/merge identities.
+Human final merge for autonomous improvement PRs is unchanged.
+
+Direct pushes bind `GITHUB_REF`, the push payload reference and live run branch; a proven direct
+tag can receive the `human-tag` label. Downstream consumers do not infer original event type
+from today's tags or branches. Missing, moved, created or deleted refs cannot change the
+original actor's admission. Downstream human pushes use the broader `human-push`/`human-merge`
+labels; only an exact unique human merger gets the latter, without using that label as a gate.
+The classification policy digest records `humanPushAdmission: original-write-actor`.
+No OIDC permission, signed-original-event scheme or additional caller credential is required.
 
 `app-id` is the broker's immutable App ID. A bot's public App metadata must match it; the
 bot username alone is insufficient. `allow-app-authored-merges` defaults to `false` and must

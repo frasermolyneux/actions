@@ -157,11 +157,11 @@ test("bot pushes without one exact merged PR are held", () => {
   }
 });
 
-test("ambiguous merges and mismatched branch merge actors hold without verified tag context", () => {
+test("human write admission is independent of prior mergers while bot ambiguity still holds", () => {
   assert.equal(decision({ run: run({ actor: app }),
     pullRequests: [pr({ merged_by: app }), pr({ number: 8, merged_by: app })] }).origin, "ambiguous-merge");
-  assert.equal(decision({ pullRequests: [pr({ merged_by: app })] }).origin, "actor-mismatch");
-  assert.equal(decision({ pullRequests: [pr(), pr({ number: 8 })] }).origin, "ambiguous-merge");
+  assert.equal(decision({ pullRequests: [pr({ merged_by: app })] }).origin, "human-push");
+  assert.equal(decision({ pullRequests: [pr(), pr({ number: 8 })] }).origin, "human-push");
 });
 
 test("PRs, dynamic events, unknown bots and foreign source repositories are held", () => {
@@ -240,8 +240,8 @@ test("allowed metadata routes preserve encoded bot identities, exact revisions a
     "/users/dependabot%5Bbot%5D", "/users/github-actions%5Bbot%5D", "/apps/trusted-app",
     `/repos/owner/target/contents/.github/workflows/relay.yml?ref=${SOURCE}`,
     "/repos/owner/target/actions/runs/20/artifacts?per_page=100&page=20",
-    "/repos/owner/target/git/ref/tags/release%2Fv1.0.0",
-    `/repos/owner/target/git/tags/${BLOB}`,
+    "/repos/owner/contents/actions/runs/10",
+    `/repos/contents/target/contents/.github/workflows/relay.yml?ref=${SOURCE}`,
   ]) {
     await api.get(endpoint);
     assert.equal(requests.at(-1).url, `https://api.github.com${endpoint}`);
@@ -284,62 +284,50 @@ function tagFixture() {
   const source = run({ head_branch: "v1.0.0" });
   const current = run({ id: 20, event: "workflow_run", head_sha: LATER });
   const pullRequests = [pr({ merged_by: { ...human, id: 9, login: "maintainer" } })];
-  const tagPath = "/repos/owner/target/git/ref/tags/v1.0.0";
-  const branchPath = "/repos/owner/target/git/ref/heads/v1.0.0";
-  const files = { [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "commit", sha: SOURCE } },
-    [branchPath]: null };
-  return { source, current, pullRequests, tagPath, branchPath, files };
+  return { source, current, pullRequests };
 }
 
-test("downstream consumers verify lightweight and annotated tags independently of the older merger", async () => {
-  const { source, current, pullRequests, tagPath, files } = tagFixture();
-  const annotated = { ...files,
-    [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "tag", sha: BLOB } },
-    [`/repos/owner/target/git/tags/${BLOB}`]: { sha: BLOB, object: { type: "commit", sha: SOURCE } } };
-  for (const definitions of [files, annotated]) {
-    const api = apiFixture({ runs: [source, current], pullRequests, files: definitions });
-    const plan = await request(current, api, { event: { workflow_run: source } });
-    const result = await finalize(plan, api);
-    assert.equal(result.decision.allowed, true);
-    assert.equal(result.decision.origin, "human-tag");
-    assert.equal(result.sourceSha, SOURCE);
-  }
+test("downstream human admission depends on the original writer, not historical merger or mutable refs", async () => {
+  const { source, current, pullRequests } = tagFixture();
+  const api = apiFixture({ runs: [source, current], pullRequests });
+  const plan = await request(current, api, { event: { workflow_run: source } });
+  const result = await finalize(plan, api);
+  assert.equal(result.decision.allowed, true);
+  assert.equal(result.decision.origin, "human-push");
+  assert.equal(result.sourceSha, SOURCE);
+  assert.ok(api.observed.every(endpoint => !endpoint.includes("/git/")));
 });
 
 test("direct and downstream tags remain consistent when multiple PRs share the same human merger", async () => {
-  const { source, current, files } = tagFixture();
+  const { source, current } = tagFixture();
   const pullRequests = [pr(), pr({ number: 8 })];
-  const api = apiFixture({ runs: [source, current], pullRequests, files });
+  const api = apiFixture({ runs: [source, current], pullRequests });
   const direct = await request(source, api, { event: { ref: "refs/tags/v1.0.0" } });
   const downstream = await request(current, api, { event: { workflow_run: source } });
   for (const plan of [direct, downstream]) {
     const result = await finalize(plan, api);
-    assert.equal(result.decision.origin, "human-tag");
     assert.equal(result.decision.allowed, true);
     assert.equal(result.sourceSha, SOURCE);
   }
 });
 
-test("missing, moved and same-name branch/tag origins cannot bypass human merger binding", async () => {
-  const { source, current, pullRequests, tagPath, branchPath, files } = tagFixture();
-  for (const definitions of [
-    { ...files, [tagPath]: null },
-    { ...files, [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "commit", sha: LATER } } },
-    { ...files, [branchPath]: { ref: "refs/heads/v1.0.0" } },
-  ]) {
-    const api = apiFixture({ runs: [source, current], pullRequests, files: definitions });
-    const plan = await request(current, api, { event: { workflow_run: source } });
-    assert.equal((await finalize(plan, api)).decision.origin, "actor-mismatch");
+test("later tag state cannot upgrade a bot origin or downgrade an originally authorized human branch push", async () => {
+  const { current } = tagFixture();
+  const humanSource = run({ head_branch: "release" });
+  const botSource = run({ head_branch: "release", actor: app, triggering_actor: human });
+  for (const source of [humanSource, botSource]) {
+    const pullRequests = [pr({ merged_by: app })];
+    const api = apiFixture({ runs: [source, current], pullRequests,
+      files: { "/repos/owner/target/git/ref/tags/release": { object: { type: "commit", sha: SOURCE } } } });
+    const direct = await request(source, api);
+    const downstream = await request(current, api, { event: { workflow_run: source } });
+    for (const plan of [direct, downstream]) {
+      const result = await finalize(plan, api);
+      assert.equal(result.decision.allowed, source.actor.type === "User");
+      assert.equal(result.decision.origin, source.actor.type === "User" ? "human-push" : "automatic-dependency-merge");
+    }
+    assert.ok(api.observed.every(endpoint => !endpoint.includes("/git/")));
   }
-});
-
-test("annotated tag cycles and mismatched objects fail explicitly within the resolution bound", async () => {
-  const { source, current, pullRequests, tagPath, files } = tagFixture();
-  const cyclic = { ...files,
-    [tagPath]: { ref: "refs/tags/v1.0.0", object: { type: "tag", sha: BLOB } },
-    [`/repos/owner/target/git/tags/${BLOB}`]: { sha: BLOB, object: { type: "tag", sha: BLOB } } };
-  await assert.rejects(request(current, apiFixture({ runs: [source, current], pullRequests, files: cyclic }),
-    { event: { workflow_run: source } }), /resolution bound/);
 });
 
 test("a direct App merge resolves the official App and bot identities before denial", async () => {

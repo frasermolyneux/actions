@@ -18,8 +18,6 @@ const METADATA_ROUTES = [
   new RegExp(`^${REPOSITORY_PATH}/commits/[a-f0-9]{40}/pulls$`),
   new RegExp(`^${REPOSITORY_PATH}/pulls/[1-9][0-9]*$`),
   new RegExp(`^${REPOSITORY_PATH}/contents/\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$`),
-  new RegExp(`^${REPOSITORY_PATH}/git/ref/(?:tags|heads)/(?:[A-Za-z0-9_.-]|%[A-Fa-f0-9]{2})+$`),
-  new RegExp(`^${REPOSITORY_PATH}/git/tags/[a-f0-9]{40}$`),
   /^\/users\/(?:dependabot|github-actions)%5Bbot%5D$/,
   /^\/apps\/[A-Za-z0-9_-]+$/,
 ];
@@ -132,11 +130,8 @@ export function decideOrigin({ repository, run, pullRequests, identities, permis
     }
     if (run.event !== "push") return allowed(`human-${run.event}`, "Existing write-authorized manual or scheduled behavior");
     if (tagPush) return allowed("human-tag", "Verified repository-write human tag push");
-    if (matching.length > 1) return denied("ambiguous-merge", "Multiple merged pull requests claim this source commit");
-    if (matching[0] && matching[0].merged_by?.id !== user.id) {
-      return denied("actor-mismatch", "The push actor does not match the verified merge actor");
-    }
-    return allowed(matching.length ? "human-merge" : "human-push", "Verified repository-write human push or merge");
+    const humanMerge = matching.length === 1 && matching[0].merged_by?.id === user.id;
+    return allowed(humanMerge ? "human-merge" : "human-push", "Verified original repository-write human push actor");
   }
   if (run.event !== "push") return denied("unknown-automation", "Bot-triggered manual or scheduled publication is not authorized");
   if (matching.length > 1) return denied("ambiguous-merge", "Multiple merged pull requests claim this source commit");
@@ -161,7 +156,8 @@ export function decideOrigin({ repository, run, pullRequests, identities, permis
 export function policyDigest(repository, policy) {
   policy = validatePolicy(policy);
   return createHash("sha256").update(JSON.stringify({ contract: CONTRACT, repositoryId: repository.id,
-    appId: policy.appId, allowAppAuthoredMerges: policy.allowAppAuthoredMerges })).digest("hex");
+    humanPushAdmission: "original-write-actor", appId: policy.appId,
+    allowAppAuthoredMerges: policy.allowAppAuthoredMerges })).digest("hex");
 }
 
 function runIdentity(run) {
@@ -214,7 +210,7 @@ function metadataUrl(endpoint) {
   if (segments.some(segment => segment.split("/").some(part => part === "." || part === "..") ||
       /[\u0000-\u0020\u007f\\#?]/.test(segment))) throw new Error("Invalid GitHub metadata path component");
   url.pathname = segments.map(segment => encodeURIComponent(segment)).join("/");
-  if (pathname.includes("/contents/")) {
+  if (new RegExp(`^${REPOSITORY_PATH}/contents/`).test(pathname)) {
     if (!/^ref=[a-f0-9]{40}$/.test(query ?? "")) throw new Error("Invalid workflow metadata revision");
   } else if (query !== undefined) {
     if (!/\/(?:artifacts|pulls)$/.test(pathname) || !/^per_page=100&page=(?:[1-9]|1[0-9]|20)$/.test(query)) {
@@ -259,31 +255,6 @@ export class GitHub {
   }
 }
 
-async function verifiedTagPush(api, repository, run, pushRef) {
-  if (pushRef !== undefined) return pushRef === `refs/tags/${run.head_branch}`;
-  const endpoint = `/repos/${repository.full_name}/git/ref`;
-  const name = encodeURIComponent(run.head_branch);
-  const tag = await api.get(`${endpoint}/tags/${name}`, true);
-  if (!tag) return false;
-  if (tag.ref !== `refs/tags/${run.head_branch}`) throw new Error("Tag metadata does not match the run reference");
-  const branch = await api.get(`${endpoint}/heads/${name}`, true);
-  if (branch) {
-    if (branch.ref !== `refs/heads/${run.head_branch}`) throw new Error("Branch metadata does not match the run reference");
-    return false;
-  }
-  let target = tag.object;
-  for (let depth = 0; depth < 8; depth++) {
-    object(target, "Tag target");
-    sha(target.sha, "Tag target");
-    if (target.type === "commit") return target.sha === run.head_sha;
-    if (target.type !== "tag") throw new Error("Invalid tag target type");
-    const annotated = await api.get(`/repos/${repository.full_name}/git/tags/${target.sha}`);
-    if (annotated.sha !== target.sha) throw new Error("Annotated tag identity does not match the reference");
-    target = annotated.object;
-  }
-  throw new Error("Annotated tag exceeds the resolution bound");
-}
-
 export async function readRootDecision(api, repository, run, policy, pushRef) {
   validateRun(run, repository, run.id);
   if (run.head_repository?.id !== repository.id ||
@@ -321,9 +292,7 @@ export async function readRootDecision(api, repository, run, policy, pushRef) {
     }
   }
   const tagPush = run.actor.type === "User" && run.event === "push" &&
-    (pushRef === `refs/tags/${run.head_branch}` || pullRequests.length > 1 ||
-     pullRequests.some(pr => pr.merged_by?.id !== run.actor.id))
-    ? await verifiedTagPush(api, repository, run, pushRef) : false;
+    pushRef === `refs/tags/${run.head_branch}`;
   return decideOrigin({ repository, run, pullRequests, identities, permission, policy, tagPush });
 }
 
