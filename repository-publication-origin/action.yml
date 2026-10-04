@@ -1,0 +1,68 @@
+name: Repository Publication Origin
+description: Resolve publication eligibility from verified GitHub run and merge metadata, without checking out or executing repository source.
+inputs:
+  github-token:
+    description: Repository metadata-read token with contents, pull requests and Actions read access; never a merge or cloud credential.
+    required: true
+  app-id:
+    description: Immutable shared GitHub App identity from the trusted repository broker.
+    required: true
+  allow-app-authored-merges:
+    description: Preserve explicitly declared pre-existing same-repository App-authored automation; never permits dependency publication.
+    default: 'false'
+  trusted-producers:
+    description: JSON array of reviewed upstream workflow path and exact git blobSha declarations for chained publication.
+    default: '[]'
+outputs:
+  publication-allowed:
+    description: True only for a verified existing publication origin; other existing publication gates still apply.
+    value: ${{ steps.origin.outputs.publication-allowed }}
+  origin:
+    description: Explicit classified source origin or hold reason.
+    value: ${{ steps.origin.outputs.origin }}
+  source-sha:
+    description: Actual originating source SHA, not the later default-branch workflow checkout.
+    value: ${{ steps.origin.outputs.source-sha }}
+  report-directory:
+    description: Originating-repository-only metadata proof for trusted downstream workflow_run consumers.
+    value: ${{ steps.origin.outputs.report-directory }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      with:
+        node-version: '22'
+        package-manager-cache: false
+
+    - name: Verify publication source metadata
+      id: prepare
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ORIGIN_APP_ID: ${{ inputs.app-id }}
+        ORIGIN_ALLOW_APP_AUTHORED: ${{ inputs.allow-app-authored-merges }}
+        ORIGIN_TRUSTED_PRODUCERS: ${{ inputs.trusted-producers }}
+        ORIGIN_SCRIPT: ${{ github.action_path }}/origin.mjs
+      run: node "$ORIGIN_SCRIPT" prepare
+
+    - name: Read proof from the verified producer artifact
+      if: steps.prepare.outputs.proof-required == 'true'
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        artifact-ids: ${{ steps.prepare.outputs.artifact-id }}
+        run-id: ${{ steps.prepare.outputs.producer-run-id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ inputs.github-token }}
+        path: ${{ steps.prepare.outputs.proof-directory }}
+        merge-multiple: true
+
+    - name: Revalidate source and publish the origin decision
+      id: origin
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        ORIGIN_PLAN_PATH: ${{ steps.prepare.outputs.plan-path }}
+        ORIGIN_PROOF_DIRECTORY: ${{ steps.prepare.outputs.proof-directory }}
+        ORIGIN_SCRIPT: ${{ github.action_path }}/origin.mjs
+      run: node "$ORIGIN_SCRIPT" finalize

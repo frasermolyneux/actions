@@ -1,0 +1,87 @@
+name: Publication Origin Chain
+on:
+  workflow_run:
+    workflows: [Publication Origin Relay]
+    types: [completed]
+permissions: {}
+jobs:
+  chain:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.id == github.repository_id
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Bind the fixture to its reviewed default-branch producer definition
+        id: producer
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ github.repository }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          PRODUCER_RUN: ${{ github.event.workflow_run.id }}
+          PRODUCER_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          set -euo pipefail
+          [[ "$PRODUCER_RUN" =~ ^[1-9][0-9]*$ && "$PRODUCER_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          jobs="$(gh api "repos/${TARGET}/actions/runs/${PRODUCER_RUN}/attempts/${PRODUCER_ATTEMPT}/jobs?per_page=100")"
+          conclusion="$(jq -er '
+            if .total_count != 1 or .jobs[0].name != "relay" or .jobs[0].status != "completed"
+            then error("Unexpected relay attempt jobs")
+            else .jobs[0].conclusion end' <<< "$jobs")"
+          if [[ "$conclusion" == 'skipped' ]]; then
+            echo 'executed=false' >> "$GITHUB_OUTPUT"
+            echo 'Relay job was skipped; no positive chain acceptance was exercised.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [[ "$conclusion" == 'success' ]]
+          echo 'executed=true' >> "$GITHUB_OUTPUT"
+          blob="$(gh api "repos/${TARGET}/contents/.github/workflows/publication-origin-relay.yml?ref=${WORKFLOW_SHA}" --jq '.sha')"
+          [[ "$blob" =~ ^[a-f0-9]{40}$ ]]
+          echo "policy=[{\"path\":\".github/workflows/publication-origin-relay.yml\",\"blobSha\":\"${blob}\"}]" >> "$GITHUB_OUTPUT"
+      - name: Verify a real two-hop workflow_run lineage
+        if: steps.producer.outputs.executed == 'true'
+        id: origin
+        uses: ./repository-publication-origin
+        with:
+          github-token: ${{ github.token }}
+          app-id: '1'
+          trusted-producers: ${{ steps.producer.outputs.policy }}
+      - name: Assert positive acceptance and intentional holds independently
+        if: steps.producer.outputs.executed == 'true'
+        shell: bash
+        env:
+          EXPECTED_POSITIVE: ${{ github.event.workflow_run.actor.type == 'User' }}
+          REPORT: ${{ steps.origin.outputs.report-directory }}/origin.json
+        run: |
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            import assert from "node:assert/strict";
+            const proof = JSON.parse(await readFile(process.env.REPORT, "utf8"));
+            const expectedPositive = process.env.EXPECTED_POSITIVE === "true";
+            assert.equal(proof.decision.allowed, expectedPositive);
+            assert.equal(proof.execution.sourceSha, proof.lineage.at(-1).sha);
+            assert.equal(proof.execution.workflowSha, proof.lineage.at(-1).sha);
+            if (expectedPositive) {
+              assert.equal(proof.lineage.length, 3);
+              assert.equal(proof.sourceSha, proof.lineage[0].sha);
+            } else {
+              assert.equal(proof.decision.origin, "missing-producer-proof");
+              assert.equal(proof.lineage.length, 2);
+              assert.equal(proof.sourceSha, null);
+            }
+          '
+      - name: Retain the complete hosted lineage
+        if: steps.producer.outputs.executed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: publication-origin-chain-evidence
+          path: ${{ steps.origin.outputs.report-directory }}/origin.json
+          if-no-files-found: error
+          retention-days: 7

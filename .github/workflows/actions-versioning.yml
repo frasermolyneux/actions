@@ -59,6 +59,7 @@ jobs:
             run-api-integration-tests
             repository-analysis-context
             repository-analysis-local
+            repository-publication-origin
             stale-branch-sweep
             terraform-apply
             terraform-destroy

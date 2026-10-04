@@ -1,0 +1,53 @@
+name: Publication Origin Relay
+on:
+  workflow_run:
+    workflows: [Publication Origin Contracts]
+    types: [completed]
+permissions: {}
+jobs:
+  relay:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+      github.event.workflow_run.head_repository.id == github.repository_id
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Resolve the actual upstream origin
+        id: origin
+        uses: ./repository-publication-origin
+        with:
+          github-token: ${{ github.token }}
+          app-id: '1'
+      - name: Require positive human acceptance independently of guard output
+        if: github.event.workflow_run.actor.type == 'User'
+        shell: bash
+        env:
+          ALLOWED: ${{ steps.origin.outputs.publication-allowed }}
+          REPORT: ${{ steps.origin.outputs.report-directory }}/origin.json
+        run: |
+          test "$ALLOWED" = 'true'
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            import assert from "node:assert/strict";
+            const proof = JSON.parse(await readFile(process.env.REPORT, "utf8"));
+            assert.equal(proof.decision.allowed, true);
+            assert.equal(proof.lineage.length, 2);
+            assert.equal(proof.sourceSha, proof.lineage[0].sha);
+            assert.equal(proof.execution.sourceSha, proof.lineage.at(-1).sha);
+            assert.equal(proof.execution.workflowSha, proof.lineage.at(-1).sha);
+          '
+      - name: Retain an originating-repository-only lineage proof
+        if: steps.origin.outputs.publication-allowed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repository-publication-origin
+          path: ${{ steps.origin.outputs.report-directory }}/origin.json
+          if-no-files-found: error
+          retention-days: 1
