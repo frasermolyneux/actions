@@ -121,14 +121,25 @@ export async function copySource(root, destination, filename, languages) {
   return capabilities;
 }
 
+export function ownedSourceFiles(index, languages) {
+  return index.split("\0").filter(Boolean).flatMap((entry) => {
+    const match = /^(100644|100755|120000|160000) [a-f\d]{40} 0\t([\s\S]+)$/.exec(entry);
+    if (!match) throw new Error("Tracked source index is malformed or unmerged");
+    const [, mode, filename] = match;
+    if (mode === "160000" || !eligibleFile(filename, languages)) return [];
+    if (mode === "120000") throw new Error("Tracked source must be regular files, not links");
+    return [filename];
+  });
+}
+
 async function snapshot(root, destination, selected, environment) {
-  const tracked = run("/usr/bin/git", ["ls-files", "-z"], root, environment);
+  const tracked = run("/usr/bin/git", ["ls-files", "--stage", "-z"], root, environment);
   const clean = run("/usr/bin/git", ["diff", "--exit-code", "HEAD", "--"], root, environment);
   if (tracked.status || clean.status) throw new Error("Analysis requires an unchanged tracked checkout");
   const files = [];
   const counts = Object.fromEntries(selected.languages.map((language) => [language, 0]));
   const languageFiles = Object.fromEntries(selected.languages.map((language) => [language, []]));
-  const candidates = tracked.stdout.split("\0").filter(Boolean);
+  const candidates = ownedSourceFiles(tracked.stdout, selected.languages);
   const copied = [];
   let cursor = 0;
   async function worker() {

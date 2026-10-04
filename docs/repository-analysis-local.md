@@ -33,7 +33,10 @@ These alternatives are not claimed to be CodeQL-equivalent.
 ## Source and result boundaries
 
 The actual Git checkout must match `expected-sha` and the immutable workflow repository
-identity. Tracked changes are rejected. Selected maintained source is copied into an
+identity. Tracked changes are rejected. Index modes distinguish owned source from
+submodule gitlinks; dependencies are not recursed or copied, and selected tracked symlinks
+are rejected even if a checkout materializes the link as a regular file.
+Selected maintained source is copied into an
 isolated snapshot; no target analyzer configuration, ignored untracked file, user credential
 configuration or dependency/vendor/build-output/fixture directory is used. Extensionless
 supported-shebang scripts are included regardless of their maintained-source location,
@@ -81,9 +84,11 @@ keep them private when the originating repository is private.
     github-token: ${{ github.token }}
 ```
 
-The `Local analysis contracts` workflow executes all six real pinned tools against synthetic
+The `Local analysis contracts` workflow runs portable policy/analyzer contracts on both
+Ubuntu and Windows, and executes all six real pinned tools on Linux against synthetic
 private-policy fixtures with deliberately detectable findings, including both Terraform
-representations and supported Ansible certificate-validation policies. Those fixtures do not contain
+representations, supported Ansible certificate-validation policies and an uninitialized
+dependency gitlink. Those fixtures do not contain
 private repository source and are not evidence that the estate callers have been migrated.
 Negative contract tests cover invalid selection, credential isolation and malformed,
 incomplete or parsing-error reports. Actual private-repository execution remains a rollout

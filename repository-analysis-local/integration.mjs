@@ -42,6 +42,12 @@ execFileSync("/usr/bin/git", ["init", "--quiet", root]);
 execFileSync("/usr/bin/git", ["-C", root, "add", "."]);
 execFileSync("/usr/bin/git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c", "user.email=fixture@example.invalid",
   "commit", "--quiet", "-m", "Scanner fixtures"]);
+const initialSha = execFileSync("/usr/bin/git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+execFileSync("/usr/bin/git", ["-C", root, "update-index", "--add", "--cacheinfo",
+  `160000,${initialSha},uninitialized-dependency`]);
+await mkdir(path.join(root, "uninitialized-dependency"));
+execFileSync("/usr/bin/git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c", "user.email=fixture@example.invalid",
+  "commit", "--quiet", "-m", "Add an uninitialized dependency gitlink"]);
 const sha = execFileSync("/usr/bin/git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const context = selectAnalysis({
   version: "repository-analysis-v1",

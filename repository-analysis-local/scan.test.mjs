@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { batchFiles, checkovFrameworks, command, copySource, engineDigest, scanGroups, scannerEnvironment, selectTool } from "./scan.mjs";
+import { batchFiles, checkovFrameworks, command, copySource, engineDigest, ownedSourceFiles, scanGroups, scannerEnvironment, selectTool } from "./scan.mjs";
 import { validateReport } from "./reports.mjs";
 import { selectAnalysis } from "../repository-analysis-context/policy.mjs";
 
@@ -66,6 +66,20 @@ test("Terraform JSON selects its native Checkov runner and cannot pass without t
   };
   assert.throws(() => validateReport("checkov", report, "1", ["main.tf.json"], ["terraform_json"]),
     /every selected framework/);
+});
+
+test("source inventory excludes gitlinks but rejects selected symlinks and malformed index records", () => {
+  const sha = "a".repeat(40);
+  const record = (mode, filename, stage = 0) => `${mode} ${sha} ${stage}\t${filename}\0`;
+  const index = record("100644", "main.py") + record("100755", "operations/health") +
+    record("160000", "uninitialized-dependency") + record("160000", "external.py") +
+    record("100644", "scripts/tab\tname.py") + record("100644", "scripts/new\nline.py") +
+    record("100644", "vendor/excluded.py") + record("120000", "docs/reference.txt");
+  assert.deepEqual(ownedSourceFiles(index, ["python", "shell"]),
+    ["main.py", "operations/health", "scripts/tab\tname.py", "scripts/new\nline.py"]);
+  assert.throws(() => ownedSourceFiles(record("120000", "linked.py"), ["python"]), /not links/);
+  assert.throws(() => ownedSourceFiles(record("100644", "main.py", 2), ["python"]), /unmerged/);
+  assert.throws(() => ownedSourceFiles("invalid\0", ["python"]), /malformed/);
 });
 
 test("only a selected local analyzer and an intact policy context can execute", () => {
