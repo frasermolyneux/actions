@@ -10,6 +10,17 @@ const WORKFLOW = /^\.github\/workflows\/[A-Za-z0-9_.-]+\.ya?ml$/;
 const LOGIN = /^[A-Za-z0-9_-]+(?:\[bot\])?$/;
 const MAX_PROOF = 64 * 1024;
 const MAX_LINEAGE = 8;
+const REPOSITORY_PATH = String.raw`/repos/[A-Za-z0-9-]+/[A-Za-z0-9_.-]+`;
+const METADATA_ROUTES = [
+  new RegExp(`^${REPOSITORY_PATH}$`),
+  new RegExp(`^${REPOSITORY_PATH}/actions/runs/[1-9][0-9]*(?:/artifacts)?$`),
+  new RegExp(`^${REPOSITORY_PATH}/collaborators/[A-Za-z0-9_-]+/permission$`),
+  new RegExp(`^${REPOSITORY_PATH}/commits/[a-f0-9]{40}/pulls$`),
+  new RegExp(`^${REPOSITORY_PATH}/pulls/[1-9][0-9]*$`),
+  new RegExp(`^${REPOSITORY_PATH}/contents/\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$`),
+  /^\/users\/(?:dependabot|github-actions)%5Bbot%5D$/,
+  /^\/apps\/[A-Za-z0-9_-]+$/,
+];
 
 function object(value, label) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -185,6 +196,27 @@ export function validateProof(proof, { repository, producer, policy, engineDiges
   return proof;
 }
 
+function metadataUrl(endpoint) {
+  if (typeof endpoint !== "string") throw new TypeError("Invalid GitHub metadata endpoint");
+  if (/[\u0000-\u0020\u007f\\#]/.test(endpoint)) throw new Error("Invalid GitHub metadata endpoint");
+  const [pathname, query, extra] = endpoint.split("?");
+  if (extra !== undefined || !METADATA_ROUTES.some(route => route.test(pathname)) ||
+      pathname.split("/").some(segment => segment === "." || segment === "..")) {
+    throw new Error("Invalid GitHub metadata endpoint");
+  }
+  const url = new URL("https://api.github.com");
+  url.pathname = pathname.split("/").map(segment => encodeURIComponent(decodeURIComponent(segment))).join("/");
+  if (pathname.includes("/contents/")) {
+    if (!/^ref=[a-f0-9]{40}$/.test(query ?? "")) throw new Error("Invalid workflow metadata revision");
+  } else if (query !== undefined) {
+    if (!/\/(?:artifacts|pulls)$/.test(pathname) || !/^per_page=100&page=(?:[1-9]|1[0-9]|20)$/.test(query)) {
+      throw new Error("Invalid GitHub metadata pagination");
+    }
+  }
+  for (const [key, value] of new URLSearchParams(query)) url.searchParams.set(key, value);
+  return url;
+}
+
 export class GitHub {
   constructor(token, request = fetch) {
     if (typeof token !== "string" || !/^[\x21-\x7e]+$/.test(token)) throw new Error("A metadata-read token is required");
@@ -192,12 +224,12 @@ export class GitHub {
     this.request = request;
   }
   async get(endpoint, allowMissing = false) {
-    if (!endpoint.startsWith("/") || endpoint.startsWith("//") || /[\r\n#]/.test(endpoint)) {
-      throw new Error("Invalid GitHub metadata endpoint");
-    }
-    const response = await this.request(`https://api.github.com${endpoint}`, {
+    const url = metadataUrl(endpoint);
+    if (!["https://api.github.com"].includes(url.origin)) throw new Error("Invalid GitHub metadata origin");
+    const response = await this.request(url.href, {
       headers: { Authorization: `Bearer ${this.token}`, Accept: "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28" },
+      redirect: "error",
       signal: AbortSignal.timeout(30_000),
     });
     if (response.status === 404 && allowMissing) return null;
@@ -436,8 +468,10 @@ export async function main(mode, env = process.env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main(process.argv[2]).catch(error => {
+  try {
+    await main(process.argv[2]);
+  } catch (error) {
     console.error(`::error::${error.message}`);
     process.exitCode = 1;
-  });
+  }
 }

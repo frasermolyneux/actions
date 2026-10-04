@@ -9,6 +9,9 @@ It does not merge, check out target source, build, deploy, fetch secrets or chan
 It reads GitHub metadata using `contents: read`, `pull-requests: read` and `actions: read`.
 Use the default repository token or a fresh repository-scoped **read-only** installation
 token, not an App merge token, private key, cloud credential or human PAT.
+The client permits only the required metadata routes, exact workflow revisions and bounded
+pagination. It encodes individual path components, fixes the API origin, and rejects redirects
+and traversal/query injection before sending an authenticated request.
 
 ## Admission policy
 

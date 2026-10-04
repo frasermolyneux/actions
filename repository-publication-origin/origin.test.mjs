@@ -182,6 +182,7 @@ test("metadata requests are GET-only, fixed-origin and never reinterpret a 403 a
   await assert.rejects(api.get("/repos/owner/target", true), /HTTP 403/);
   assert.equal(requests[0].url, "https://api.github.com/repos/owner/target");
   assert.equal(requests[0].options.method, undefined);
+  assert.equal(requests[0].options.redirect, "error");
   assert.equal(requests[0].options.headers.Authorization, "Bearer read-token");
   await assert.rejects(api.get("//external.invalid/path"), /endpoint/);
   assert.throws(() => new GitHub("invalid\nsecret"), /read token/);
@@ -193,7 +194,40 @@ test("transport, malformed metadata and pagination errors fail rather than autho
     ({ ok: true, status: 200, text: async () => "not-json" })).get("/repos/o/r"), SyntaxError);
   const api = new GitHub("read-token", async () =>
     ({ ok: true, status: 200, text: async () => JSON.stringify(Array(100).fill({})) }));
-  await assert.rejects(api.pages("/repos/o/r/pulls"), /pagination bound/);
+  await assert.rejects(api.pages(`/repos/o/r/commits/${SOURCE}/pulls`), /pagination bound/);
+});
+
+test("metadata routes reject traversal, injected queries and unrelated API access before requesting", async () => {
+  let requests = 0;
+  const api = new GitHub("read-token", async () => { requests++; throw new Error("Unexpected request"); });
+  for (const endpoint of [
+    "/repos/owner/../actions/runs/10", "/repos/owner/%2e%2e/actions/runs/10",
+    "/repos/owner/target\\actions\\runs\\10", "/repos/owner/target/actions/runs/10#fragment",
+    "/repos/owner/target/actions/runs/10?other=1", "/repos/owner/target/issues",
+    "/repos/owner/target\n", "/repos/owner/target/contents/.github/workflows/relay.yml?ref=" + SOURCE + "\n",
+    "/repos/owner/target/actions/runs/10/artifacts?per_page=100&page=21",
+    "/repos/owner/target/actions/runs/10/artifacts?per_page=100&page=1&redirect=evil",
+    "/repos/owner/target/contents/.github/workflows/relay.yml?ref=main",
+    "/repos/owner/target/contents/.github/workflows/relay.yml?ref=" + SOURCE + "&ref=" + LATER,
+    "//external.invalid/path", "https://api.github.com/repos/owner/target",
+  ]) await assert.rejects(api.get(endpoint), /Invalid/);
+  assert.equal(requests, 0);
+});
+
+test("allowed metadata routes preserve encoded bot identities, exact revisions and bounded pagination", async () => {
+  const requests = [];
+  const api = new GitHub("read-token", async (url, options) => {
+    requests.push({ url, options });
+    return { ok: true, text: async () => "{}" };
+  });
+  for (const endpoint of [
+    "/users/dependabot%5Bbot%5D", "/users/github-actions%5Bbot%5D", "/apps/trusted-app",
+    `/repos/owner/target/contents/.github/workflows/relay.yml?ref=${SOURCE}`,
+    "/repos/owner/target/actions/runs/20/artifacts?per_page=100&page=20",
+  ]) {
+    await api.get(endpoint);
+    assert.equal(requests.at(-1).url, `https://api.github.com${endpoint}`);
+  }
 });
 
 test("direct prepare/finalize uses live permission and merge metadata without source execution", async () => {
