@@ -41,7 +41,8 @@ profile. Status changes to applicability require review, not automatic omission 
 | Capability | Public repository | Private repository under the current contract |
 | --- | --- | --- |
 | Supported C#/C++, JS/TS, Python and Actions | CodeQL where applicable | No CodeQL execution, even for artifact-only output |
-| C#/C++, JS/TS, Python | Native CodeQL plus selected complementary tools | Locally executed Semgrep CE; Python also retains Bandit |
+| C#, JS/TS, Python | Native CodeQL plus selected complementary tools | Locally executed Semgrep CE; Python also retains Bandit |
+| C/C++ | Native CodeQL | Explicitly unavailable; community C rules are not C++ coverage |
 | PHP | Local Semgrep CE | Local Semgrep CE |
 | Workflow security | Local zizmor alongside applicable native analysis | Local zizmor |
 | Terraform/Bicep/Dockerfile/Ansible | Local Checkov | Local Checkov |
@@ -55,6 +56,9 @@ checks disabled and no Semgrep platform login or cloud publishing. Local analyze
 have pinned versions, actual source coverage and complete validated reports. An unsupported
 capability, execution failure, missing report or publication failure is never zero findings.
 Downloading public rules is distinct from sending repository source to a provider.
+The current estate has no private C/C++ target. If one is onboarded, the explicit
+unavailable capability requires a reviewed local backend decision; do not mark it clean,
+silently omit it or invoke unlicensed CodeQL.
 
 Caller-supplied visibility, entitlement and upload flags are rejected. The action reads
 only `GET /repos/{owner}/{repository}` with a metadata-capable token. Failed requests,
