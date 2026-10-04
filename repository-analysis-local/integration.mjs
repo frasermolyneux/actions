@@ -111,4 +111,18 @@ if (tool === "shellcheck") {
 }
 assert.doesNotMatch(JSON.stringify(report), /fixture-credential/);
 assert.doesNotMatch(await readFile(environment.GITHUB_STEP_SUMMARY, "utf8"), /fixture-credential/);
+if (tool === "checkov") {
+  await writeFile(path.join(root, "json", "terraform.tfvars"), 'fixture_tls = "TLS1_0"\n');
+  execFileSync("/usr/bin/git", ["-C", root, "add", "json/terraform.tfvars"]);
+  execFileSync("/usr/bin/git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c", "user.email=fixture@example.invalid",
+    "commit", "--quiet", "-m", "Unsupported JSON variable input"]);
+  const unsupportedSha = execFileSync("/usr/bin/git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  await assert.rejects(scan({
+    ...environment, ANALYSIS_EXPECTED_SHA: unsupportedSha,
+    ANALYSIS_RULES: installed.rules, ANALYSIS_PS_MODULE_ROOT: installed.modules,
+    ANALYSIS_SCANNER_BIN: installed.bin,
+  }), /cannot bind Terraform JSON variable files/);
+  assert.equal((await readFile(environment.GITHUB_OUTPUT, "utf8")).match(/^report-directory=/gm).length, 1,
+    "Unsupported input must not emit another completed result");
+}
 console.log(JSON.stringify({ tool, fixture: true, sourceCoverage: report.sourceCoverage, findings: report.findingCount }));

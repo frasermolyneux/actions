@@ -37,6 +37,8 @@ test("tracked Terraform JSON and supported extensionless scripts enter the real 
     ["README", "This is not an executable script.\n", []],
     ["vendor/verify", "#!/bin/sh\necho excluded\n", []],
     ["node_modules/check", "#!/bin/sh\necho excluded\n", []],
+    ["wwwroot/lib/app/main.mts", "export const excluded = true;\n", []],
+    ["src/site/wwwroot/lib/app/main.cts", "export const excluded = true;\n", []],
   ];
   const languages = ["terraform", "shell", "python", "javascript", "typescript", "cpp", "php", "powershell"];
   try {
@@ -57,6 +59,12 @@ test("Terraform JSON selects its native Checkov runner and cannot pass without t
   assert.deepEqual(checkovFrameworks(["terraform", "bicep"], ["main.tf", "main.tf.json", "main.bicep"]),
     ["terraform", "terraform_json", "bicep"]);
   assert.deepEqual(checkovFrameworks(["terraform"], ["main.tfvars.json"]), ["terraform"]);
+  for (const variables of ["terraform.tfvars", "terraform.tfvars.json"]) {
+    assert.throws(() => checkovFrameworks(["terraform"], ["json/main.tf.json", `json/${variables}`]),
+      /cannot bind Terraform JSON variable files/);
+  }
+  assert.deepEqual(checkovFrameworks(["terraform"], ["main.tf", "terraform.tfvars", "json/main.tf.json"]),
+    ["terraform", "terraform_json"]);
   const args = command("checkov", "1", ["main.tf.json"], [], { languages: ["terraform"] })[1];
   assert.ok(args.includes("terraform_json"));
   assert.ok(!args.includes("terraform"));

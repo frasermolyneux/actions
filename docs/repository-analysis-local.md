@@ -43,6 +43,9 @@ supported-shebang scripts are included regardless of their maintained-source loc
 subject to the same vendor/build-output exclusions. Terraform includes `.tf`, `.tf.json`,
 `.tfvars` and `.tfvars.json`; JSON resource definitions require the native `terraform_json`
 Checkov framework, not merely the Terraform source-inventory count.
+The pinned Checkov JSON runner cannot bind co-located `.tfvars`/`.tfvars.json` overrides.
+That layout fails explicitly without a completed result; adding the HCL runner does not
+fix the native limitation. Variable inputs alone are not standalone policy evaluation.
 Extensionless PowerShell is analyzed as script text with its originating source path;
 completed PowerShell reports must identify every selected file, not just match a count.
 Every selected capability needs nonempty source.

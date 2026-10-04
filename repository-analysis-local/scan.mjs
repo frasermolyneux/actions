@@ -23,6 +23,10 @@ const INTERPRETERS = {
 };
 
 export function checkovFrameworks(languages, files) {
+  const jsonDirectories = new Set(files.filter((file) => /\.tf\.json$/i.test(file)).map(path.posix.dirname));
+  if (files.some((file) => /\.tfvars(?:\.json)?$/i.test(file) && jsonDirectories.has(path.posix.dirname(file)))) {
+    throw new Error("Pinned Checkov cannot bind Terraform JSON variable files; no completed analysis");
+  }
   return languages.flatMap((language) => {
     if (language !== "terraform") return [language];
     const frameworks = [];
@@ -101,7 +105,7 @@ function classify(filename, firstLine, languages) {
 
 function eligibleFile(filename, languages) {
   if (/(^|\/)(?:node_modules|vendor|bin|obj|fixtures)\//i.test(filename) ||
-      /\/wwwroot\/lib\//i.test(filename)) return false;
+      /(^|\/)wwwroot\/lib\//i.test(filename)) return false;
   if (languages.some((language) => EXTENSIONS.get(language).test(filename))) return true;
   return !path.posix.extname(filename) && languages.some((language) => INTERPRETERS[language]);
 }
