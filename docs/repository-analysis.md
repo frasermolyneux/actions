@@ -32,8 +32,9 @@ The current contract does not approve private Sonar execution.
 
 An empty profile requires an explicit `exemption` with `kind`, `reason` and `reevaluate`.
 Supported kinds are `documentation-only`, `empty`, `archived` and `upstream-fork`. Exempt
-profiles select no scanners. Status changes to archival/fork applicability require review,
-not automatic omission or unarchiving.
+profiles select no scanners. The archive exemption takes precedence when an archived
+repository is also a fork. Unarchiving it requires a reviewed active or upstream-fork
+profile. Status changes to applicability require review, not automatic omission or unarchiving.
 
 ## Execution and publication
 

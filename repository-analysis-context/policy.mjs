@@ -81,10 +81,12 @@ function validateRepository(repository, expectedRepository) {
 }
 
 function validateApplicability(profile, repository) {
-  if ((repository.archived && profile.exemption?.kind !== "archived") ||
-      (repository.fork && profile.exemption?.kind !== "upstream-fork") ||
-      (!repository.archived && profile.exemption?.kind === "archived") ||
-      (!repository.fork && profile.exemption?.kind === "upstream-fork")) {
+  const kind = profile.exemption?.kind;
+  if (repository.archived) {
+    if (kind !== "archived") throw new Error("Repository applicability changed; review the catalog profile");
+    return;
+  }
+  if (kind === "archived" || repository.fork !== (kind === "upstream-fork")) {
     throw new Error("Repository applicability changed; review the catalog profile");
   }
 }
@@ -207,11 +209,12 @@ export async function main(env = process.env) {
     "",
   ].join("\n"));
   const toolNames = context.localTools.map(({ tool }) => "`" + tool + "`").join(", ");
+  const emptyTools = context.profile.exemption ? "none (applicability exemption)" : "none selected";
   await appendFile(env.GITHUB_STEP_SUMMARY, [
     "### Analysis capability selection", "",
     `Repository visibility: **${context.visibility}**. Contract: \`${context.contract}\`.`,
     `CodeQL: **${context.codeql.status}**. ${context.codeql.reason}.`,
-    `Local tools: ${toolNames || "none (applicability exemption)"}.`,
+    `Local tools: ${toolNames || emptyTools}.`,
     `Sonar: **${context.sonar.status}**. ${context.sonar.reason}.`,
     `SARIF destination: **${context.publication.sarif}**; artifacts remain **${context.publication.artifacts}**.`,
     "Capability selection is not scanner execution or evidence of zero findings.",

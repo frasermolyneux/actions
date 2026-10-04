@@ -138,6 +138,22 @@ test("live lookup uses only GitHub metadata, never scanner feature probes or sou
     calls.push({ url, options });
     return { ok: true, json: async () => metadata("private") };
   });
+
+  test("archived forks use the archive exemption and require re-evaluation when unarchived", () => {
+    const exempt = { ...profile([]), exemption: {
+      kind: "archived", reason: "Archived repository", reevaluate: "Repository is unarchived",
+    } };
+    const repository = { ...metadata(), archived: true, fork: true };
+    const context = selectAnalysis(exempt, repository, "example/sample");
+    assert.deepEqual(context.localTools, []);
+    assert.equal(context.codeql.status, "not-applicable");
+    assert.throws(() => selectAnalysis(exempt, { ...repository, archived: false }, "example/sample"),
+      /applicability changed/);
+    for (const kind of ["upstream-fork", "documentation-only"]) {
+      assert.throws(() => selectAnalysis({ ...exempt, exemption: { ...exempt.exemption, kind } },
+        repository, "example/sample"), /applicability changed/);
+    }
+  });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://api.github.com/repos/example/sample");
   assert.equal(calls[0].options.headers.Authorization, "Bearer test-token");
@@ -211,5 +227,23 @@ test("the composite binds live metadata to immutable workflow repository identit
     }
   } finally {
     globalThis.fetch = previous;
+  }
+});
+
+test("a public CodeQL-only profile is not described as an applicability exemption", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "analysis-summary-"));
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, json: async () => metadata() });
+  try {
+    const summary = path.join(directory, "summary");
+    await main({ GITHUB_OUTPUT: path.join(directory, "outputs"), GITHUB_STEP_SUMMARY: summary,
+      ANALYSIS_REPOSITORY: "example/sample", ANALYSIS_REPOSITORY_ID: "123",
+      GH_TOKEN: "test-token", ANALYSIS_PROFILE: JSON.stringify(profile(["csharp"])) });
+    const body = await readFile(summary, "utf8");
+    assert.match(body, /Local tools: none selected/);
+    assert.doesNotMatch(body, /applicability exemption/);
+  } finally {
+    globalThis.fetch = previous;
+    await rm(directory, { recursive: true });
   }
 });
