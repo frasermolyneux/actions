@@ -106,10 +106,25 @@ its failure. It requires an already-configured .NET SDK and repository checkout.
 | `filter` | `FullyQualifiedName!~IntegrationTests` | Preserves existing unit-test selection. Set `""` to run all tests in a selected integration project. |
 | `artifact-name` | `test-results-Unit` | Must be unique within the workflow run, including matrix jobs. |
 | `source-path-pattern` | `^src/.+\.(?:cs\|fs\|feature)$` | Eligible source annotations; paths outside the checkout are always rejected. |
+| `coverage` | `false` | Collect native Cobertura with pinned `dotnet-coverage` 18.11.2; no test-project collector dependency is added (v1.1+). |
 
-Outputs: `report` and `artifact-id`. TRX artifacts are retained for seven days. Browser installation,
-coverage profiles, external-service setup and repository-specific diagnostics remain with consumers.
+Outputs: `report`, `artifact-id`, `coverage-report` and `results-directory`. TRX artifacts are retained for seven days. Browser installation,
+coverage profiles, provider import, external-service setup and repository-specific diagnostics remain with consumers.
 This runner targets the VSTest/TRX contract; it does not change projects to Microsoft.Testing.Platform.
+
+Optional coverage wraps that same selected test invocation, preserving its configuration,
+filter, multi-project/framework reporting and failure propagation. The native XML is retained
+with the originating test artifact; `results-directory` allows same-job Sonar import from its
+`coverage.cobertura.xml`. Missing/empty/malformed instrumentation fails rather than emitting
+zero coverage. `coverage-report` contains collection state, actual checkout revision, tool
+version, XML hash and deduplicated instrumented/covered line counts without source filenames.
+Revision checks resolve Git from the configured test directory, including custom-path or
+independent checkouts; the caller workspace's revision is not substituted for tested source.
+These raw counts may include test assemblies; they are not production-only Sonar metrics.
+Collection is **not** a claim of provider import. The analysis engine must separately verify
+source integrity, the provider's actual import, passing tests and the completed analysis ID.
+The default remains disabled, and Windows/.NET Framework coverage needs its own compatible
+build/runtime verification rather than being inferred from the SDK fixture.
 
 ### Opt in from existing CI composites
 
@@ -173,7 +188,10 @@ Portal-web keeps its richer coverage/provenance, browser bootstrap and required-
 
 ## Validation
 
-`node --test dotnet-test/action.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js` exercises release ordering, parsing,
+`node --test dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js` exercises release ordering, parsing,
 failure propagation, source annotations, and comment ownership/write-context/stale-run behavior.
 The `Test reporting contracts` workflow additionally runs two real xUnit projects on both .NET 9
-and .NET 10 on Linux and Windows, and asserts that all four executions and the artifact ID survive.
+and .NET 10 on Linux and Windows, and asserts that all four executions, the artifact ID and
+real native coverage instrumentation survive.
+The coverage smoke uses an independently checked out reviewed revision different from its
+caller definition, proving that actual tested-source provenance is preserved.

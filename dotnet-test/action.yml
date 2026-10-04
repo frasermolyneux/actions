@@ -34,6 +34,10 @@ inputs:
     description: "Repository-relative source paths eligible for failure annotations."
     required: false
     default: '^src/.+\.(?:cs|fs|feature)$'
+  coverage:
+    description: "Collect pinned native Cobertura coverage without changing test-project dependencies."
+    required: false
+    default: "false"
 
 outputs:
   report:
@@ -42,6 +46,12 @@ outputs:
   artifact-id:
     description: "Uploaded TRX artifact ID."
     value: ${{ steps.report.outputs.artifact-id }}
+  coverage-report:
+    description: "Bounded native collection evidence; not a claim of Sonar import or production-only coverage."
+    value: ${{ steps.coverage.outputs.coverage-report }}
+  results-directory:
+    description: "Isolated TRX/native coverage directory for same-job provider import."
+    value: ${{ steps.invocation.outputs.results-directory }}
 
 runs:
   using: "composite"
@@ -49,10 +59,39 @@ runs:
     - name: Allocate isolated test results directory
       id: invocation
       shell: pwsh
+      env:
+        TEST_COVERAGE: ${{ inputs.coverage }}
+        TEST_WORKING_DIRECTORY: ${{ inputs.working-directory }}
       run: |
+        if ($env:TEST_COVERAGE -notin @('true', 'false')) { throw 'coverage must be exactly true or false.' }
         $directory = Join-Path $env:RUNNER_TEMP "dotnet-test/$([guid]::NewGuid().ToString('N'))"
         New-Item -ItemType Directory -Path $directory -ErrorAction Stop | Out-Null
         "results-directory=$directory" >> $env:GITHUB_OUTPUT
+        if ($env:TEST_COVERAGE -eq 'true') {
+          $sha = git -C $env:TEST_WORKING_DIRECTORY rev-parse HEAD
+          if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[a-f0-9]{40}$') { throw 'Cannot freeze coverage source revision.' }
+          "source-sha=$sha" >> $env:GITHUB_OUTPUT
+        }
+
+    - name: Install pinned native coverage collector
+      id: collector
+      if: inputs.coverage == 'true'
+      shell: pwsh
+      env:
+        TEST_ACTION_PATH: ${{ github.action_path }}
+        DOTNET_COVERAGE_TELEMETRY_OPTOUT: "1"
+      run: |
+        $pin = Get-Content -LiteralPath (Join-Path $env:TEST_ACTION_PATH 'coverage-tools.json') -Raw | ConvertFrom-Json
+        $directory = Join-Path $env:RUNNER_TEMP "dotnet-coverage/$([guid]::NewGuid().ToString('N'))"
+        dotnet tool install $pin.package --version $pin.version --tool-path $directory
+        if ($LASTEXITCODE -ne 0) { throw 'Pinned coverage collector installation failed.' }
+        $command = Join-Path $directory ("dotnet-coverage" + $(if ($IsWindows) { '.exe' } else { '' }))
+        $version = & $command --version
+        if ($LASTEXITCODE -ne 0 -or $version -notmatch "^$([regex]::Escape($pin.version))(\+[A-Za-z0-9.-]+)?$") {
+          throw 'Installed coverage collector does not match the immutable pin.'
+        }
+        "command=$command" >> $env:GITHUB_OUTPUT
+        "version=$version" >> $env:GITHUB_OUTPUT
 
     - name: Run ${{ inputs.suite }} tests
       id: tests
@@ -65,6 +104,8 @@ runs:
         TEST_NO_BUILD: ${{ inputs.no-build }}
         TEST_FILTER: ${{ inputs.filter }}
         TEST_RESULTS_DIRECTORY: ${{ steps.invocation.outputs.results-directory }}
+        TEST_COVERAGE_COMMAND: ${{ steps.collector.outputs.command }}
+        DOTNET_COVERAGE_TELEMETRY_OPTOUT: "1"
       run: |
         & (Join-Path $env:TEST_ACTION_PATH 'run-tests.ps1') `
           -WorkingDirectory $env:TEST_WORKING_DIRECTORY `
@@ -72,7 +113,9 @@ runs:
           -Configuration $env:TEST_CONFIGURATION `
           -NoBuild $env:TEST_NO_BUILD `
           -Filter $env:TEST_FILTER `
-          -ResultsDirectory $env:TEST_RESULTS_DIRECTORY
+          -ResultsDirectory $env:TEST_RESULTS_DIRECTORY `
+          -CoverageCommand $env:TEST_COVERAGE_COMMAND `
+          -CoverageFile $(if ($env:TEST_COVERAGE_COMMAND) { Join-Path $env:TEST_RESULTS_DIRECTORY 'coverage.cobertura.xml' } else { '' })
 
     - name: Report ${{ inputs.suite }} tests
       id: report
@@ -85,3 +128,21 @@ runs:
         run-outcome: ${{ steps.tests.outcome }}
         artifact-name: ${{ inputs.artifact-name }}
         source-path-pattern: ${{ inputs.source-path-pattern }}
+
+    - name: Validate collected native coverage
+      id: coverage
+      if: success() && inputs.coverage == 'true'
+      shell: pwsh
+      env:
+        TEST_ACTION_PATH: ${{ github.action_path }}
+        TEST_RESULTS_DIRECTORY: ${{ steps.invocation.outputs.results-directory }}
+        TEST_SOURCE_SHA: ${{ steps.invocation.outputs.source-sha }}
+        TEST_COVERAGE_VERSION: ${{ steps.collector.outputs.version }}
+        TEST_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        $sha = git -C $env:TEST_WORKING_DIRECTORY rev-parse HEAD
+        if ($LASTEXITCODE -ne 0 -or $sha -ne $env:TEST_SOURCE_SHA) { throw 'Coverage source revision changed during testing.' }
+        & (Join-Path $env:TEST_ACTION_PATH 'report-coverage.ps1') `
+          -CoverageFile (Join-Path $env:TEST_RESULTS_DIRECTORY 'coverage.cobertura.xml') `
+          -SourceSha $env:TEST_SOURCE_SHA `
+          -CoverageVersion $env:TEST_COVERAGE_VERSION
