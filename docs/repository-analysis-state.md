@@ -59,7 +59,7 @@ and target/base revisions separate.
 ## Coverage
 
 Each suite declares `imported`, `unavailable`, `not-applicable` or `failed`. Imported
-OpenCover, LCOV or gcov evidence needs nonempty hashed report paths, positive instrumented
+OpenCover, VS coverage XML, Cobertura, LCOV or gcov evidence needs nonempty hashed report paths, positive instrumented
 line/test counts, consistent passing executed-test totals and the same completed Sonar
 analysis ID. Zero covered lines is a legitimate measurable result; zero instrumentation
 or all-skipped tests is not evidence of an import. Scanner engines must validate the real
@@ -69,6 +69,13 @@ Every active profile needs at least one explicit suite entry, including workflow
 private profiles with a documented inapplicable/unavailable coverage provider. Omitting
 the coverage array is not a way to hide that gap. Only an explicit applicability exemption
 may omit suites without fabricating a test or import.
+
+Microsoft's cross-platform `dotnet-coverage` can produce VS coverage XML or Cobertura
+without adding a collector package to each test project. Sonar's current
+[.NET coverage contract](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/test-coverage/dotnet-test-coverage)
+supports both, while its
+[C/C++ coverage contract](https://docs.sonarsource.com/sonarqube-cloud/analyzing-source-code/test-coverage/c-c-objective-c-test-coverage)
+also supports Cobertura and gcov. These labels alone are not proof of a real import.
 
 Unavailable/inapplicable coverage needs an explicit reason and null metrics/provider
 identity, not manufactured zeroes. Failed collection leaves the overall result incomplete.

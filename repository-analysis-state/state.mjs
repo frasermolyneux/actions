@@ -194,7 +194,7 @@ function validateCoverage(coverage, source, exempt) {
         entry.tests === null && entry.analysisId === null, "Unavailable coverage must not masquerade as an imported zero");
       continue;
     }
-    requireValue(["opencover", "lcov", "gcov"].includes(entry.format) && entry.reports.length > 0 &&
+    requireValue(["opencover", "vscoveragexml", "cobertura", "lcov", "gcov"].includes(entry.format) && entry.reports.length > 0 &&
       text(entry.analysisId) && /^[A-Za-z0-9_.:-]+$/.test(entry.analysisId), "Imported coverage needs a bound provider analysis");
     const files = new Set();
     for (const report of entry.reports) {

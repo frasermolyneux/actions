@@ -155,11 +155,13 @@ test("Sonar accepted upload without compute completion is not completed", () => 
   assert.throws(() => assemble(context(), input), /compute task/);
 });
 
-test("actual imported coverage binds reports, tests, source and this Sonar analysis", () => {
-  const input = bundle();
-  input.coverage = [coverage()];
-  assert.equal(assemble(context(), input).completeness.status, "completed");
-});
+for (const format of ["opencover", "vscoveragexml", "cobertura", "lcov", "gcov"]) {
+  test(`actual ${format} import binds reports, tests, source and this Sonar analysis`, () => {
+    const input = bundle();
+    input.coverage = [{ ...coverage(), format }];
+    assert.equal(assemble(context(), input).completeness.status, "completed");
+  });
+}
 
 for (const [label, change] of [
   ["foreign revision", (entry) => { entry.sourceSha = B; }],
