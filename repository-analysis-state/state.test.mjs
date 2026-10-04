@@ -172,6 +172,12 @@ for (const [label, change] of [
   ["empty instrumentation", (entry) => { entry.lines.total = 0; }],
   ["invalid line counts", (entry) => { entry.lines.covered = 100; }],
   ["report traversal", (entry) => { entry.reports[0].path = "../coverage.xml"; }],
+  ["Windows absolute report", (entry) => { entry.reports[0].path = "C:/coverage.xml"; }],
+  ["lowercase Windows absolute report", (entry) => { entry.reports[0].path = "c:/coverage.xml"; }],
+  ["Windows drive-relative report", (entry) => { entry.reports[0].path = "C:coverage.xml"; }],
+  ["Windows backslash report", (entry) => { entry.reports[0].path = "C:\\coverage.xml"; }],
+  ["UNC report", (entry) => { entry.reports[0].path = "//server/share/coverage.xml"; }],
+  ["Windows alternate data stream", (entry) => { entry.reports[0].path = "coverage/report.xml:stream"; }],
   ["missing report hash", (entry) => { entry.reports[0].sha256 = ""; }],
 ]) {
   test(`coverage rejects ${label}`, () => {
@@ -263,6 +269,22 @@ test("scanner, rule, engine and live visibility changes invalidate previous comp
   }
   const privateContext = context("private", ["actions", "javascript", "terraform"], true);
   assert.equal(assessFreshness(privateContext, request(bundle(privateContext)), result, Date.parse(END)).action, "scan");
+});
+
+test("validated engine, pin and completion property order does not change freshness", () => {
+  const input = bundle();
+  const result = assemble(context(), input);
+  const reverseFields = (value) => Object.fromEntries(Object.entries(value).reverse());
+  const current = request(clone(input));
+  current.engine = reverseFields(current.engine);
+  current.pins = current.pins.reverse().map(reverseFields);
+  result.engine = reverseFields(result.engine);
+  result.pins = result.pins.map(reverseFields);
+  result.completeness = reverseFields(result.completeness);
+  assert.deepEqual(validateResult(result).completeness, assemble(context(), input).completeness);
+  assert.equal(assessFreshness(context(), current, result, Date.parse(END)).action, "current");
+  current.pins[0].version = "1.2.4";
+  assert.equal(assessFreshness(context(), current, result, Date.parse(END)).action, "scan");
 });
 
 test("foreign results, impossible timestamps and malformed schemas fail explicitly", () => {

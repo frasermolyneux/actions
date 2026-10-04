@@ -29,7 +29,8 @@ The `assemble` operation accepts a bounded JSON file beneath `RUNNER_TEMP`, cont
 CodeQL IDs are `codeql/<language>` with `/language:<language>` categories. Local IDs are
 `local/<tool>` with `/tool:<tool>` categories. Sonar uses `sonar` and `quality`, not a
 fictional Sonar SARIF identity. The tool set is derived from live visibility and the catalog
-profile, not a caller's arbitrary list. Tool pin order does not affect freshness.
+profile, not a caller's arbitrary list. Tool pin order and validated engine/pin JSON
+property ordering do not affect freshness.
 
 Tool `status` is `completed`, `failed`, `pending` or `unavailable`. Incomplete tools need
 an explicit `reason`, null `findingCount` and null `completedAt`; they cannot use a
@@ -64,6 +65,8 @@ line/test counts, consistent passing executed-test totals and the same completed
 analysis ID. Zero covered lines is a legitimate measurable result; zero instrumentation
 or all-skipped tests is not evidence of an import. Scanner engines must validate the real
 report contents, passing test invocation and actual provider import.
+Report paths must be repository-relative, use forward slashes, and exclude traversal,
+drive-qualified paths, backslashes and alternate data streams.
 
 Every active profile needs at least one explicit suite entry, including workflow-only and
 private profiles with a documented inapplicable/unavailable coverage provider. Omitting

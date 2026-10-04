@@ -200,7 +200,7 @@ function validateCoverage(coverage, source, exempt) {
     for (const report of entry.reports) {
       object(report, ["path", "sha256"], "coverage report");
       requireValue(typeof report.path === "string" && report.path.length <= 512 &&
-        !/[\\\0\r\n]/.test(report.path) && !report.path.startsWith("/") &&
+        !/[\\:\0\r\n]/.test(report.path) && !report.path.startsWith("/") &&
         report.path.split("/").every((part) => part && ![".", ".."].includes(part)) &&
         DIGEST.test(report.sha256 ?? "") && !files.has(report.path), "Invalid or duplicate coverage report provenance");
       files.add(report.path);
@@ -268,7 +268,10 @@ export function validateResult(result) {
   requireValue(result.schema === RESULT_SCHEMA, "Unsupported completed-result schema");
   const { schema, context, completeness, ...input } = result;
   const validated = assemble(context, input);
-  requireValue(JSON.stringify(completeness) === JSON.stringify(validated.completeness),
+  object(completeness, ["status", "missing", "unavailable", "selectedTools"], "result completeness");
+  requireValue(completeness.status === validated.completeness.status &&
+    ["missing", "unavailable", "selectedTools"].every((key) =>
+      JSON.stringify(completeness[key]) === JSON.stringify(validated.completeness[key])),
     "Result completion flags disagree with actual selected-tool evidence");
   return validated;
 }
@@ -298,8 +301,11 @@ export function assessFreshness(context, request, previous, now = Date.now()) {
   if (result.source.checkoutSha !== request.headSha || result.source.logicalHeadSha !== request.headSha) {
     return { action: "scan", reason: "Source revision changed" };
   }
-  if (result.context.policyDigest !== context.policyDigest || hash(result.engine) !== hash(request.engine) ||
-      hash(result.pins) !== hash([...request.pins].sort((left, right) => left.id.localeCompare(right.id, "en")))) {
+  const sameEngine = ["release", "sourceSha", "digest"].every((key) => result.engine[key] === request.engine[key]);
+  const currentPins = new Map(request.pins.map((pin) => [pin.id, pin]));
+  const samePins = result.pins.every((pin) =>
+    ["version", "ruleRevision", "engineDigest"].every((key) => pin[key] === currentPins.get(pin.id)?.[key]));
+  if (result.context.policyDigest !== context.policyDigest || !sameEngine || !samePins) {
     return { action: "scan", reason: "Visibility, profile, engine, scanner or rule policy changed" };
   }
   if (now - completedAt >= WEEK_MS) return { action: "scan", reason: "Weekly unchanged-source analysis is due" };
