@@ -138,27 +138,27 @@ test("live lookup uses only GitHub metadata, never scanner feature probes or sou
     calls.push({ url, options });
     return { ok: true, json: async () => metadata("private") };
   });
-
-  test("archived forks use the archive exemption and require re-evaluation when unarchived", () => {
-    const exempt = { ...profile([]), exemption: {
-      kind: "archived", reason: "Archived repository", reevaluate: "Repository is unarchived",
-    } };
-    const repository = { ...metadata(), archived: true, fork: true };
-    const context = selectAnalysis(exempt, repository, "example/sample");
-    assert.deepEqual(context.localTools, []);
-    assert.equal(context.codeql.status, "not-applicable");
-    assert.throws(() => selectAnalysis(exempt, { ...repository, archived: false }, "example/sample"),
-      /applicability changed/);
-    for (const kind of ["upstream-fork", "documentation-only"]) {
-      assert.throws(() => selectAnalysis({ ...exempt, exemption: { ...exempt.exemption, kind } },
-        repository, "example/sample"), /applicability changed/);
-    }
-  });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].url, "https://api.github.com/repos/example/sample");
   assert.equal(calls[0].options.headers.Authorization, "Bearer test-token");
   assert.equal(calls[0].options.body, undefined);
   assert.deepEqual(context.codeql.languages, []);
+});
+
+test("archived forks use the archive exemption and require re-evaluation when unarchived", () => {
+  const exempt = { ...profile([]), exemption: {
+    kind: "archived", reason: "Archived repository", reevaluate: "Repository is unarchived",
+  } };
+  const repository = { ...metadata(), archived: true, fork: true };
+  const context = selectAnalysis(exempt, repository, "example/sample");
+  assert.deepEqual(context.localTools, []);
+  assert.equal(context.codeql.status, "not-applicable");
+  assert.throws(() => selectAnalysis(exempt, { ...repository, archived: false }, "example/sample"),
+    /applicability changed/);
+  for (const kind of ["upstream-fork", "documentation-only"]) {
+    assert.throws(() => selectAnalysis({ ...exempt, exemption: { ...exempt.exemption, kind } },
+      repository, "example/sample"), /applicability changed/);
+  }
 });
 
 test("403, 404 and server errors cannot be mistaken for private-feature inapplicability", async () => {
