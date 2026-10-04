@@ -32,9 +32,12 @@ function semgrep(report, version, inputs) {
   return array(report.results, "Semgrep results");
 }
 
-function checkov(report) {
+function checkov(report, languages) {
   const frameworks = Array.isArray(report) ? report : [report];
   if (!frameworks.length) throw new Error("Missing Checkov frameworks");
+  if (languages.some((language) => !frameworks.some((entry) => entry.check_type === language))) {
+    throw new Error("Checkov did not report every selected framework");
+  }
   return frameworks.flatMap((entry) => {
     if (!entry?.check_type) throw new Error("Malformed Checkov framework");
     const errors = count(entry.summary?.parsing_errors, "Checkov parsing errors");
@@ -78,12 +81,12 @@ function powershell(report, version, inputs) {
   return array(report.results, "PSScriptAnalyzer results");
 }
 
-export function validateReport(tool, report, version, inputs) {
+export function validateReport(tool, report, version, inputs, languages = []) {
   if (!Array.isArray(inputs) || !inputs.length) throw new Error("Nonempty source coverage is required");
   switch (tool) {
     case "zizmor": return validateSarif(report);
     case "semgrep-ce": return semgrep(report, version, inputs);
-    case "checkov": return checkov(report);
+    case "checkov": return checkov(report, languages);
     case "bandit": return bandit(report, inputs);
     case "shellcheck": return shellcheck(report);
     case "psscriptanalyzer": return powershell(report, version, inputs);

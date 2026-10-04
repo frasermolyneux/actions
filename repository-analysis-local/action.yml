@@ -60,5 +60,6 @@ runs:
         ANALYSIS_EXPECTED_SHA: ${{ inputs.expected-sha }}
         ANALYSIS_RULES: ${{ steps.install.outputs.rules-directory }}
         ANALYSIS_PS_MODULE_ROOT: ${{ steps.install.outputs.module-root }}
+        ANALYSIS_SCANNER_BIN: ${{ steps.install.outputs.scanner-path }}
         SCANNER_SCRIPT: ${{ github.action_path }}/scan.mjs
       run: node "$SCANNER_SCRIPT"

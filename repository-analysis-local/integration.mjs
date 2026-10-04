@@ -10,6 +10,9 @@ const root = await mkdtemp(path.join(process.env.RUNNER_TEMP, "local-scan-fixtur
 const files = {
   ".github/workflows/ci.yml": "on: pull_request\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo \"${{ github.event.pull_request.title }}\"\n",
   "main.php": "<?php\nfunction run_command($value) { return shell_exec($value); }\n",
+  "main.js": "export function run(value) { return eval(value); }\n",
+  "main.ts": "export function run(value: string) { return eval(value); }\n",
+  "Main.cs": "using System.Diagnostics;\nclass Fixture {\n public static void Run(string value) { Process.Start(value); }\n}\n",
   "main.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
   "main.ps1": "Write-Host 'fixture'\n",
   "scripts/health": "#!/bin/sh\necho $FIXTURE_VALUE\n",
@@ -18,19 +21,20 @@ const files = {
   "main.bicep": "param location string = resourceGroup().location\nresource fixture 'Microsoft.Storage/storageAccounts@2023-05-01' = {\n  name: 'fixturestorage'\n  location: location\n  kind: 'StorageV2'\n  sku: { name: 'Standard_LRS' }\n  properties: { supportsHttpsTrafficOnly: false }\n}\n",
   "roles/fixture/tasks/main.yml": "- name: Run a fixture command\n  ansible.builtin.shell: echo fixture\n",
 };
-for (const [filename, content] of Object.entries(files)) {
+await Promise.all(Object.entries(files).map(async ([filename, content]) => {
   const destination = path.join(root, filename);
   await mkdir(path.dirname(destination), { recursive: true });
   await writeFile(destination, content);
-}
-execFileSync("git", ["init", "--quiet", root]);
-execFileSync("git", ["-C", root, "add", "."]);
-execFileSync("git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c", "user.email=fixture@example.invalid",
+}));
+execFileSync("/usr/bin/git", ["init", "--quiet", root]);
+execFileSync("/usr/bin/git", ["-C", root, "add", "."]);
+execFileSync("/usr/bin/git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c", "user.email=fixture@example.invalid",
   "commit", "--quiet", "-m", "Scanner fixtures"]);
-const sha = execFileSync("git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const sha = execFileSync("/usr/bin/git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const context = selectAnalysis({
   version: "repository-analysis-v1",
-  languages: ["actions", "php", "python", "powershell", "shell", "terraform", "bicep", "dockerfile", "ansible"],
+  languages: ["actions", "csharp", "javascript", "typescript", "php", "python", "powershell",
+    "shell", "terraform", "bicep", "dockerfile", "ansible"],
   sonar: false,
 }, {
   id: 123, full_name: "fixture/sandbox", visibility: "private", private: true,
@@ -47,6 +51,7 @@ const report = await scan({
   ...environment,
   PATH: installed.bin ? installed.bin + path.delimiter + process.env.PATH : process.env.PATH,
   ANALYSIS_RULES: installed.rules, ANALYSIS_PS_MODULE_ROOT: installed.modules,
+  ANALYSIS_SCANNER_BIN: installed.bin,
 });
 assert.equal(report.status, "completed");
 assert.equal(report.sourceSha, sha);

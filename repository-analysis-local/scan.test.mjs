@@ -83,6 +83,8 @@ test("Checkov consistency and real policy evaluation are mandatory", () => {
     "1", ["main.tf"]), /Inconsistent/);
   assert.throws(() => validateReport("checkov", { ...report, summary: { ...report.summary, parsing_errors: 1 } },
     "1", ["main.tf"]), /parsing errors/);
+  assert.throws(() => validateReport("checkov", report, "1", ["main.tf", "Dockerfile"],
+    ["terraform", "dockerfile"]), /every selected framework/);
 });
 
 test("native SARIF failures do not pass even when they contain an empty result list", () => {

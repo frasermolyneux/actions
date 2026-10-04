@@ -6,7 +6,7 @@ execute CodeQL or Sonar, upload to GitHub Security, deploy, publish packages, or
 the complete estate schedule/freshness/build/coverage contract.
 
 Use an exact reviewed `repository-analysis-local/v1.X.Y` tag. The action requires a Linux
-runner with Git and PowerShell available. It installs Node.js 22 through the released
+runner with trusted `/usr/bin/git` and `/usr/bin/pwsh`. It installs Node.js 22 through the released
 preflight and Python 3.12 where needed. The metadata token is used only by preflight; scanner
 processes receive an explicit environment allowlist without provider or Actions credentials.
 Python analyzers use isolated virtual environments. PowerShell uses an explicitly pinned
@@ -28,7 +28,9 @@ configuration or dependency/vendor/build-output/fixture directory is used. Exten
 supported scripts are included. Every selected capability needs nonempty source.
 
 The runner verifies actual engine versions and native report structure, counts, parsing
-errors and available per-file evidence. Failed execution, malformed output, missing source
+errors, selected framework completeness and available per-file evidence. A second checkout
+identity/change check prevents publishing results after source changed during execution.
+Failed execution, malformed output, missing source
 coverage and no evaluated IaC policies fail explicitly. Findings are valid completed results,
 not scanner failures. This component does not impose a new historical-backlog merge gate.
 
@@ -64,3 +66,5 @@ acceptance requirement.
 node --test repository-analysis-local\scan.test.mjs
 git diff --check
 ```
+Scanner entry points use the installed virtual environment's absolute paths, not a target
+repository's executable search path.
