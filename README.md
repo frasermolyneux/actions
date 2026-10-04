@@ -12,6 +12,8 @@
   and private result boundaries for the estate analysis migration.
 - [docs/repository-analysis-local.md](docs/repository-analysis-local.md) - Pinned local
   analyzers, isolated source execution and truthful native result validation.
+- [docs/repository-analysis-state.md](docs/repository-analysis-state.md) - Complete
+  per-tool results, actual coverage provenance and bounded default-branch freshness.
 - [docs/repository-publication-origin.md](docs/repository-publication-origin.md) - Metadata-only
   publication admission and verified downstream workflow lineage before App merge cutover.
 - [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.

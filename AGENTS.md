@@ -40,6 +40,8 @@ Documentation-only Copilot configuration changes do not require action integrati
   selection and private execution/publication boundaries for the estate migration.
 - [`docs/repository-analysis-local.md`](docs/repository-analysis-local.md) - Pinned local
   scanner execution, source isolation and native-report validation.
+- [`docs/repository-analysis-state.md`](docs/repository-analysis-state.md) - Complete
+  selected-tool results, explicit coverage gaps and exact-source weekly freshness.
 - [`docs/repository-publication-origin.md`](docs/repository-publication-origin.md) - Trusted
   metadata-only publication admission and bounded originating-repository lineage proofs.
 - [`docs/dotnet-test-reporting.md`](docs/dotnet-test-reporting.md) - .NET test setup/execution, bounded TRX reporting and isolated PR summary publishing.

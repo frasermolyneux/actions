@@ -9,6 +9,10 @@ not purchase subscriptions, enable private GitHub Code Security, transfer reposi
 change settings. Scanner consumers must implement the selected local/native tools and
 validate their real results before publishing completion.
 
+[`repository-analysis-state`](repository-analysis-state.md) defines selected-tool result
+completeness and weekly freshness separately from this preflight. A selected tool, accepted
+upload or fresh timestamp alone is not completed evidence.
+
 ## Profile
 
 ```json
