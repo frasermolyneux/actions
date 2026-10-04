@@ -8,11 +8,11 @@ import { validateReport } from "./reports.mjs";
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const tools = JSON.parse(await readFile(path.join(directory, "tools.json"), "utf8"));
 const EXTENSIONS = new Map([
-  ["csharp", /\.cs$/i], ["cpp", /\.(?:c|cc|cpp|cxx|h|hpp)$/i],
-  ["javascript", /\.[cm]?jsx?$/i], ["typescript", /\.tsx?$/i],
+  ["csharp", /\.cs$/i], ["cpp", /\.(?:c|cc|cpp|cxx|h|hh|hpp|hxx)$/i],
+  ["javascript", /\.[cm]?jsx?$/i], ["typescript", /\.(?:tsx?|[cm]ts)$/i],
   ["python", /\.py$/i], ["php", /\.php$/i], ["terraform", /\.tf(?:\.json|vars(?:\.json)?)?$/i],
   ["bicep", /\.bicep$/i], ["powershell", /\.ps(?:1|m1|d1)$/i],
-  ["shell", /\.sh$/i], ["dockerfile", /(^|\/)Dockerfile(?:\.[^/]+)?$/i],
+  ["shell", /\.(?:sh|bash|dash|ksh)$/i], ["dockerfile", /(^|\/)Dockerfile(?:\.[^/]+)?$/i],
   ["actions", /^\.github\/workflows\/[^/]+\.ya?ml$|(^|\/)action\.ya?ml$|^templates\/workflows\/.*\.ya?ml$/],
   ["ansible", /^(?:ansible|playbooks|roles)\/.*\.ya?ml$|(^|\/)playbook\.ya?ml$/],
 ]);
@@ -97,7 +97,7 @@ function classify(filename, firstLine, languages) {
 }
 
 function eligibleFile(filename, languages) {
-  if (/(^|\/)(?:node_modules|vendor|bin|obj|packages|fixtures)\//i.test(filename) ||
+  if (/(^|\/)(?:node_modules|vendor|bin|obj|fixtures)\//i.test(filename) ||
       /\/wwwroot\/lib\//i.test(filename)) return false;
   if (languages.some((language) => EXTENSIONS.get(language).test(filename))) return true;
   return !path.posix.extname(filename) && languages.some((language) => INTERPRETERS[language]);
@@ -159,8 +159,10 @@ async function rulesFor(selected, rulesRoot, environment) {
   if (head.status || clean.status || head.stdout.trim() !== tools["semgrep-ce"].rulesRevision) {
     throw new Error("Semgrep rules do not match the pinned immutable revision");
   }
-  const ruleDirectories = { cpp: "c", typescript: "javascript" };
-  const languageDirectories = new Set(selected.languages.map((language) => ruleDirectories[language] ?? language));
+  const languageDirectories = new Set(selected.languages.flatMap((language) => {
+    if (language === "cpp") return ["c"];
+    return language === "typescript" ? ["typescript", "javascript"] : [language];
+  }));
   const tracked = run("/usr/bin/git", ["ls-files", "-z"], rulesRoot, environment);
   if (tracked.status) throw new Error("Cannot inventory pinned Semgrep rules");
   const configs = tracked.stdout.split("\0").filter((file) =>

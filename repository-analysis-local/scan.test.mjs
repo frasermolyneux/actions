@@ -26,11 +26,18 @@ test("tracked Terraform JSON and supported extensionless scripts enter the real 
     ["tools/validate", "#!/usr/bin/env node\nconsole.log('fixture');\n", ["javascript"]],
     ["maintenance/check", "#!/usr/bin/env php\n<?php echo 'fixture';\n", ["php"]],
     ["automation/check", "#!/usr/bin/env pwsh\nWrite-Output 'fixture'\n", ["powershell"]],
+    ["packages/app/src/main.mts", "export const fixture = true;\n", ["typescript"]],
+    ["packages/app/src/main.cts", "export const fixture = true;\n", ["typescript"]],
+    ["include/main.hh", "void fixture();\n", ["cpp"]],
+    ["include/main.hxx", "void fixture();\n", ["cpp"]],
+    ["operations/check.bash", "#!/bin/bash\necho fixture\n", ["shell"]],
+    ["operations/check.dash", "#!/bin/dash\necho fixture\n", ["shell"]],
+    ["operations/check.ksh", "#!/bin/ksh\necho fixture\n", ["shell"]],
     ["README", "This is not an executable script.\n", []],
     ["vendor/verify", "#!/bin/sh\necho excluded\n", []],
     ["node_modules/check", "#!/bin/sh\necho excluded\n", []],
   ];
-  const languages = ["terraform", "shell", "python", "javascript", "php", "powershell"];
+  const languages = ["terraform", "shell", "python", "javascript", "typescript", "cpp", "php", "powershell"];
   try {
     for (const [filename, content, expected] of fixtures) {
       await mkdir(path.dirname(path.join(root, filename)), { recursive: true });

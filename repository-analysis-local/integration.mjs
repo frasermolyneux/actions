@@ -12,11 +12,19 @@ const files = {
   "main.php": "<?php\nfunction run_command($value) { return shell_exec($value); }\n",
   "main.js": "export function run(value) { return eval(value); }\n",
   "main.ts": "export function run(value: string) { return eval(value); }\n",
+  "main.cts": "export function run(value: string) { return eval(value); }\n",
+  "packages/app/src/main.mts": "export function run(value: string) { return eval(value); }\n",
+  "Main.cpp": "#include <cstdio>\nclass Fixture {\npublic:\n static void Run(int argc, char **argv) { printf(argv[1]); }\n};\n",
+  "include/main.hh": "#include <cstdio>\ninline void run(int argc, char **argv) { printf(argv[1]); }\n",
+  "include/main.hxx": "#include <cstdio>\ninline void run2(int argc, char **argv) { printf(argv[1]); }\n",
   "Main.cs": "using System.Diagnostics;\nclass Fixture {\n public static void Run(string value) { Process.Start(value); }\n}\n",
   "main.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
   "main.ps1": "Write-Host 'fixture'\n",
   "automation/check": "#!/usr/bin/env pwsh\nWrite-Host 'extensionless fixture'\n",
   "operations/health": "#!/bin/sh\necho $FIXTURE_VALUE\n",
+  "operations/health.bash": "#!/bin/bash\necho $FIXTURE_VALUE\n",
+  "operations/health.dash": "#!/bin/dash\necho $FIXTURE_VALUE\n",
+  "operations/health.ksh": "#!/bin/ksh\necho $FIXTURE_VALUE\n",
   "main.tf": "resource \"azurerm_storage_account\" \"fixture\" {\n  name = \"fixture\"\n  resource_group_name = \"fixture\"\n  location = \"uksouth\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  min_tls_version = \"TLS1_0\"\n}\n",
   "json/main.tf.json": JSON.stringify({ resource: { azurerm_storage_account: { fixture: {
     name: "jsonfixture", resource_group_name: "fixture", location: "uksouth",
@@ -39,7 +47,7 @@ execFileSync("/usr/bin/git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c
 const sha = execFileSync("/usr/bin/git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const context = selectAnalysis({
   version: "repository-analysis-v1",
-  languages: ["actions", "csharp", "javascript", "typescript", "php", "python", "powershell",
+  languages: ["actions", "csharp", "cpp", "javascript", "typescript", "php", "python", "powershell",
     "shell", "terraform", "bicep", "dockerfile", "ansible"],
   sonar: false,
 }, {
@@ -86,6 +94,11 @@ if (tool === "checkov") {
 if (tool === "psscriptanalyzer") {
   assert.ok(native.results.some((entry) => entry.ScriptPath.endsWith("/automation/check")),
     "The extensionless PowerShell fixture must actually be analyzed");
+}
+if (tool === "semgrep-ce") {
+  for (const filename of ["Main.cpp", "include/main.hh", "include/main.hxx", "main.cts", "packages/app/src/main.mts"]) {
+    assert.ok(native.results.some((entry) => entry.path === filename), `A real security rule must detect ${filename}`);
+  }
 }
 assert.doesNotMatch(JSON.stringify(report), /fixture-credential/);
 assert.doesNotMatch(await readFile(environment.GITHUB_STEP_SUMMARY, "utf8"), /fixture-credential/);

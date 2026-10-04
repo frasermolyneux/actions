@@ -20,7 +20,7 @@ without login, cloud publication, local builds or autofix. The current upstream 
 the [Semgrep Rules License](https://semgrep.dev/legal/rules-license): internal use only,
 not rule redistribution or providing a scanning service to others. Each runner downloads
 its own immutable upstream revision; the action does not redistribute the rules.
-TypeScript selects the shared JavaScript/TypeScript rules directory.
+TypeScript selects both its own rules directory and the shared JavaScript/TypeScript rules.
 zizmor runs offline with strict
 collection. Checkov runs only the selected IaC frameworks, without platform authentication
 or external module downloads. Bandit, ShellCheck and PSScriptAnalyzer parse source locally.
@@ -39,6 +39,8 @@ Checkov framework, not merely the Terraform source-inventory count.
 Extensionless PowerShell is analyzed as script text with its originating source path;
 completed PowerShell reports must identify every selected file, not just match a count.
 Every selected capability needs nonempty source.
+First-party monorepo source under `packages/` is included. TypeScript module files
+(`.mts`, `.cts`), C++ headers (`.hh`, `.hxx`) and Bash/Dash/Ksh file extensions are included.
 
 The runner verifies actual engine versions and native report structure, counts, parsing
 errors, selected framework completeness and available per-file evidence. A second checkout
