@@ -3,7 +3,7 @@
   "version": "1.0",
   "inherit": false,
   "pathFilters": [
-    "repository-publication-origin/**"
+    ":/repository-publication-origin"
   ],
   "publicReleaseRefSpec": [
     "^refs/heads/main$"

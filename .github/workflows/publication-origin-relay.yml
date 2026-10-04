@@ -25,6 +25,24 @@ jobs:
         with:
           github-token: ${{ github.token }}
           app-id: '1'
+      - name: Require positive human acceptance independently of guard output
+        if: github.event.workflow_run.actor.type == 'User'
+        shell: bash
+        env:
+          ALLOWED: ${{ steps.origin.outputs.publication-allowed }}
+          REPORT: ${{ steps.origin.outputs.report-directory }}/origin.json
+        run: |
+          test "$ALLOWED" = 'true'
+          node --input-type=module -e '
+            import { readFile } from "node:fs/promises";
+            import assert from "node:assert/strict";
+            const proof = JSON.parse(await readFile(process.env.REPORT, "utf8"));
+            assert.equal(proof.decision.allowed, true);
+            assert.equal(proof.lineage.length, 2);
+            assert.equal(proof.sourceSha, proof.lineage[0].sha);
+            assert.equal(proof.execution.sourceSha, proof.lineage.at(-1).sha);
+            assert.equal(proof.execution.workflowSha, proof.lineage.at(-1).sha);
+          '
       - name: Retain an originating-repository-only lineage proof
         if: steps.origin.outputs.publication-allowed == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

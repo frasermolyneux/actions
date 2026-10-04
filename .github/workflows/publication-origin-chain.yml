@@ -37,21 +37,28 @@ jobs:
           github-token: ${{ github.token }}
           app-id: '1'
           trusted-producers: ${{ steps.producer.outputs.policy }}
-      - name: Assert actual origin is preserved through both hops
-        if: steps.origin.outputs.publication-allowed == 'true'
+      - name: Assert positive acceptance and intentional holds independently
         shell: bash
         env:
+          EXPECTED_POSITIVE: ${{ github.event.workflow_run.actor.type == 'User' }}
           REPORT: ${{ steps.origin.outputs.report-directory }}/origin.json
         run: |
           node --input-type=module -e '
             import { readFile } from "node:fs/promises";
             import assert from "node:assert/strict";
             const proof = JSON.parse(await readFile(process.env.REPORT, "utf8"));
-            assert.equal(proof.lineage.length, 3);
-            assert.equal(proof.sourceSha, proof.lineage[0].sha);
-            assert.equal(proof.decision.allowed, true);
+            const expectedPositive = process.env.EXPECTED_POSITIVE === "true";
+            assert.equal(proof.decision.allowed, expectedPositive);
             assert.equal(proof.execution.sourceSha, proof.lineage.at(-1).sha);
             assert.equal(proof.execution.workflowSha, proof.lineage.at(-1).sha);
+            if (expectedPositive) {
+              assert.equal(proof.lineage.length, 3);
+              assert.equal(proof.sourceSha, proof.lineage[0].sha);
+            } else {
+              assert.equal(proof.decision.origin, "missing-producer-proof");
+              assert.equal(proof.lineage.length, 2);
+              assert.equal(proof.sourceSha, null);
+            }
           '
       - name: Retain the complete hosted lineage
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -149,6 +149,9 @@ not an actual App dependency merge. The relay/chain workflows exercise real nest
 `workflow_run` and artifact processing without merge/cloud credentials or publication.
 Actual catalog-scoped App-merge preservation evidence is required during rollout; fixtures
 do not substitute for it.
+Positive human fixture runs are identified from the trigger actor independently of the guard
+output and must authorize with the expected lineage and runtime/root SHA bindings. A successful
+hold cannot masquerade as positive acceptance; intentional bot holds have separate assertions.
 
 This shared primitive alone does not mean estate routes are guarded. Install and verify
 every affected route, including downstream consumers and existing automation, before
