@@ -122,20 +122,18 @@ export function decideOrigin({ repository, run, pullRequests, identities, permis
   if (!Array.isArray(pullRequests)) throw new Error("Associated pull requests must be an array");
   const matching = pullRequests.filter(pr => pr.merged === true && pr.merge_commit_sha === run.head_sha &&
     pr.base?.repo?.id === repository.id);
-  if (matching.length > 1) return denied("ambiguous-merge", "Multiple merged pull requests claim this source commit");
-  const pr = matching[0];
   const user = actor(run.actor);
   if (user.type === "User") {
     if (!["admin", "maintain", "write"].includes(permission)) {
       return denied("untrusted-human", "Publication requires a verified repository-write human actor");
     }
     if (run.event !== "push") return allowed(`human-${run.event}`, "Existing write-authorized manual or scheduled behavior");
-    if (pr && pr.merged_by?.id !== user.id) {
-      return denied("actor-mismatch", "The push actor does not match the verified merge actor");
-    }
-    return allowed(pr ? "human-merge" : "human-push", "Verified repository-write human push or merge");
+    const humanMerge = matching.length === 1 && matching[0].merged_by?.id === user.id;
+    return allowed(humanMerge ? "human-merge" : "human-push", "Verified repository-write human push or merge");
   }
   if (run.event !== "push") return denied("unknown-automation", "Bot-triggered manual or scheduled publication is not authorized");
+  if (matching.length > 1) return denied("ambiguous-merge", "Multiple merged pull requests claim this source commit");
+  const pr = matching[0];
   if (!pr || pr.merged_by?.id !== user.id || pr.merged_by?.type !== "Bot") {
     return denied("unproven-bot-merge", "The bot push is not bound to one exact merged pull request");
   }

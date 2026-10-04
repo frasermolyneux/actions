@@ -151,9 +151,11 @@ test("bot pushes without one exact merged PR are held", () => {
   }
 });
 
-test("ambiguous exact merges and mismatched human merge actors are held", () => {
-  assert.equal(decision({ pullRequests: [pr(), pr({ number: 8 })] }).origin, "ambiguous-merge");
-  assert.equal(decision({ pullRequests: [pr({ merged_by: app })] }).origin, "actor-mismatch");
+test("ambiguous bot merges hold while human pushes are not misattributed to earlier merges", () => {
+  assert.equal(decision({ run: run({ actor: app }),
+    pullRequests: [pr({ merged_by: app }), pr({ number: 8, merged_by: app })] }).origin, "ambiguous-merge");
+  assert.equal(decision({ pullRequests: [pr({ merged_by: app })] }).origin, "human-push");
+  assert.equal(decision({ pullRequests: [pr(), pr({ number: 8 })] }).origin, "human-push");
 });
 
 test("PRs, dynamic events, unknown bots and foreign source repositories are held", () => {
@@ -246,6 +248,18 @@ test("direct prepare/finalize uses live permission and merge metadata without so
   assert.equal(result.sourceSha, SOURCE);
   assert.deepEqual(result.lineage.map(value => value.id), [root.id]);
   assert.ok(api.observed.every(endpoint => !endpoint.includes("/git/blobs")));
+});
+
+test("a write-authorized release manager can tag a commit merged by another maintainer", async () => {
+  const root = run({ head_branch: "v1.0.0" });
+  const otherMaintainer = { ...human, id: 9, login: "maintainer" };
+  const api = apiFixture({ runs: [root], pullRequests: [pr({ merged_by: otherMaintainer })] });
+  const plan = await request(root, api, { event: { ref: "refs/tags/v1.0.0" } });
+  const result = await finalize(plan, api);
+  assert.equal(result.decision.allowed, true);
+  assert.equal(result.decision.origin, "human-push");
+  assert.equal(result.sourceSha, SOURCE);
+  assert.equal((await finalize(plan, apiFixture({ runs: [root], permission: "read" }))).decision.allowed, false);
 });
 
 test("a direct App merge resolves the official App and bot identities before denial", async () => {
