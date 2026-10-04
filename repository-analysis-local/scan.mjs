@@ -250,6 +250,11 @@ export async function scan(environment = process.env) {
   const [executable, args] = command(tool, pin.version, inventory.files,
     rules, selected, environment.ANALYSIS_PS_MODULE_ROOT, environment.ANALYSIS_SCANNER_BIN);
   const execution = run(executable, args, source, safeEnvironment);
+  const diagnostics = path.join(scratch, "diagnostics");
+  await mkdir(diagnostics);
+  await writeFile(path.join(diagnostics, "stdout.txt"), execution.stdout);
+  await writeFile(path.join(diagnostics, "stderr.txt"), execution.stderr);
+  await appendFile(environment.GITHUB_OUTPUT, `diagnostic-directory=${diagnostics}\n`);
   validateExit(tool, execution.status);
   let native;
   try {

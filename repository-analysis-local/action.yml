@@ -20,6 +20,9 @@ outputs:
   finding-count:
     description: Finding count from a complete validated native report.
     value: ${{ steps.scan.outputs.finding-count }}
+  diagnostic-directory:
+    description: Originating-repository-only native diagnostics; not completed or clean scan evidence.
+    value: ${{ steps.scan.outputs.diagnostic-directory }}
 runs:
   using: composite
   steps:

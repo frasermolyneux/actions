@@ -20,6 +20,7 @@ const files = {
   "Dockerfile": "FROM alpine:3.23\nRUN echo fixture\n",
   "main.bicep": "param location string = resourceGroup().location\nresource fixture 'Microsoft.Storage/storageAccounts@2023-05-01' = {\n  name: 'fixturestorage'\n  location: location\n  kind: 'StorageV2'\n  sku: { name: 'Standard_LRS' }\n  properties: { supportsHttpsTrafficOnly: false }\n}\n",
   "roles/fixture/tasks/main.yml": "- name: Run a fixture command\n  ansible.builtin.shell: echo fixture\n",
+  "ansible/playbook.yml": "- name: Fixture playbook\n  hosts: all\n  tasks:\n    - name: Run a fixture command\n      shell: echo fixture\n",
 };
 await Promise.all(Object.entries(files).map(async ([filename, content]) => {
   const destination = path.join(root, filename);
@@ -47,12 +48,24 @@ const environment = {
   GH_TOKEN: "fixture-credential-must-never-reach-scanners",
 };
 const installed = await install(environment);
-const report = await scan({
+let report;
+try {
+  report = await scan({
   ...environment,
   PATH: installed.bin ? installed.bin + path.delimiter + process.env.PATH : process.env.PATH,
   ANALYSIS_RULES: installed.rules, ANALYSIS_PS_MODULE_ROOT: installed.modules,
   ANALYSIS_SCANNER_BIN: installed.bin,
-});
+  });
+} catch (error) {
+  const output = await readFile(environment.GITHUB_OUTPUT, "utf8");
+  const diagnostics = output.split("\n").find((line) => line.startsWith("diagnostic-directory="));
+  if (diagnostics) {
+    const location = diagnostics.slice("diagnostic-directory=".length);
+    console.error(await readFile(path.join(location, "stdout.txt"), "utf8"));
+    console.error(await readFile(path.join(location, "stderr.txt"), "utf8"));
+  }
+  throw error;
+}
 assert.equal(report.status, "completed");
 assert.equal(report.sourceSha, sha);
 assert.equal(report.visibility, "private");

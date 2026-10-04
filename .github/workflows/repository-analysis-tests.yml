@@ -7,6 +7,28 @@ on:
 permissions:
   contents: read
 jobs:
+  live-composite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Exercise actual composite and live repository identity
+        id: scan
+        uses: ./repository-analysis-local
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
+          tool: zizmor
+          expected-sha: ${{ github.sha }}
+          github-token: ${{ github.token }}
+      - name: Retain originating-repository-only scanner evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: local-composite-evidence
+          path: ${{ steps.scan.outputs.report-directory }}
+          if-no-files-found: error
+          retention-days: 7
+
   local-analyzer:
     strategy:
       fail-fast: false

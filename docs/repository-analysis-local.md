@@ -11,6 +11,8 @@ preflight and Python 3.12 where needed. The metadata token is used only by prefl
 processes receive an explicit environment allowlist without provider or Actions credentials.
 Python analyzers use isolated virtual environments. PowerShell uses an explicitly pinned
 saved module. Semgrep downloads the pinned public rule revision without authentication.
+Scanner entry points use the installed virtual environment's absolute paths, not a target
+repository's executable search path.
 
 The six backends and versions are owned by `repository-analysis-local/tools.json`.
 Semgrep CE uses the pinned community security rules, metrics/version checks disabled,
@@ -30,8 +32,8 @@ supported scripts are included. Every selected capability needs nonempty source.
 The runner verifies actual engine versions and native report structure, counts, parsing
 errors, selected framework completeness and available per-file evidence. A second checkout
 identity/change check prevents publishing results after source changed during execution.
-Failed execution, malformed output, missing source
-coverage and no evaluated IaC policies fail explicitly. Findings are valid completed results,
+Failed execution, malformed output, missing source coverage and no evaluated IaC policies
+fail explicitly. Findings are valid completed results,
 not scanner failures. This component does not impose a new historical-backlog merge gate.
 
 Outputs point to `report.json` and the native report in `native.json`. The bounded local
@@ -41,6 +43,9 @@ Publication is **originating-repository artifact only**; callers must keep priva
 and summaries private. Never send these native reports or finding excerpts to public estate
 reporting. The shared public/native publication and aggregate result workflows are separate
 migration packages.
+Failed native runs also expose an originating-repository-only diagnostic directory.
+Diagnostics are never completed scan evidence and may contain source/finding excerpts;
+keep them private when the originating repository is private.
 
 ```yaml
 - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -66,5 +71,3 @@ acceptance requirement.
 node --test repository-analysis-local\scan.test.mjs
 git diff --check
 ```
-Scanner entry points use the installed virtual environment's absolute paths, not a target
-repository's executable search path.
