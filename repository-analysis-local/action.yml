@@ -1,0 +1,68 @@
+name: Repository Local Analysis
+description: Run one permitted, pinned local analyzer with isolated credentials and validated source/report provenance.
+inputs:
+  profile:
+    description: Catalog repository-analysis-v1 capability profile.
+    required: true
+  tool:
+    description: Local tool selected by the live repository policy.
+    required: true
+  expected-sha:
+    description: Frozen SHA that must match the actual checkout.
+    required: true
+  github-token:
+    description: Repository metadata-read token, used only by the live preflight.
+    required: true
+outputs:
+  report-directory:
+    description: Validated report and native results, for originating-repository artifact publication.
+    value: ${{ steps.scan.outputs.report-directory }}
+  finding-count:
+    description: Finding count from a complete validated native report.
+    value: ${{ steps.scan.outputs.finding-count }}
+  diagnostic-directory:
+    description: Originating-repository-only native diagnostics; not completed or clean scan evidence.
+    value: ${{ steps.scan.outputs.diagnostic-directory }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve live analysis policy
+      id: context
+      uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.0.1
+      with:
+        profile: ${{ inputs.profile }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Set up Python
+      if: inputs.tool != 'psscriptanalyzer'
+      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+      with:
+        python-version: '3.12'
+
+    - name: Install pinned local analyzer
+      id: install
+      shell: bash
+      env:
+        ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+        ANALYSIS_TOOL: ${{ inputs.tool }}
+        SCANNER_SCRIPT: ${{ github.action_path }}/scan.mjs
+      run: |
+        set -euo pipefail
+        node "$SCANNER_SCRIPT" install
+        path="$(sed -n 's/^scanner-path=//p' "$GITHUB_OUTPUT")"
+        if [ -n "$path" ]; then
+          echo "$path" >> "$GITHUB_PATH"
+        fi
+
+    - name: Run and validate local analysis
+      id: scan
+      shell: bash
+      env:
+        ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+        ANALYSIS_TOOL: ${{ inputs.tool }}
+        ANALYSIS_EXPECTED_SHA: ${{ inputs.expected-sha }}
+        ANALYSIS_RULES: ${{ steps.install.outputs.rules-directory }}
+        ANALYSIS_PS_MODULE_ROOT: ${{ steps.install.outputs.module-root }}
+        ANALYSIS_SCANNER_BIN: ${{ steps.install.outputs.scanner-path }}
+        SCANNER_SCRIPT: ${{ github.action_path }}/scan.mjs
+      run: node "$SCANNER_SCRIPT"

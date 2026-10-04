@@ -74,7 +74,7 @@ jobs:
           # in the critical path across ~58 repos; extending this to every
           # action.yml in the repo is a reasonable follow-up but is a much
           # larger, separate cleanup (many pre-existing findings elsewhere).
-          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep repository-analysis-context"
+          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep repository-analysis-context repository-analysis-local"
         run: |
           set -euo pipefail
 
