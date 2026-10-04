@@ -1,0 +1,41 @@
+name: Repository Analysis State
+description: Validate selected-tool result completeness and exact-source weekly freshness without executing scanners.
+inputs:
+  profile:
+    description: Catalog repository-analysis-v1 capability profile.
+    required: true
+  github-token:
+    description: Repository metadata-read token; never a merge or cloud credential.
+    required: true
+  mode:
+    description: assemble a result bundle or assess verified default-branch freshness.
+    required: true
+  input-file:
+    description: Bounded JSON bundle in an isolated runner temporary directory.
+    required: true
+outputs:
+  status:
+    description: Completed, incomplete, superseded, not-applicable, scan or current; never a clean-finding claim.
+    value: ${{ steps.state.outputs.status }}
+  result-directory:
+    description: Validated state/result JSON for originating-repository-only publication.
+    value: ${{ steps.state.outputs.result-directory }}
+runs:
+  using: composite
+  steps:
+    - name: Re-evaluate live analysis capabilities
+      id: context
+      uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.0.1
+      with:
+        profile: ${{ inputs.profile }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Validate analysis state
+      id: state
+      shell: bash
+      env:
+        ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+        ANALYSIS_MODE: ${{ inputs.mode }}
+        ANALYSIS_INPUT: ${{ inputs.input-file }}
+        STATE_SCRIPT: ${{ github.action_path }}/state.mjs
+      run: node "$STATE_SCRIPT"

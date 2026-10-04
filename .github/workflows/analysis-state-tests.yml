@@ -1,0 +1,66 @@
+name: Analysis state contracts
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions: {}
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Exercise completeness, private boundaries and exact weekly freshness
+        shell: bash
+        run: node --test repository-analysis-state/state.test.mjs
+
+  live-state:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Prepare a cold-state contract fixture, not completed scanner evidence
+        shell: bash
+        env:
+          STATE_FIXTURE: ${{ runner.temp }}/analysis-state-input.json
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module -e '
+            import { writeFile } from "node:fs/promises";
+            const pin = (id) => ({ id, version: "0.0.0-fixture", ruleRevision: "0.0.0-fixture", engineDigest: "d".repeat(64) });
+            await writeFile(process.env.STATE_FIXTURE, JSON.stringify({
+              request: {
+                engine: { release: "repository-analysis/v1.0.0", sourceSha: process.env.SOURCE_SHA, digest: "d".repeat(64) },
+                pins: [pin("codeql/actions"), pin("local/zizmor")],
+                headSha: process.env.SOURCE_SHA, expectedSha: null, force: false
+              }, previous: null
+            }));
+          '
+      - name: Exercise actual composite against live repository visibility
+        id: state
+        uses: ./repository-analysis-state
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
+          github-token: ${{ github.token }}
+          mode: assess
+          input-file: ${{ runner.temp }}/analysis-state-input.json
+      - name: Require explicit scan-needed state, never fake completed scanner results
+        shell: bash
+        env:
+          STATUS: ${{ steps.state.outputs.status }}
+        run: test "$STATUS" = scan
