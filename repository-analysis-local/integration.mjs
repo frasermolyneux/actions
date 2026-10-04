@@ -14,9 +14,6 @@ const files = {
   "main.ts": "export function run(value: string) { return eval(value); }\n",
   "main.cts": "export function run(value: string) { return eval(value); }\n",
   "packages/app/src/main.mts": "export function run(value: string) { return eval(value); }\n",
-  "Main.cpp": "#include <cstdio>\nclass Fixture {\npublic:\n static void Run(int argc, char **argv) { printf(argv[1]); }\n};\n",
-  "include/main.hh": "#include <cstdio>\ninline void run(int argc, char **argv) { printf(argv[1]); }\n",
-  "include/main.hxx": "#include <cstdio>\ninline void run2(int argc, char **argv) { printf(argv[1]); }\n",
   "Main.cs": "using System.Diagnostics;\nclass Fixture {\n public static void Run(string value) { Process.Start(value); }\n}\n",
   "main.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
   "main.ps1": "Write-Host 'fixture'\n",
@@ -25,6 +22,7 @@ const files = {
   "operations/health.bash": "#!/bin/bash\necho $FIXTURE_VALUE\n",
   "operations/health.dash": "#!/bin/dash\necho $FIXTURE_VALUE\n",
   "operations/health.ksh": "#!/bin/ksh\necho $FIXTURE_VALUE\n",
+  "--exclude=SC2086": "#!/bin/sh\necho $FIXTURE_VALUE\n",
   "main.tf": "resource \"azurerm_storage_account\" \"fixture\" {\n  name = \"fixture\"\n  resource_group_name = \"fixture\"\n  location = \"uksouth\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  min_tls_version = \"TLS1_0\"\n}\n",
   "json/main.tf.json": JSON.stringify({ resource: { azurerm_storage_account: { fixture: {
     name: "jsonfixture", resource_group_name: "fixture", location: "uksouth",
@@ -47,7 +45,7 @@ execFileSync("/usr/bin/git", ["-C", root, "-c", "user.name=Scanner Fixture", "-c
 const sha = execFileSync("/usr/bin/git", ["-C", root, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const context = selectAnalysis({
   version: "repository-analysis-v1",
-  languages: ["actions", "csharp", "cpp", "javascript", "typescript", "php", "python", "powershell",
+  languages: ["actions", "csharp", "javascript", "typescript", "php", "python", "powershell",
     "shell", "terraform", "bicep", "dockerfile", "ansible"],
   sonar: false,
 }, {
@@ -96,9 +94,14 @@ if (tool === "psscriptanalyzer") {
     "The extensionless PowerShell fixture must actually be analyzed");
 }
 if (tool === "semgrep-ce") {
-  for (const filename of ["Main.cpp", "include/main.hh", "include/main.hxx", "main.cts", "packages/app/src/main.mts"]) {
-    assert.ok(native.results.some((entry) => entry.path === filename), `A real security rule must detect ${filename}`);
+  const findings = native.flatMap((entry) => entry.results);
+  for (const filename of ["main.cts", "packages/app/src/main.mts"]) {
+    assert.ok(findings.some((entry) => entry.path === filename), `A real security rule must detect ${filename}`);
   }
+}
+if (tool === "shellcheck") {
+  assert.ok(native.comments.some((entry) => entry.file === "--exclude=SC2086" && entry.code === 2086),
+    "An option-shaped filename must be analyzed, not interpreted as a suppression");
 }
 assert.doesNotMatch(JSON.stringify(report), /fixture-credential/);
 assert.doesNotMatch(await readFile(environment.GITHUB_STEP_SUMMARY, "utf8"), /fixture-credential/);

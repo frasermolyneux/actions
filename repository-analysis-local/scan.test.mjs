@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { checkovFrameworks, command, copySource, scannerEnvironment, selectTool } from "./scan.mjs";
+import { batchFiles, checkovFrameworks, command, copySource, engineDigest, scanGroups, scannerEnvironment, selectTool } from "./scan.mjs";
 import { validateReport } from "./reports.mjs";
 import { selectAnalysis } from "../repository-analysis-context/policy.mjs";
 
@@ -72,6 +73,61 @@ test("only a selected local analyzer and an intact policy context can execute", 
   assert.throws(() => selectTool(context, "codeql"), /supported local/);
   assert.throws(() => selectTool({ ...context, visibility: "public" }, "bandit"), /digest/);
   assert.throws(() => selectTool({ ...context, localTools: [] }, "bandit"), /not selected/);
+  const legacyCpp = { ...context, localTools: [{ tool: "semgrep-ce", languages: ["cpp"] }] };
+  assert.throws(() => selectTool(legacyCpp, "semgrep-ce"), /Local C\+\+ analysis is unavailable/);
+});
+
+test("Semgrep files and rules are scoped to one selected language at a time", () => {
+  const selected = { tool: "semgrep-ce", languages: ["csharp", "typescript"] };
+  const inventory = {
+    files: ["Main.cs", "main.cts", "packages/app/src/main.mts"],
+    languageFiles: { csharp: ["Main.cs"], typescript: ["main.cts", "packages/app/src/main.mts"] },
+  };
+  assert.deepEqual(scanGroups("semgrep-ce", selected, inventory), [
+    { selected: { tool: "semgrep-ce", languages: ["csharp"] }, files: ["Main.cs"] },
+    { selected: { tool: "semgrep-ce", languages: ["typescript"] }, files: ["main.cts", "packages/app/src/main.mts"] },
+  ]);
+  const reports = [
+    { version: "1", errors: [], results: [], paths: { scanned: ["Main.cs"] } },
+    { version: "1", errors: [], results: [{ path: "main.cts" }], paths: { scanned: inventory.languageFiles.typescript } },
+  ];
+  assert.equal(validateReport("semgrep-ce", reports, "1", inventory.files).length, 1);
+  assert.throws(() => validateReport("semgrep-ce", reports.slice(0, 1), "1", inventory.files), /every selected source file/);
+  assert.throws(() => validateReport("semgrep-ce", [
+    reports[0], { ...reports[1], errors: ["partial parse"] },
+  ], "1", inventory.files), /Semgrep errors/);
+});
+
+test("tracked filenames cannot inject options into positional-input analyzers", () => {
+  for (const tool of ["zizmor", "semgrep-ce", "bandit", "shellcheck"]) {
+    const args = command(tool, "1", ["--exclude=SC2086"], ["rules.yaml"], {})[1];
+    assert.equal(args[args.indexOf("--") + 1], "--exclude=SC2086");
+  }
+});
+
+test("argument batches cover every input within a byte bound, including rule options", () => {
+  const files = Array.from({ length: 6000 }, (_, index) => `packages/app-${index}/src/${"x".repeat(100)}.ts`);
+  const base = command("semgrep-ce", "1", [], ["rules.yaml"], {});
+  const batches = batchFiles(base, files);
+  assert.ok(batches.length > 1);
+  assert.deepEqual(batches.flat(), files);
+  for (const batch of batches) {
+    const args = command("semgrep-ce", "1", batch, ["rules.yaml"], {}).flat();
+    assert.ok(args.reduce((bytes, value) => bytes + Buffer.byteLength(value) + 1, 0) <= 128 * 1024);
+  }
+  assert.throws(() => batchFiles(["tool", ["x".repeat(128 * 1024)]], ["file"]), /options exceed/);
+  assert.throws(() => batchFiles(["tool", []], ["x".repeat(128 * 1024)]), /Source path exceeds/);
+});
+
+test("engine identity hashes a filename and length delimited manifest including the composite", async () => {
+  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "tools.json", "powershell-scan.ps1"]
+    .map(async (filename) => {
+      const content = await readFile(new URL(filename, import.meta.url));
+      return { filename, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };
+    }));
+  const expected = createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
+  assert.equal(await engineDigest(), expected);
+  assert.notEqual(await engineDigest(), createHash("sha256").update(JSON.stringify(manifest.slice(1))).digest("hex"));
 });
 
 test("scanner processes inherit neither credentials nor provider publishing settings", () => {

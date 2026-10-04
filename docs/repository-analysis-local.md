@@ -21,6 +21,10 @@ the [Semgrep Rules License](https://semgrep.dev/legal/rules-license): internal u
 not rule redistribution or providing a scanning service to others. Each runner downloads
 its own immutable upstream revision; the action does not redistribute the rules.
 TypeScript selects both its own rules directory and the shared JavaScript/TypeScript rules.
+Semgrep runs each selected language separately, retaining the native report collection;
+unknown module/script extensions cannot be sent to unrelated language parsers.
+Private C++ analysis is explicitly unavailable; the community C rules are not claimed to
+analyze C++. Public C++ remains eligible for the separate CodeQL workflow.
 zizmor runs offline with strict
 collection. Checkov runs only the selected IaC frameworks, without platform authentication
 or external module downloads. Bandit, ShellCheck and PSScriptAnalyzer parse source locally.
@@ -40,7 +44,7 @@ Extensionless PowerShell is analyzed as script text with its originating source 
 completed PowerShell reports must identify every selected file, not just match a count.
 Every selected capability needs nonempty source.
 First-party monorepo source under `packages/` is included. TypeScript module files
-(`.mts`, `.cts`), C++ headers (`.hh`, `.hxx`) and Bash/Dash/Ksh file extensions are included.
+(`.mts`, `.cts`) and Bash/Dash/Ksh file extensions are included.
 
 The runner verifies actual engine versions and native report structure, counts, parsing
 errors, selected framework completeness and available per-file evidence. A second checkout
@@ -52,6 +56,10 @@ not scanner failures. This component does not impose a new historical-backlog me
 Outputs point to `report.json` and the native report in `native.json`. The bounded local
 result identifies repository/visibility, frozen source SHA, policy/engine/rule digests,
 actual tool/package versions, source coverage, finding count and completion time.
+The engine digest includes a filename/length-delimited hash manifest of the composite and
+all execution helpers. Positional inputs use an end-of-options delimiter and byte-bounded
+batches; every native batch must validate before completion. `native.json` retains a report
+collection for language-scoped or multi-batch execution, without suppressing partial failures.
 Publication is **originating-repository artifact only**; callers must keep private artifacts
 and summaries private. Never send these native reports or finding excerpts to public estate
 reporting. The shared public/native publication and aggregate result workflows are separate

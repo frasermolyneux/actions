@@ -45,18 +45,18 @@ export function scannerEnvironment(environment, home) {
 export function command(tool, version, files, rules, source, moduleRoot, bin = "") {
   switch (tool) {
     case "zizmor":
-      return [path.join(bin, "zizmor"), ["--offline", "--strict-collection", "--format=sarif", ...files]];
+      return [path.join(bin, "zizmor"), ["--offline", "--strict-collection", "--format=sarif", "--", ...files]];
     case "semgrep-ce":
       return [path.join(bin, "semgrep"), ["scan", "--metrics=off", "--disable-version-check", "--no-git-ignore",
         "--strict", "--scan-unknown-extensions", "--max-target-bytes=0", "--json",
-        ...rules.flatMap((rule) => ["--config", rule]), ...files]];
+        ...rules.flatMap((rule) => ["--config", rule]), "--", ...files]];
     case "checkov":
       return [path.join(bin, "checkov"), ["--directory", ".", "--framework", ...checkovFrameworks(source.languages, files),
         "--skip-download", "--download-external-modules", "false", "--output", "json"]];
     case "bandit":
-      return [path.join(bin, "bandit"), ["--format", "json", "--quiet", ...files]];
+      return [path.join(bin, "bandit"), ["--format", "json", "--quiet", "--", ...files]];
     case "shellcheck":
-      return [path.join(bin, "shellcheck"), ["--norc", "--format=json1", ...files]];
+      return [path.join(bin, "shellcheck"), ["--norc", "--format=json1", "--", ...files]];
     case "psscriptanalyzer":
       return ["/usr/bin/pwsh", ["-NoProfile", "-NonInteractive", "-File", path.join(directory, "powershell-scan.ps1"),
         "-Source", ".", "-Version", version, "-ModuleRoot", moduleRoot]];
@@ -81,6 +81,9 @@ export function selectTool(context, tool) {
   const selected = context.localTools.find((entry) => entry.tool === tool);
   if (!selected?.languages?.length || selected.languages.some((language) => !EXTENSIONS.has(language))) {
     throw new Error("The local analyzer is not selected by the live capability policy");
+  }
+  if (tool === "semgrep-ce" && selected.languages.includes("cpp")) {
+    throw new Error("Local C++ analysis is unavailable; update the preflight and never report C rules as C++ coverage");
   }
   const { policyDigest, ...body } = context;
   const digest = createHash("sha256").update(JSON.stringify(body)).digest("hex");
@@ -124,6 +127,7 @@ async function snapshot(root, destination, selected, environment) {
   if (tracked.status || clean.status) throw new Error("Analysis requires an unchanged tracked checkout");
   const files = [];
   const counts = Object.fromEntries(selected.languages.map((language) => [language, 0]));
+  const languageFiles = Object.fromEntries(selected.languages.map((language) => [language, []]));
   const candidates = tracked.stdout.split("\0").filter(Boolean);
   const copied = [];
   let cursor = 0;
@@ -137,13 +141,16 @@ async function snapshot(root, destination, selected, environment) {
   }
   await Promise.all(Array.from({ length: 16 }, () => worker()));
   for (const { filename, capabilities } of copied) {
-    for (const language of capabilities) counts[language]++;
+    for (const language of capabilities) {
+      counts[language]++;
+      languageFiles[language].push(filename);
+    }
     if (capabilities.length) files.push(filename);
   }
   if (!files.length || Object.values(counts).some((value) => !value)) {
     throw new Error("Every selected analyzer capability needs nonempty maintained source");
   }
-  return { files, counts };
+  return { files, counts, languageFiles };
 }
 
 function validateExit(tool, status) {
@@ -160,7 +167,6 @@ async function rulesFor(selected, rulesRoot, environment) {
     throw new Error("Semgrep rules do not match the pinned immutable revision");
   }
   const languageDirectories = new Set(selected.languages.flatMap((language) => {
-    if (language === "cpp") return ["c"];
     return language === "typescript" ? ["typescript", "javascript"] : [language];
   }));
   const tracked = run("/usr/bin/git", ["ls-files", "-z"], rulesRoot, environment);
@@ -221,6 +227,7 @@ export async function install(environment = process.env) {
   const modules = path.join(scratch, "modules");
   let bin = "";
   if (tool === "psscriptanalyzer") {
+    await mkdir(modules);
     requiredCommand("/usr/bin/pwsh", ["-NoProfile", "-NonInteractive", "-Command",
       "$ErrorActionPreference='Stop'; Save-Module -Name PSScriptAnalyzer -RequiredVersion $env:PIN_VERSION -Path $env:PIN_MODULES -Repository PSGallery -Force"],
     scratch, { ...safe, PIN_VERSION: pin.version, PIN_MODULES: modules });
@@ -232,6 +239,65 @@ export async function install(environment = process.env) {
     `scanner-path=${bin}`, `rules-directory=${rules}`, `module-root=${modules}`, "",
   ].join("\n"));
   return { bin, rules, modules };
+}
+
+export function scanGroups(tool, selected, inventory) {
+  if (tool !== "semgrep-ce") return [{ selected, files: inventory.files }];
+  return selected.languages.map((language) => ({
+    selected: { tool, languages: [language] }, files: inventory.languageFiles[language],
+  }));
+}
+
+export function batchFiles(baseCommand, files) {
+  const limit = 128 * 1024;
+  const baseBytes = baseCommand.flat().reduce((bytes, value) => bytes + Buffer.byteLength(value) + 1, 0);
+  if (baseBytes >= limit) throw new Error("Pinned analyzer options exceed the command argument bound");
+  const batches = [];
+  let batch = [];
+  let bytes = baseBytes;
+  for (const file of files) {
+    const size = Buffer.byteLength(file) + 1;
+    if (baseBytes + size > limit) throw new Error("Source path exceeds the analyzer command argument bound");
+    if (bytes + size > limit) {
+      batches.push(batch);
+      batch = [];
+      bytes = baseBytes;
+    }
+    batch.push(file);
+    bytes += size;
+  }
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+
+async function executeScans(tool, pin, selected, inventory, source, environment, safeEnvironment) {
+  const executions = [];
+  for (const group of scanGroups(tool, selected, inventory)) {
+    const rules = tool === "semgrep-ce"
+      ? await rulesFor(group.selected, environment.ANALYSIS_RULES, safeEnvironment) : [];
+    const base = command(tool, pin.version, [], rules, group.selected,
+      environment.ANALYSIS_PS_MODULE_ROOT, environment.ANALYSIS_SCANNER_BIN);
+    const batches = ["zizmor", "semgrep-ce", "bandit", "shellcheck"].includes(tool)
+      ? batchFiles(base, group.files) : [group.files];
+    for (const files of batches) {
+      const [executable, args] = command(tool, pin.version, files,
+        rules, group.selected, environment.ANALYSIS_PS_MODULE_ROOT, environment.ANALYSIS_SCANNER_BIN);
+      executions.push({
+        languages: group.selected.languages, files, executable, args,
+        execution: run(executable, args, source, safeEnvironment),
+      });
+    }
+  }
+  return executions;
+}
+
+export async function engineDigest() {
+  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "tools.json", "powershell-scan.ps1"]
+    .map(async (filename) => {
+      const content = await readFile(path.join(directory, filename));
+      return { filename, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };
+    }));
+  return createHash("sha256").update(JSON.stringify(manifest)).digest("hex");
 }
 
 export async function scan(environment = process.env) {
@@ -258,28 +324,30 @@ export async function scan(environment = process.env) {
   await mkdir(source);
   const inventory = await snapshot(root, source, selected, safeEnvironment);
   verifyVersion(tool, pin, source, safeEnvironment, environment.ANALYSIS_SCANNER_BIN);
-  const rules = tool === "semgrep-ce" ? await rulesFor(selected, environment.ANALYSIS_RULES, safeEnvironment) : [];
-  const [executable, args] = command(tool, pin.version, inventory.files,
-    rules, selected, environment.ANALYSIS_PS_MODULE_ROOT, environment.ANALYSIS_SCANNER_BIN);
   const frameworks = tool === "checkov" ? checkovFrameworks(selected.languages, inventory.files) : selected.languages;
-  const execution = run(executable, args, source, safeEnvironment);
+  const executions = await executeScans(tool, pin, selected, inventory, source, environment, safeEnvironment);
   const diagnostics = path.join(scratch, "diagnostics");
   await mkdir(diagnostics);
-  await writeFile(path.join(diagnostics, "stdout.txt"), execution.stdout);
-  await writeFile(path.join(diagnostics, "stderr.txt"), execution.stderr);
+  await writeFile(path.join(diagnostics, "stdout.txt"), executions.map(({ execution }) => execution.stdout).join("\n"));
+  await writeFile(path.join(diagnostics, "stderr.txt"), executions.map(({ execution }) => execution.stderr).join("\n"));
   await writeFile(path.join(diagnostics, "execution.json"), JSON.stringify({
-    kind: "diagnostic-not-completed-analysis", tool, exit: execution.status,
-    sourceSha: head.stdout.trim(), sourceCoverage: inventory.counts, frameworks, executable, args,
+    kind: "diagnostic-not-completed-analysis", tool,
+    sourceSha: head.stdout.trim(), sourceCoverage: inventory.counts, frameworks,
+    executions: executions.map(({ languages, files, executable, args, execution }) =>
+      ({ languages, files, executable, args, exit: execution.status })),
   }, null, 2));
   await appendFile(environment.GITHUB_OUTPUT, `diagnostic-directory=${diagnostics}\n`);
-  validateExit(tool, execution.status);
+  for (const { execution } of executions) validateExit(tool, execution.status);
   let native;
+  let reports;
   try {
-    native = JSON.parse(execution.stdout);
+    reports = executions.map(({ execution }) => JSON.parse(execution.stdout));
+    native = tool === "semgrep-ce" || reports.length > 1 ? reports : reports[0];
   } catch (error) {
     throw new Error("Analyzer did not produce a valid JSON report", { cause: error });
   }
-  const findings = validateReport(tool, native, pin.version, inventory.files, frameworks);
+  const findings = reports.flatMap((report, index) =>
+    validateReport(tool, report, pin.version, executions[index].files, frameworks));
   const finalHead = run("/usr/bin/git", ["rev-parse", "HEAD"], root, safeEnvironment);
   const finalClean = run("/usr/bin/git", ["diff", "--exit-code", "HEAD", "--"], root, safeEnvironment);
   if (finalHead.status || finalClean.status || finalHead.stdout.trim() !== head.stdout.trim()) {
@@ -287,14 +355,12 @@ export async function scan(environment = process.env) {
   }
   const output = path.join(scratch, "result");
   await mkdir(output);
-  const engine = await Promise.all(["scan.mjs", "reports.mjs", "tools.json", "powershell-scan.ps1"]
-    .map((filename) => readFile(path.join(directory, filename))));
   const report = {
     schema: "repository-analysis-local-v1", status: "completed",
     repository: context.repository, repositoryId: context.repositoryId, visibility: context.visibility,
     sourceSha: head.stdout.trim(), policyDigest: context.policyDigest,
     tool, toolVersion: pin.engineVersion ?? pin.version, packageVersion: pin.version,
-    engineDigest: createHash("sha256").update(Buffer.concat(engine)).digest("hex"),
+    engineDigest: await engineDigest(),
     ruleRevision: pin.rulesRevision ?? pin.version,
     sourceCoverage: inventory.counts, findingCount: findings.length,
     publication: "originating-repository-artifact-only",

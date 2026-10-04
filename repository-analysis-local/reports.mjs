@@ -25,11 +25,17 @@ function validateSarif(report) {
 }
 
 function semgrep(report, version, inputs) {
-  if (report?.version !== version) throw new Error("Unexpected Semgrep version");
-  noErrors(report.errors, "Semgrep errors");
-  const scanned = new Set(array(report.paths?.scanned, "Semgrep scanned paths"));
+  const reports = Array.isArray(report) ? report : [report];
+  if (!reports.length) throw new Error("Missing Semgrep language reports");
+  const scanned = new Set();
+  const findings = reports.flatMap((entry) => {
+    if (entry?.version !== version) throw new Error("Unexpected Semgrep version");
+    noErrors(entry.errors, "Semgrep errors");
+    for (const file of array(entry.paths?.scanned, "Semgrep scanned paths")) scanned.add(file);
+    return array(entry.results, "Semgrep results");
+  });
   if (inputs.some((file) => !scanned.has(file))) throw new Error("Semgrep did not analyze every selected source file");
-  return array(report.results, "Semgrep results");
+  return findings;
 }
 
 function checkov(report, languages) {
