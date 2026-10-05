@@ -1,9 +1,11 @@
 import { appendFile, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import path from "node:path";
 import { authorizeSource, recipeDigest, validateRecipe, WORKFLOW_PATH } from "./sonar.mjs";
 
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
 const relative = (value) => typeof value === "string" &&
+  !value.startsWith("-") &&
   (value === "." || /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(value)) &&
   value.split("/").every((part) => !["", ".."].includes(part));
 
@@ -27,6 +29,12 @@ export function validateBuild(value, recipeInput) {
     "Build-aware .NET needs declared SDK/solution/format/test and coverage selections");
     requireValue(["kind", "sdk", "globalJson", "solution", "skipFormat", "tests"].length === Object.keys(value).length,
       "Unexpected .NET build inputs");
+    if (value.globalJson !== null) {
+      const directory = path.posix.normalize(path.posix.dirname(value.globalJson));
+      const source = path.posix.normalize(recipe.sourceDirectory);
+      requireValue(directory === "." || source === directory || source.startsWith(directory + "/"),
+        "Declared global.json must be discoverable from the build source directory or its ancestors");
+    }
   } else if (value.kind === "cmake") {
     const allowedConfigure = new Set(["-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
       "-DPORTAL_COD4X_BUILD_PLUGIN_BINARY=OFF"]);

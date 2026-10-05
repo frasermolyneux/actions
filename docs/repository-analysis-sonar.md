@@ -100,6 +100,9 @@ Declared SDKs and the repository's actual `global.json` SDK are installed
 **before** installing or beginning the pinned Sonar .NET scanner **11.3.0**.
 The final SDK-selection filename must be exactly `global.json`, not a matching
 suffix that the .NET CLI would not discover.
+It must be in the source directory or one of its repository ancestors, not an
+unrelated sibling or descendant. Solution inputs are paths, never option-prefixed
+values that could make restore/build return successful help without compilation.
 Restore, original format policy and Release/CI build are preserved. Successful
 unit tests use the existing `FullyQualifiedName!~IntegrationTests` selection and
 pinned native `dotnet-coverage` **18.11.2**, without test-package dependency changes.

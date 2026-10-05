@@ -35,3 +35,29 @@ test("SDK discovery uses the exact root or nested global.json basename", () => {
   assert.equal(validateBuild(build, dotnet).globalJson, "global.json");
   assert.equal(validateBuild({ ...build, globalJson: "src/global.json" }, dotnet).globalJson, "src/global.json");
 });
+
+test("a solution path cannot turn restore/build into a successful help invocation", () => {
+  for (const kind of ["dotnet", "netfx"]) {
+    const absentTests = { ...build, kind, tests: false };
+    for (const solution of ["-h", "--help", "-version", "-folder/Project.sln"]) {
+      assert.throws(() => validateBuild({ ...absentTests, solution },
+        { ...dotnet, coverage: "not-applicable" }), /SDK\/solution/);
+    }
+    assert.equal(validateBuild({ ...absentTests, solution: "src/-Named.sln" },
+      { ...dotnet, coverage: "not-applicable" }).solution, "src/-Named.sln");
+  }
+});
+
+test("the selected global.json must be a real build-search ancestor, not a sibling or descendant", () => {
+  for (const sourceDirectory of ["src", "src/project"]) {
+    for (const globalJson of ["global.json", "src/global.json", "src/./global.json"]) {
+      assert.equal(validateBuild({ ...build, globalJson }, { ...dotnet, sourceDirectory }).globalJson,
+        globalJson);
+    }
+  }
+  for (const [sourceDirectory, globalJson] of [
+    ["src", "other/global.json"], ["src", "src/child/global.json"],
+    ["src/project", "src/project-other/global.json"], [".", "src/global.json"],
+  ]) assert.throws(() => validateBuild({ ...build, globalJson },
+    { ...dotnet, sourceDirectory }), /discoverable/);
+});
