@@ -40,6 +40,8 @@ is accepted only when paired with a verified Dependabot author. Other bots,
 collaborators, fork authors, draft/closed PRs and superseded heads are denied.
 Outside PRs, analysis is confined to the default branch or explicit owner dispatch.
 Completed proofs record this trust policy and accepted same-runner boundary.
+On reruns, the authenticated current triggering actor is checked; an owner rerun
+can authorize an already approved automation origin but never an untrusted author.
 
 This policy does not authorize generic bot publication or change deployment,
 account, visibility or human-final-merge rules. New automation origins require a

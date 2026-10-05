@@ -16,6 +16,8 @@ match their tracked checkout bytes under a single native archive root. The resol
 database source location must identify the actual runner checkout.
 Estimated baseline lines are not extraction
 evidence. Archive file counts are not evaluated-line or coverage percentages.
+The raw SARIF `resultCount` can include diagnostic results and is not a native
+security-alert count; alert disposition belongs to the processed provider output.
 Live-public eligibility is checked again before the validated SARIF upload; the
 existing native verifier independently binds processing, source and publication.
 

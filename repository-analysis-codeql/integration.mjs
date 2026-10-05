@@ -78,7 +78,7 @@ await writeFile(path.join(directory, "proof.json"), JSON.stringify({
   sourceSha: env.GITHUB_SHA, language, version: "2.27.1", ruleRevision: "2.27.1",
   run: { id: Number(env.GITHUB_RUN_ID), attempt: Number(env.GITHUB_RUN_ATTEMPT) },
   extraction: extracted, resolvedDatabaseFields: Object.keys(resolved).sort((left, right) => left.localeCompare(right, "en")),
-  sarif: { sha256: hash(bytes), findingCount: analysis.results.length },
+  sarif: { sha256: hash(bytes), resultCount: analysis.results.length },
   publication: fixture ? "not-requested-fixture-source" : "await-independent-native-processing-proof",
 }) + "\n");
 console.log(`CodeQL genuinely archived ${extracted.files} selected source files; integration evidence only.`);

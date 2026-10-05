@@ -88,6 +88,15 @@ test("third-party identities, generic bots, spoofed service names and mismatched
     { ...pull, user: author }, pullInput, pullEvent), /author|actor/);
 });
 
+test("authenticated owner reruns authorize approved origins but cannot override an untrusted PR author", () => {
+  assert.equal(trustedSource(publicRepository, { actor: githubActions, triggering_actor: owner },
+    { ...pull, user: copilot }, pullInput, pullEvent).origin, "copilot");
+  assert.throws(() => trustedSource(publicRepository, { actor: owner, triggering_actor: githubActions },
+    { ...pull, user: copilot }, pullInput, pullEvent), /actor/);
+  assert.throws(() => trustedSource(publicRepository, { actor: githubActions, triggering_actor: owner },
+    { ...pull, user: { ...owner, id: 987 } }, pullInput, pullEvent), /author/);
+});
+
 test("trust admission refuses forks, superseded heads, closed/draft PRs and account/visibility changes", () => {
   for (const candidate of [
     { ...pull, draft: true }, { ...pull, state: "closed" },
@@ -178,7 +187,8 @@ test("not-applicable coverage cannot accept undeclared root scanner report paths
 
 test("alternate coverage imports are rejected without retaining their configured values", () => {
   for (const key of ["sonar.cs.opencover.reportsPaths", "sonar.javascript.lcov.reportPaths",
-    "sonar.coverageReportPaths", "sonar.python.coverage.reportPaths", "sonar.coverage.jacoco.xmlReportPaths"]) {
+    "sonar.coverageReportPaths", "sonar.python.coverage.reportPaths", "sonar.coverage.jacoco.xmlReportPaths",
+    "sonar.cs.dotcover.reportsPaths", "sonar.cfamily.llvm-cov.reportPath"]) {
     const alternate = scannerContext().replace("Project scanner properties:",
       `Project scanner properties:\n  - ${key}=unretained-value`);
     assert.throws(() => rootProperties(alternate), /Alternate Sonar coverage/);

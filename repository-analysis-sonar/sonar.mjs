@@ -52,10 +52,10 @@ export function trustedSource(repository, run, pullRequest, input, event) {
   const owner = repository?.owner;
   requireValue(repository?.id === input.repositoryId && repository.full_name === input.repository &&
     repository.visibility === "public" && repository.private === false &&
-    owner?.type === "User" && Number.isSafeInteger(owner.id) &&
+    owner?.type === "User" && Number.isSafeInteger(owner.id) && owner.id > 0 &&
     owner.login === input.repository.split("/")[0],
   "Sonar trusted-first-party policy requires this live public personal-owner repository");
-  const actor = run?.actor;
+  const actor = run?.triggering_actor ?? run?.actor;
   if (input.pullRequest === null) {
     requireValue(run.head_branch === repository.default_branch ||
       (run.event === "workflow_dispatch" && sameIdentity(actor, owner)),
@@ -144,7 +144,7 @@ export function rootProperties(scannerContext) {
     const key = line.slice(4, offset);
     requireValue(!seen.has(key), "Duplicate root Sonar scanner property");
     seen.add(key);
-    const coverageImport = /(?:coverage|opencover|cobertura|lcov|gcov|jacoco)/i.test(key) &&
+    const coverageImport = /(?:cover|cov|jacoco)/i.test(key) &&
       /report(?:s?Paths?|s)/i.test(key);
     requireValue(!coverageImport || key === "sonar.cs.cobertura.reportsPaths",
       "Alternate Sonar coverage import properties cannot prove the selected native report");
