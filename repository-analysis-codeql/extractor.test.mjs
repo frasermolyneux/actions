@@ -10,7 +10,7 @@ const metadata = "name: javascript\nfile_types:\n  - name: language\n    extensi
 
 test("candidate matching follows the complete pinned extractor declaration, including Vue-only input", () => {
   const extensions = extractorExtensions(metadata);
-  assert.deepEqual(extensions, [...declared].sort());
+  assert.deepEqual(extensions, [...declared].sort((left, right) => left.localeCompare(right, "en")));
   for (const extension of declared) assert(matchesExtractor("src/source" + extension, extensions));
   assert(matchesExtractor("src/App.VUE", extensions));
   assert.equal(["src/App.vue", "README.md"].filter((filename) => matchesExtractor(filename, extensions)).length, 1);

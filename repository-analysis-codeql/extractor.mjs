@@ -1,3 +1,9 @@
+function extensionLine(line) {
+  if (!line.startsWith("      - ")) return null;
+  if (!/^ {6}- \.[A-Za-z0-9]+$/.test(line)) throw new Error("Malformed pinned extractor extension");
+  return line.slice(8);
+}
+
 export function extractorExtensions(text) {
   if (typeof text !== "string" || Buffer.byteLength(text) > 128 * 1024 ||
       text.split(/\r?\n/).filter((line) => line === "file_types:").length !== 1) {
@@ -17,17 +23,14 @@ export function extractorExtensions(text) {
       active = true;
       continue;
     }
-    if (active && /^      - \.[A-Za-z0-9]+$/.test(line)) {
-      extensions.add(line.slice(8));
-    } else if (line.trim()) {
-      if (active && /^      - /.test(line)) throw new Error("Malformed pinned extractor extension");
-      active = false;
-    }
+    const extension = active ? extensionLine(line) : null;
+    if (extension) extensions.add(extension);
+    else if (line.trim()) active = false;
   }
   if (!extensions.size || extensions.size > 128) {
     throw new Error("Pinned extractor has no bounded supported source extensions");
   }
-  return [...extensions].sort();
+  return [...extensions].sort((left, right) => left.localeCompare(right, "en"));
 }
 
 export function matchesExtractor(filename, extensions) {

@@ -125,6 +125,11 @@ export function recipeDigest(recipe, build) {
   return hash(JSON.stringify(build === undefined ? material : { recipe: material, build }));
 }
 
+function isCoverageImport(key) {
+  return key === "sonar.cs.cobertura.reportsPaths" ||
+    (/(?:cover|cov|jacoco)/i.test(key) && /report(?:s?Paths?|s)/i.test(key));
+}
+
 export function rootProperties(scannerContext) {
   requireValue(typeof scannerContext === "string" &&
     Buffer.byteLength(scannerContext) <= 2 * 1024 * 1024, "Missing or oversized Sonar scanner context");
@@ -147,9 +152,7 @@ export function rootProperties(scannerContext) {
       continue;
     }
     const key = line.slice(4, offset);
-    const coverageImport = key === "sonar.cs.cobertura.reportsPaths" ||
-      (/(?:cover|cov|jacoco)/i.test(key) && /report(?:s?Paths?|s)/i.test(key));
-    requireValue(!coverageImport || (active && key === "sonar.cs.cobertura.reportsPaths"),
+    requireValue(!isCoverageImport(key) || (active && key === "sonar.cs.cobertura.reportsPaths"),
       "Alternate Sonar coverage import properties cannot prove the selected native report");
     if (!active) continue;
     requireValue(!seen.has(key), "Duplicate root Sonar scanner property");
