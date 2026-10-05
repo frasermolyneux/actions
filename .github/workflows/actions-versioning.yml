@@ -59,6 +59,7 @@ jobs:
             run-api-integration-tests
             repository-analysis-context
             repository-analysis-local
+            repository-analysis-sarif
             repository-analysis-state
             repository-publication-origin
             stale-branch-sweep
