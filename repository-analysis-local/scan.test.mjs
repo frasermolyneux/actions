@@ -142,7 +142,7 @@ test("argument batches cover every input within a byte bound, including rule opt
 });
 
 test("engine identity hashes a filename and length delimited manifest including the composite", async () => {
-  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "tools.json", "powershell-scan.ps1"]
+  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "sarif.mjs", "tools.json", "powershell-scan.ps1"]
     .map(async (filename) => {
       const content = await readFile(new URL(filename, import.meta.url));
       return { filename, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };

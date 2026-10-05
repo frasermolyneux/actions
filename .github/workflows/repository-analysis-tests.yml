@@ -87,7 +87,7 @@ jobs:
           node-version: '22'
       - name: Check policy, source, credential and report boundaries
         shell: bash
-        run: node --test repository-analysis-context/policy.test.mjs repository-analysis-local/scan.test.mjs
+        run: node --test repository-analysis-context/policy.test.mjs repository-analysis-local/scan.test.mjs repository-analysis-local/sarif.test.mjs
 
   live-composite:
     runs-on: ubuntu-latest

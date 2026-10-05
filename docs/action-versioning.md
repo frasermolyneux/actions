@@ -2,6 +2,12 @@
 
 Each composite action in this repository owns a dedicated `version.json` so Nerdbank.GitVersioning can calculate versions that only advance when files inside that folder change.
 
+The `repository-analysis` workflow package is the explicit exception: it has no
+composite `action.yml`; its path filters and release detector include the reusable
+local-analysis workflow and its actual context/local/native-verifier dependency
+closure. Invoke that workflow using an exact `repository-analysis/vX.Y.Z` tag;
+changes to any execution dependency trigger a new immutable package release.
+
 ## Publishing Flow
 
 - Pushing to `main` runs the `actions-versioning` workflow, which installs `nbgv`, recomputes versions for the folders touched in the push, and emits three tag shapes for each updated action.

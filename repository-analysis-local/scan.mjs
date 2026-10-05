@@ -4,6 +4,7 @@ import { appendFile, copyFile, lstat, mkdir, mkdtemp, readFile, writeFile } from
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateReport } from "./reports.mjs";
+import { toSarif } from "./sarif.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const tools = JSON.parse(await readFile(path.join(directory, "tools.json"), "utf8"));
@@ -307,7 +308,7 @@ async function executeScans(tool, pin, selected, inventory, source, environment,
 }
 
 export async function engineDigest() {
-  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "tools.json", "powershell-scan.ps1"]
+  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "sarif.mjs", "tools.json", "powershell-scan.ps1"]
     .map(async (filename) => {
       const content = await readFile(path.join(directory, filename));
       return { filename, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };
@@ -320,7 +321,8 @@ export async function scan(environment = process.env) {
   const tool = environment.ANALYSIS_TOOL;
   const selected = selectTool(context, tool);
   const pin = tools[tool];
-  const root = environment.GITHUB_WORKSPACE;
+  const workspace = environment.GITHUB_WORKSPACE;
+  const root = workspace ? path.resolve(workspace, environment.ANALYSIS_SOURCE_DIR ?? ".") : undefined;
   if (!root || !environment.RUNNER_TEMP || !/^[a-f\d]{40}$/.test(environment.ANALYSIS_EXPECTED_SHA ?? "")) {
     throw new Error("Source checkout, runner temporary directory and expected SHA are required");
   }
@@ -363,6 +365,8 @@ export async function scan(environment = process.env) {
   }
   const findings = reports.flatMap((report, index) =>
     validateReport(tool, report, pin.version, executions[index].files, frameworks));
+  const sarif = toSarif(tool, native, pin.engineVersion ?? pin.version,
+    executions.map((entry) => ({ files: entry.files, frameworks })), source);
   const finalHead = run("/usr/bin/git", ["rev-parse", "HEAD"], root, safeEnvironment);
   const finalClean = run("/usr/bin/git", ["diff", "--exit-code", "HEAD", "--"], root, safeEnvironment);
   if (finalHead.status || finalClean.status || finalHead.stdout.trim() !== head.stdout.trim()) {
@@ -383,6 +387,7 @@ export async function scan(environment = process.env) {
   };
   await writeFile(path.join(output, "report.json"), JSON.stringify(report, null, 2) + "\n");
   await writeFile(path.join(output, "native.json"), JSON.stringify(native) + "\n");
+  await writeFile(path.join(output, "analysis.sarif"), JSON.stringify(sarif) + "\n");
   await appendFile(environment.GITHUB_OUTPUT, `report-directory=${output}\nfinding-count=${findings.length}\n`);
   await appendFile(environment.GITHUB_STEP_SUMMARY, [
     `### Local analysis: ${tool}`, "",

@@ -12,6 +12,8 @@
   and private result boundaries for the estate analysis migration.
 - [docs/repository-analysis-local.md](docs/repository-analysis-local.md) - Pinned local
   analyzers, isolated source execution and truthful native result validation.
+- [docs/repository-analysis-workflows.md](docs/repository-analysis-workflows.md) - Reusable
+  selected-local-tool matrix, private artifacts and verified public SARIF publication.
 - [docs/repository-analysis-state.md](docs/repository-analysis-state.md) - Complete
   per-tool results, actual coverage provenance and bounded default-branch freshness.
 - [docs/repository-analysis-sarif.md](docs/repository-analysis-sarif.md) - Native SARIF

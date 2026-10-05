@@ -59,7 +59,12 @@ Failed execution, malformed output, missing source coverage and no evaluated IaC
 fail explicitly. Findings are valid completed results,
 not scanner failures. This component does not impose a new historical-backlog merge gate.
 
-Outputs point to `report.json` and the native report in `native.json`. The bounded local
+Outputs point to `report.json`, the native report in `native.json` and finding-preserving
+SARIF in `analysis.sarif` (`sarif-file`). Conversion retains actual rule/message/location
+identities, version and counts; incomplete native output or unanalysed finding paths
+cannot become completed SARIF. File-level diagnostics do not invent line numbers.
+The `source-directory` input defaults to the workspace and can select a separate target
+checkout, keeping trusted shared helpers outside the scanned Git tree. The bounded local
 result identifies repository/visibility, frozen source SHA, policy/engine/rule digests,
 actual tool/package versions, source coverage, finding count and completion time.
 The engine digest includes a filename/length-delimited hash manifest of the composite and
@@ -70,6 +75,8 @@ Publication is **originating-repository artifact only**; callers must keep priva
 and summaries private. Never send these native reports or finding excerpts to public estate
 reporting. The shared public/native publication and aggregate result workflows are separate
 migration packages.
+The [selected local workflow](repository-analysis-workflows.md) implements the local
+tool matrix and public-native publishing portion; it is not full-profile completion.
 Failed native runs also expose an originating-repository-only diagnostic directory.
 Diagnostics are never completed scan evidence and may contain source/finding excerpts;
 keep them private when the originating repository is private.
@@ -98,6 +105,6 @@ incomplete or parsing-error reports. Actual private-repository execution remains
 acceptance requirement.
 
 ```powershell
-node --test repository-analysis-local\scan.test.mjs
+node --test repository-analysis-local\scan.test.mjs repository-analysis-local\sarif.test.mjs
 git diff --check
 ```

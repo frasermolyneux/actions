@@ -61,6 +61,7 @@ jobs:
             repository-analysis-local
             repository-analysis-sarif
             repository-analysis-state
+            repository-analysis
             repository-publication-origin
             stale-branch-sweep
             terraform-apply
@@ -84,7 +85,12 @@ jobs:
           CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}")
           SELECTED=()
           for ACTION in "${ACTIONS[@]}"; do
-            if echo "$CHANGED" | grep -q "^${ACTION}/"; then
+            if [[ "$ACTION" == "repository-analysis" ]]; then
+              PATTERN='^(repository-analysis(-context|-local|-sarif)?/|\.github/workflows/repository-analysis-local\.yml$)'
+            else
+              PATTERN="^${ACTION}/"
+            fi
+            if echo "$CHANGED" | grep -Eq "$PATTERN"; then
               SELECTED+=("$ACTION")
             fi
           done

@@ -59,7 +59,8 @@ const context = selectAnalysis({
   archived: false, fork: false, owner: { type: "User" },
 }, "fixture/sandbox");
 const environment = {
-  ...process.env, GITHUB_WORKSPACE: root, GITHUB_REPOSITORY: "fixture/sandbox", GITHUB_REPOSITORY_ID: "123",
+  ...process.env, GITHUB_WORKSPACE: path.dirname(root), ANALYSIS_SOURCE_DIR: path.basename(root),
+  GITHUB_REPOSITORY: "fixture/sandbox", GITHUB_REPOSITORY_ID: "123",
   ANALYSIS_CONTEXT: JSON.stringify(context), ANALYSIS_TOOL: tool, ANALYSIS_EXPECTED_SHA: sha,
   GITHUB_OUTPUT: path.join(root, "outputs"), GITHUB_STEP_SUMMARY: path.join(root, "summary"),
   GH_TOKEN: "fixture-credential-must-never-reach-scanners",
@@ -92,6 +93,18 @@ assert.ok(report.findingCount > 0, "The deliberately insecure fixture must produ
 const outputs = await readFile(environment.GITHUB_OUTPUT, "utf8");
 const result = outputs.split("\n").find((line) => line.startsWith("report-directory="));
 const native = JSON.parse(await readFile(path.join(result.slice("report-directory=".length), "native.json"), "utf8"));
+const sarif = JSON.parse(await readFile(path.join(result.slice("report-directory=".length), "analysis.sarif"), "utf8"));
+assert.equal(sarif.version, "2.1.0");
+assert.equal(sarif.runs.length, 1);
+assert.equal(sarif.runs[0].automationDetails.id, `/tool:${tool}/`);
+assert.equal(sarif.runs[0].tool.driver.version, report.toolVersion);
+assert.equal(sarif.runs[0].results.length, report.findingCount);
+assert.ok(sarif.runs[0].results.every((finding) => finding.ruleId &&
+  finding.message?.text && finding.locations?.every((location) =>
+    location.physicalLocation.artifactLocation.uri &&
+    !location.physicalLocation.artifactLocation.uri.startsWith("/") &&
+    !location.physicalLocation.artifactLocation.uri.includes(root))));
+assert.doesNotMatch(JSON.stringify(sarif), /fixture-credential/);
 if (tool === "checkov") {
   assert.ok(native.every((entry) => entry.summary.failed > 0), "Each IaC framework fixture must detect a real finding");
 }
@@ -125,4 +138,5 @@ if (tool === "checkov") {
   assert.equal((await readFile(environment.GITHUB_OUTPUT, "utf8")).match(/^report-directory=/gm).length, 1,
     "Unsupported input must not emit another completed result");
 }
-console.log(JSON.stringify({ tool, fixture: true, sourceCoverage: report.sourceCoverage, findings: report.findingCount }));
+console.log(JSON.stringify({ tool, fixture: true, sourceCoverage: report.sourceCoverage,
+  findings: report.findingCount, sarifFindings: sarif.runs[0].results.length }));
