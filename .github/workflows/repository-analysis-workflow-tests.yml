@@ -26,7 +26,8 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: false
-      - run: node --test repository-analysis/workflow.test.mjs
+      - shell: bash
+        run: node --test repository-analysis/workflow.test.mjs
 
   actual-shared-workflow:
     permissions:
@@ -50,6 +51,7 @@ jobs:
           artifact-ids: ${{ needs.actual-shared-workflow.outputs.artifact-id }}
           path: ${{ runner.temp }}/local-set
       - name: Verify the real selected-tool execution and native publication boundary
+        shell: bash
         env:
           ACTUAL_SOURCE: ${{ github.sha }}
         run: |

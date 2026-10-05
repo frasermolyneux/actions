@@ -64,8 +64,12 @@ jobs:
             with self.subTest(reference=reference), self.assertRaises(ValueError):
                 lint_copy(f"jobs:\n  call:\n    uses: {reference}\n", True)
 
-    def test_anchored_or_escaped_self_references_fail_closed(self):
-        for reference in ("&helper $/helper", '"\\u0024/helper"'):
+    def test_tagged_anchored_or_escaped_self_references_fail_closed(self):
+        for reference in ("&helper $/helper", '"\\u0024/helper"',
+                          "!!str &helper $/helper", "!!str &helper '$/helper'",
+                          '&helper !!str "$/helper"',
+                          "!<tag:yaml.org,2002:str> &helper $/helper",
+                          "!!str $/helper"):
             with self.subTest(reference=reference), self.assertRaises(ValueError):
                 lint_copy(WORKFLOW.replace("$/helper", reference), True)
         with self.assertRaises(ValueError):
@@ -157,6 +161,15 @@ jobs:
                 WORKFLOW.replace("required: value", "required: ${{ nonexisting.value }}")):
             self.write(".github/workflows/test.yml", invalid)
             self.assertNotEqual(run(self.executable, self.root), 0)
+
+    def test_tagged_anchors_never_reach_the_released_parser(self):
+        for reference in ("!!str &helper $/helper", '&helper !!str "$/helper"'):
+            self.write(".github/workflows/test.yml", WORKFLOW.replace("$/helper", reference))
+            before = (self.root / ".github/workflows/test.yml").read_bytes()
+            with self.subTest(reference=reference), self.assertRaisesRegex(
+                    ValueError, "untagged, unanchored"):
+                run(self.executable, self.root)
+            self.assertEqual((self.root / ".github/workflows/test.yml").read_bytes(), before)
 
     def test_embedded_shellcheck_remains_enabled_on_hosted_runner(self):
         if os.name == "nt":

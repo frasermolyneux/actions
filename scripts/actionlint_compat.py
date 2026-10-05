@@ -59,8 +59,9 @@ def lint_copy(text, workflow, files=None):
                 raise ValueError(f"Self-repository target metadata is missing: {reference!r}")
         start, end = value.start_mark.index, value.end_mark.index
         original = text[start:end]
-        if start < key.end_mark.index or original.lstrip().startswith("&") or reference not in original:
-            raise ValueError("Self-repository references must be literal, unanchored uses values")
+        if start < key.end_mark.index or original not in (
+                reference, f'"{reference}"', f"'{reference}'"):
+            raise ValueError("Self-repository references must be literal, untagged, unanchored uses values")
         replacements[start] = (end, original.replace(reference, "." + reference[1:], 1))
     for start, (end, replacement) in sorted(replacements.items(), reverse=True):
         text = text[:start] + replacement + text[end:]

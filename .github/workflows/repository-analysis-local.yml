@@ -156,6 +156,7 @@ jobs:
           profile: ${{ inputs.profile }}
           github-token: ${{ github.token }}
       - name: Fail closed if visibility, eligibility or the frozen policy changed
+        shell: bash
         env:
           CURRENT_CONTEXT: ${{ steps.context.outputs.context }}
           PLANNED_CONTEXT: ${{ needs.plan.outputs.context }}
@@ -226,7 +227,8 @@ jobs:
         with:
           profile: ${{ inputs.profile }}
           github-token: ${{ github.token }}
-      - run: mkdir "$RUNNER_TEMP/selected-local-evidence"
+      - shell: bash
+        run: mkdir "$RUNNER_TEMP/selected-local-evidence"
       - if: needs.plan.outputs.has-tools == 'true'
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
