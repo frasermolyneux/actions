@@ -200,6 +200,9 @@ jobs:
           command: ${{ steps.scanner.outputs.command }}
           source-directory: ${{ steps.prepare.outputs.source-directory }}
           sonar-token: ${{ secrets.SONAR_TOKEN }}
+          coverage-report: ${{ steps.tests.outputs.coverage-report }}
+          test-report: ${{ steps.tests.outputs.report }}
+          coverage-directory: ${{ steps.tests.outputs.results-directory }}
       - name: Assemble bounded CLI arguments from validated properties
         id: cli
         if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'

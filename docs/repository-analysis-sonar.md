@@ -133,7 +133,9 @@ Only the exact `Project scanner properties:` section supplies identity.
 Server settings and repeated `Scanner properties of module:` sections may contain
 different project keys; they cannot override the root. Duplicate root sections or
 keys fail. Raw scanner context is parsed in memory and **never logged or retained**.
-Alternate coverage-import properties are rejected without retaining their values;
+Coverage-import properties are checked in every section and are allowed only
+for the selected Cobertura property in the one root section. Server/module
+coverage settings are rejected without retaining their values;
 another configured coverage source cannot supply the selected report's measures.
 
 The output binds the actual task/analysis ID, repository/source/policy/recipe,
@@ -144,7 +146,11 @@ The existing Sonar check and DevEx advisory classifier still own their respectiv
 
 Coverage collection verifies the actual report hash and source, pinned collector,
 positive instrumentation and genuinely passing executed TRX tests. Its selection
-must contain this job's single isolated invocation.
+must contain this job's single isolated invocation. Before the token-bearing
+.NET end step and again during verification, every path matched by the recursive
+report glob is enumerated: exactly one canonical regular collected report is
+required. Nested extra reports, symbolic links, foreign invocation directories
+and oversized/deep trees fail instead of contributing unvalidated provider metrics.
 
 Default-branch import verification cross-checks the exact current analysis key and
 revision against unique exact-date historical `lines_to_cover`/`uncovered_lines`

@@ -113,6 +113,9 @@ runs:
         SONAR_PROPERTIES: ${{ inputs.properties }}
         SONAR_SOURCE_DIRECTORY: ${{ github.workspace }}
         SONAR_SCANNER_SOURCE: ${{ inputs.source-directory }}
+        SONAR_COVERAGE_DIRECTORY: ${{ inputs.coverage-directory }}
+        SONAR_COVERAGE_REPORT: ${{ inputs.coverage-report }}
+        SONAR_TEST_REPORT: ${{ inputs.test-report }}
         SONAR_TOKEN: ${{ inputs.sonar-token }}
         GH_TOKEN: ${{ inputs.github-token }}
         SONAR_SCRIPT: ${{ github.action_path }}/sonar.mjs

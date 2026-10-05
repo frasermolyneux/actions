@@ -9,7 +9,8 @@ import { historicalMeasures, validateCollection, verifyBranchImport } from "./so
 import { authorizeSource, trustedSource } from "./sonar.mjs";
 import { validateUntracked } from "./sonar.mjs";
 import { validateSource } from "./sonar.mjs";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { validateCoverageSelection } from "./sonar.mjs";
+import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -143,6 +144,38 @@ test("native report bytes and genuine passing TRX execution bind coverage collec
     assert.throws(() => validateCollection(collection, { ...tests, ...patch }, input, bytes));
   }
   assert.throws(() => validateCollection(collection, tests, input, Buffer.from("changed")));
+});
+
+test("the recursive report glob cannot import an extra nested report or a foreign invocation", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sonar-coverage-contract-"));
+  try {
+    const invocation = path.join(root, "invocation");
+    await mkdir(invocation);
+    await writeFile(path.join(invocation, "coverage.cobertura.xml"), bytes);
+    const pattern = path.join(root, "**", "coverage.cobertura.xml");
+    assert.equal(await validateCoverageSelection(root, invocation, pattern),
+      await realpath(path.join(invocation, "coverage.cobertura.xml")));
+    await assert.rejects(validateCoverageSelection(root, invocation,
+      path.join(root, "**", "*.xml")), /declared/);
+    await mkdir(path.join(invocation, "extra"));
+    await writeFile(path.join(invocation, "extra", "coverage.cobertura.xml"), bytes);
+    await assert.rejects(validateCoverageSelection(root, invocation, pattern), /exactly the one/);
+    await rm(path.join(invocation, "extra", "coverage.cobertura.xml"));
+    await mkdir(path.join(root, "foreign"));
+    await assert.rejects(validateCoverageSelection(root, invocation, pattern), /one isolated/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("coverage import settings in server or module sections cannot supply selected-report evidence", () => {
+  for (const section of ["Server settings:", "Scanner properties of module: other"]) {
+    for (const key of ["sonar.cs.opencover.reportsPaths", "sonar.cs.cobertura.reportsPaths",
+      "sonar.javascript.lcov.reportPaths"]) {
+      assert.throws(() => rootProperties(scannerContext() +
+        `\n${section}\n  - ${key}=unvalidated-report`), /Alternate Sonar coverage/);
+    }
+  }
 });
 
 test("exact-date historical measures reject missing, duplicate, wrong-date and malformed metrics", () => {

@@ -138,16 +138,20 @@ export function rootProperties(scannerContext) {
       continue;
     }
     if (line && !/^\s/.test(line)) active = false;
-    if (!active || !line.startsWith("  - ")) continue;
+    if (!line.startsWith("  - ")) continue;
     const offset = line.indexOf("=", 4);
-    requireValue(offset > 4, "Malformed root Sonar scanner property");
+    if (offset <= 4) {
+      requireValue(!active, "Malformed root Sonar scanner property");
+      continue;
+    }
     const key = line.slice(4, offset);
+    const coverageImport = key === "sonar.cs.cobertura.reportsPaths" ||
+      (/(?:cover|cov|jacoco)/i.test(key) && /report(?:s?Paths?|s)/i.test(key));
+    requireValue(!coverageImport || (active && key === "sonar.cs.cobertura.reportsPaths"),
+      "Alternate Sonar coverage import properties cannot prove the selected native report");
+    if (!active) continue;
     requireValue(!seen.has(key), "Duplicate root Sonar scanner property");
     seen.add(key);
-    const coverageImport = /(?:cover|cov|jacoco)/i.test(key) &&
-      /report(?:s?Paths?|s)/i.test(key);
-    requireValue(!coverageImport || key === "sonar.cs.cobertura.reportsPaths",
-      "Alternate Sonar coverage import properties cannot prove the selected native report");
     if (ALLOWED_PROPERTIES.has(key)) result[key] = line.slice(offset + 1);
   }
   requireValue(sections === 1, "Missing root Sonar scanner section");
@@ -416,6 +420,50 @@ async function boundedFile(filename, limit) {
   return content;
 }
 
+export async function validateCoverageSelection(root, invocation, pattern) {
+  requireValue(pattern === path.join(root, "**", "coverage.cobertura.xml"),
+    "Coverage must use the declared isolated native report glob");
+  for (const location of [root, invocation]) {
+    const info = await lstat(location);
+    requireValue(info.isDirectory() && !info.isSymbolicLink(),
+      "Coverage selection must use regular directories, not symbolic links");
+  }
+  const physicalRoot = await realpath(root);
+  const directory = await realpath(invocation);
+  requireValue(await realpath(path.dirname(invocation)) === physicalRoot &&
+    (await readdir(root)).length === 1,
+  "Coverage selection must contain only this job's one isolated test invocation");
+  const matches = [];
+  let entriesSeen = 0;
+  const visit = async (location, depth) => {
+    requireValue(depth <= 32, "Coverage report glob exceeds the bounded directory depth");
+    const entries = await readdir(location, { withFileTypes: true });
+    entriesSeen += entries.length;
+    requireValue(entriesSeen <= 10000, "Coverage report glob exceeds the bounded file count");
+    for (const entry of entries) {
+      requireValue(!entry.isSymbolicLink(), "Coverage report glob cannot traverse symbolic links");
+      const filename = path.join(location, entry.name);
+      const name = process.platform === "win32" ? entry.name.toLowerCase() : entry.name;
+      if (name === "coverage.cobertura.xml") matches.push(filename);
+      if (entry.isDirectory()) await visit(filename, depth + 1);
+    }
+  };
+  await visit(root, 0);
+  const expected = path.join(directory, "coverage.cobertura.xml");
+  requireValue(matches.length === 1 && await realpath(matches[0]) === expected &&
+    (await lstat(matches[0])).isFile(),
+  "Coverage report glob must match exactly the one canonical regular collected report");
+  return expected;
+}
+
+async function selectedCollection(input, env) {
+  const filename = await validateCoverageSelection(path.join(env.RUNNER_TEMP, "dotnet-test"),
+    env.SONAR_COVERAGE_DIRECTORY, input.coveragePath);
+  const bytes = await boundedFile(filename, 32 * 1024 * 1024);
+  return { filename, collection: validateCollection(JSON.parse(env.SONAR_COVERAGE_REPORT),
+    JSON.parse(env.SONAR_TEST_REPORT), input, bytes) };
+}
+
 function git(root, args) {
   const command = process.platform === "win32" ? String.raw`C:\Program Files\Git\cmd\git.exe` : "/usr/bin/git";
   const result = spawnSync(command, ["-C", root, ...args], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
@@ -491,6 +539,9 @@ export async function main(env = process.env) {
         JSON.stringify(properties(input, path.join(env.SONAR_EVIDENCE_DIRECTORY, "report-task.txt"))),
       "Native scanner properties must exactly match the prepared fixed-provider/source binding");
     }
+    if (env.SONAR_AUTH_PHASE === "end" && recipe.coverage === "cobertura") {
+      await selectedCollection(input, env);
+    }
     return;
   }
   if (env.SONAR_MODE === "prepare") {
@@ -511,15 +562,7 @@ export async function main(env = process.env) {
   const proof = await verify(context, input, taskId, env.SONAR_TOKEN);
   proof.trust = trust;
   if (recipe.coverage === "cobertura") {
-    const root = path.join(env.RUNNER_TEMP, "dotnet-test");
-    const directories = await readdir(root);
-    requireValue(directories.length === 1 &&
-      await realpath(path.dirname(env.SONAR_COVERAGE_DIRECTORY)) === await realpath(root),
-    "Coverage selection must contain only this job's one isolated test invocation");
-    const coveragePath = path.join(env.SONAR_COVERAGE_DIRECTORY, "coverage.cobertura.xml");
-    const bytes = await boundedFile(coveragePath, 32 * 1024 * 1024);
-    const collection = validateCollection(JSON.parse(env.SONAR_COVERAGE_REPORT), JSON.parse(env.SONAR_TEST_REPORT),
-      input, bytes);
+    const { filename: coveragePath, collection } = await selectedCollection(input, env);
     proof.coverage = input.pullRequest === null
       ? await verifyBranchImport(input, proof, collection, env.SONAR_TOKEN)
       : { ...collection, status: "collected", reason: "PR task completed; default-branch history is not PR import proof" };
