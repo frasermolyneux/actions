@@ -55,6 +55,13 @@ jobs:
             if (matches?.length !== 1 || !/^[a-f0-9]{40}$/.test(matches[0].sha ?? "")) {
               throw new Error("Missing or ambiguous called workflow definition");
             }
+            const reference = matches[0].ref ?? matches[0].path.split("@")[1];
+            const immutable = /^(?:refs\/tags\/)?repository-analysis\/v\d+\.\d+\.\d+$/.test(reference);
+            const ownContract = process.env.GITHUB_REPOSITORY === "frasermolyneux/actions" &&
+              /^refs\/(?:heads\/[A-Za-z0-9_./-]+|pull\/[1-9]\d*\/merge)$/.test(reference);
+            if (!immutable && !ownContract) {
+              throw new Error("Reject an unreviewed mutable definition before checkout or execution");
+            }
             core.setOutput("sha", matches[0].sha);
             core.setOutput("logical-sha", logical);
             core.setOutput("run", JSON.stringify(run));
@@ -94,7 +101,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: source
-          ref: ${{ inputs.expected-sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -152,7 +159,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           path: source
-          ref: ${{ inputs.expected-sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

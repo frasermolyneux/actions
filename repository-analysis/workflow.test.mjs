@@ -163,6 +163,30 @@ test("workflow release and digest cover actual executable source dependencies", 
   assert.ok(!new RegExp(pattern).test(".github/workflows/codequality.yml"));
 });
 
+test("actual bootstrap rejects a mutable external definition before any checkout or execution", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/repository-analysis-local.yml", import.meta.url), "utf8");
+  const source = workflow.replace(/\r\n/g, "\n").split("          script: |\n")[1].split("      - uses:")[0]
+    .split("\n").map((line) => line.slice(12)).join("\n");
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const bootstrap = new AsyncFunction("github", "context", "core", "process", source);
+  const environment = { EXPECTED_SHA: sourceSha, GITHUB_REPOSITORY: runtime.repository, GITHUB_RUN_ATTEMPT: "2" };
+  const current = {
+    sha: sourceSha, eventName: "pull_request", runId: 456,
+    repo: { owner: "fixture", repo: "repository" },
+    payload: { pull_request: { head: { sha: runtime.logicalHeadSha } } },
+  };
+  const outputs = {};
+  const core = { setOutput: (key, value) => { outputs[key] = value; } };
+  await bootstrap({ request: async () => ({ data: run() }) }, current, core, { env: environment });
+  assert.equal(outputs.sha, definitionSha);
+  for (const ref of ["refs/heads/main", "main", "repository-analysis/v1"]) {
+    await assert.rejects(bootstrap({ request: async () => ({ data: run(ref) }) },
+      current, core, { env: environment }), /unreviewed mutable/);
+  }
+  await assert.rejects(bootstrap({}, current, core, { env: { ...environment, EXPECTED_SHA: definitionSha } }),
+    /exact supported workflow source/);
+});
+
 async function fixture(callback, selected = context()) {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "analysis-workflow-test-"));
   const evidence = path.join(temporary, "evidence");

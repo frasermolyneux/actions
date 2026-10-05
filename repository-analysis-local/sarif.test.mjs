@@ -98,6 +98,21 @@ test("valid file-level diagnostics do not fabricate line one", () => {
   assert.equal(physical.region, undefined);
 });
 
+test("actual PowerShell numeric diagnostic severity retains its original enum value", () => {
+  for (const [severity, level] of [[0, "note"], [1, "warning"], [2, "error"]]) {
+    const report = structuredClone(fixtures.psscriptanalyzer);
+    report.results[0].Severity = severity;
+    const result = convert("psscriptanalyzer", report).runs[0].results[0];
+    assert.equal(result.level, level);
+    assert.equal(result.properties.originalSeverity, severity);
+  }
+  for (const severity of [3, -1, 0.5, 4]) {
+    const report = structuredClone(fixtures.psscriptanalyzer);
+    report.results[0].Severity = severity;
+    assert.throws(() => convert("psscriptanalyzer", report), /PowerShell parsing error or unknown/);
+  }
+});
+
 test("invalid ranges and missing native identity fail without dropping a finding", () => {
   for (const patch of [
     { start: { line: -1 } }, { end: { line: 1 } }, { start: { line: 2, col: 0 } },

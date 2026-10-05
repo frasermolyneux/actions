@@ -51,7 +51,12 @@ function region(start, end, column, endColumn) {
   return result;
 }
 
-function level(value) {
+function level(value, tool) {
+  if (tool === "psscriptanalyzer" && typeof value === "number") {
+    requireValue(Number.isInteger(value) && value >= 0 && value <= 2,
+      "Native PowerShell parsing error or unknown diagnostic severity");
+    return ["note", "warning", "error"][value];
+  }
   requireValue(value === undefined || value === null || typeof value === "string",
     "Native finding has an invalid severity");
   switch (value?.toLowerCase()) {
@@ -163,7 +168,7 @@ export function toSarif(tool, native, version, executions, sourceRoot) {
       const filename = sourcePath(value.file, files, sourceRoot, tool);
       const span = region(value.start, value.end, value.column, value.endColumn);
       rules.set(value.id, { id: value.id });
-      return { ruleId: value.id, level: level(value.severity), message: { text: value.message },
+      return { ruleId: value.id, level: level(value.severity, tool), message: { text: value.message },
         properties: { originalSeverity: value.severity ?? null },
         locations: [{ physicalLocation: {
           artifactLocation: { uri: filename.split("/").map(encodeURIComponent).join("/") },
