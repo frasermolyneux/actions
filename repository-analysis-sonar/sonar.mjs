@@ -598,10 +598,8 @@ export async function main(env = process.env) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try {
-    await main();
-  } catch (error) {
+  main().catch((error) => {
     console.error(`::error::${error instanceof SyntaxError ? "Malformed Sonar analysis JSON" : error.message}`);
     process.exitCode = 1;
-  }
+  });
 }
