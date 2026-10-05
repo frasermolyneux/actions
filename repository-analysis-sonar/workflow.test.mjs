@@ -56,6 +56,11 @@ test("production workflow uses exact vendor pins and commit-bound internal execu
   assert.ok(!text.includes("skipSignatureVerification:"));
 });
 
+test("the actual scanner preserves the existing protected quality check name", () => {
+  assert.match(text, /\r?\n  analyze:\r?\n    name: Code Quality\r?\n    needs: plan\r?\n/);
+  assert.match(text, /value: \$\{\{ jobs\.analyze\.outputs\.artifact-id \}\}/);
+});
+
 test("CLI publication repeats source/producer/live-project authorization after repository builds", () => {
   const build = text.indexOf("- name: Build and validate only");
   const authorize = text.indexOf("- name: Reauthorize unchanged CLI/C++ source");

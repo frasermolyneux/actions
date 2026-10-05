@@ -81,6 +81,7 @@ jobs:
           github-token: ${{ github.token }}
 
   analyze:
+    name: Code Quality
     needs: plan
     permissions:
       contents: read

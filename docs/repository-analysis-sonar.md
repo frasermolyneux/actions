@@ -9,7 +9,10 @@ The workstream has not adopted this caller across the estate.
 ## Admission and execution
 
 The reusable workflow accepts `profile`, `recipe`, `build` and `expected-sha`, plus
-the existing `SONAR_TOKEN` secret. It reads live GitHub repository visibility before
+the existing `SONAR_TOKEN` secret. Its real scanner job is named `Code Quality` so
+a caller job named `quality` retains the protected `quality / Code Quality` context;
+this is the actual build/scan/provider verification, not an unconditional bridge.
+It reads live GitHub repository visibility before
 checkout or installation. Private, exempt, foreign-PR and draft-PR execution is
 refused, not reported as a successful empty scan. Installation/build entry points
 also recheck public eligibility; native begin/end require the prepared producer.
