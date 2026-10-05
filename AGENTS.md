@@ -42,6 +42,8 @@ Documentation-only Copilot configuration changes do not require action integrati
   scanner execution, source isolation and native-report validation.
 - [`docs/repository-analysis-state.md`](docs/repository-analysis-state.md) - Complete
   selected-tool results, explicit coverage gaps and exact-source weekly freshness.
+- [`docs/repository-analysis-sarif.md`](docs/repository-analysis-sarif.md) - Live-public
+  native processing verification and exact source/tool/publication identities.
 - [`docs/repository-publication-origin.md`](docs/repository-publication-origin.md) - Trusted
   metadata-only publication admission and bounded originating-repository lineage proofs.
 - [`docs/dotnet-test-reporting.md`](docs/dotnet-test-reporting.md) - .NET test setup/execution, optional native coverage, bounded TRX reporting and isolated PR summary publishing.

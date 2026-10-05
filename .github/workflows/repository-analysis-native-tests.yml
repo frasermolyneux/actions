@@ -1,0 +1,117 @@
+name: Native analysis contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  sarif-contracts:
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Check processing, visibility and producer boundaries
+        run: node --test repository-analysis-sarif/verify.test.mjs
+
+  codeql-actions:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify live public execution eligibility before licensed tooling
+        id: context
+        uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.0.2
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
+          github-token: ${{ github.token }}
+      - name: Require eligible Actions analysis and freeze the actual checkout
+        id: source
+        env:
+          ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+        run: |
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            const context = JSON.parse(process.env.ANALYSIS_CONTEXT);
+            assert.equal(context.visibility, "public");
+            assert.equal(context.codeql.status, "eligible");
+            assert.deepEqual(context.codeql.languages, ["actions"]);
+          '
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Execute pinned native Actions extraction
+        id: init
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          languages: actions
+          build-mode: none
+          tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.1/codeql-bundle-linux64.tar.gz
+      - name: Require the actual pinned CLI
+        env:
+          ACTUAL_CODEQL_VERSION: ${{ steps.init.outputs.codeql-version }}
+        run: test "$ACTUAL_CODEQL_VERSION" = "2.27.1"
+      - name: Execute native queries and upload the real report
+        id: analyze
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          category: /language:actions
+          upload-database: false
+          wait-for-processing: true
+      - name: Independently verify actual native processing
+        id: proof
+        uses: ./repository-analysis-sarif
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
+          github-token: ${{ github.token }}
+          tool-id: codeql/actions
+          tool-version: ${{ steps.init.outputs.codeql-version }}
+          source-sha: ${{ steps.source.outputs.sha }}
+          sarif-id: ${{ steps.analyze.outputs.sarif-id }}
+      - name: Check persistent native identities and unchanged actual source
+        env:
+          PROOF_DIRECTORY: ${{ steps.proof.outputs.proof-directory }}
+          UPLOAD_ID: ${{ steps.analyze.outputs.sarif-id }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import { readFile } from "node:fs/promises";
+            import path from "node:path";
+            const proof = JSON.parse(await readFile(path.join(process.env.PROOF_DIRECTORY, "proof.json"), "utf8"));
+            assert.equal(proof.schema, "repository-analysis-sarif-proof-v1");
+            assert.equal(proof.processing.status, "completed");
+            assert.equal(proof.processing.id, process.env.UPLOAD_ID);
+            assert.match(proof.publication.id, /^[1-9]\d*$/);
+            assert.equal(proof.sourceSha, process.env.SOURCE_SHA);
+            assert.equal(proof.sourceSha, process.env.GITHUB_SHA);
+            assert.equal(proof.run.id, Number(process.env.GITHUB_RUN_ID));
+            assert.equal(proof.run.attempt, Number(process.env.GITHUB_RUN_ATTEMPT));
+            assert.equal(proof.tool.name, "CodeQL");
+            assert.equal(proof.tool.version, "2.27.1");
+            assert(proof.ruleCount > 0);
+          '
+      - name: Retain originating-repository native completion evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-sarif-proof
+          path: ${{ steps.proof.outputs.proof-directory }}
+          if-no-files-found: error
+          retention-days: 14

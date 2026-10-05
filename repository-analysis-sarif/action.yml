@@ -1,0 +1,51 @@
+name: Repository Analysis SARIF
+description: Verify live-public native SARIF processing and exact source/tool/category identities.
+inputs:
+  profile:
+    description: Catalog repository-analysis-v1 capability profile.
+    required: true
+  github-token:
+    description: Default repository token with metadata, actions read and security-events read; never a merge token.
+    required: true
+  tool-id:
+    description: Selected codeql/language or local/tool identity.
+    required: true
+  tool-version:
+    description: Exact observed and pinned scanner version.
+    required: true
+  source-sha:
+    description: Actual analyzed checkout revision; this verifier supports the frozen workflow revision.
+    required: true
+  sarif-id:
+    description: Actual upload identity from the trusted pinned analyze or upload-sarif step.
+    required: true
+outputs:
+  analysis-id:
+    description: Actual processed native analysis identity, not an upload acknowledgement.
+    value: ${{ steps.verify.outputs.analysis-id }}
+  proof-directory:
+    description: Bounded provider completion metadata for originating-repository-only artifacts.
+    value: ${{ steps.verify.outputs.proof-directory }}
+runs:
+  using: composite
+  steps:
+    - name: Re-evaluate live native publication eligibility
+      id: context
+      uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.0.2
+      with:
+        profile: ${{ inputs.profile }}
+        github-token: ${{ inputs.github-token }}
+
+    - name: Verify native processing and publication
+      id: verify
+      shell: bash
+      env:
+        ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+        ANALYSIS_TOOL: ${{ inputs.tool-id }}
+        ANALYSIS_TOOL_VERSION: ${{ inputs.tool-version }}
+        ANALYSIS_SOURCE_SHA: ${{ inputs.source-sha }}
+        ANALYSIS_SARIF_ID: ${{ inputs.sarif-id }}
+        ANALYSIS_LOGICAL_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        VERIFY_SCRIPT: ${{ github.action_path }}/verify.mjs
+      run: node "$VERIFY_SCRIPT"
