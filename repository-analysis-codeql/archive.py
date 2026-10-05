@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import sys
@@ -60,18 +61,28 @@ def archived_hashes(archive, expected):
     return found
 
 
-def verify(archive, root, candidates):
+def verify(archive, root, candidates, language=None):
     root = Path(root).resolve(strict=True)
     found = archived_hashes(archive, source_hashes(root, candidates))
-    return {"files": len(found), "sourceDigest": hashlib.sha256(
+    result = {"files": len(found), "sourceDigest": hashlib.sha256(
         json.dumps(sorted(found.items()), separators=(",", ":")).encode()).hexdigest()}
+    if language is not None:
+        if language not in ("actions", "csharp", "cpp", "javascript-typescript", "python"):
+            raise ValueError("Unknown native extraction language")
+        result["sourceCoverage"] = (
+            {capability: sum(bool(re.search(pattern, filename, re.IGNORECASE)) for filename in found)
+             for capability, pattern in (
+                 ("javascript", r"\.(?:[cm]?js|jsx|es|es6)$"),
+                 ("typescript", r"\.(?:[cm]?ts|tsx)$"))}
+            if language == "javascript-typescript" else {language: len(found)})
+    return result
 
 
 if __name__ == "__main__":
     try:
         request = json.load(sys.stdin)
         root = os.environ["GITHUB_WORKSPACE"]
-        print(json.dumps(verify(request["archive"], root, request["files"])))
+        print(json.dumps(verify(request["archive"], root, request["files"], request.get("language"))))
     except (ValueError, zipfile.BadZipFile) as error:
         print(f"::error::CodeQL extraction archive validation failed ({type(error).__name__}): {error}", file=sys.stderr)
         sys.exit(1)

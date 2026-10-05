@@ -1,0 +1,15 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
+  "version": "1.0",
+  "inherit": false,
+  "pathFilters": [
+    ":/repository-analysis-codeql",
+    ":/.github/workflows/repository-analysis-codeql.yml",
+    ":/repository-analysis-context",
+    ":/repository-analysis-state",
+    ":/repository-analysis-sarif",
+    ":/repository-analysis-sonar",
+    ":/dotnet-test/coverage-tools.json"
+  ],
+  "publicReleaseRefSpec": ["^refs/heads/main$"]
+}

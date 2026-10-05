@@ -33,6 +33,31 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "differs"):
             verify(self.archive, self.root, ["src/main.py"])
 
+    def test_capability_counts_only_include_genuinely_archived_source(self):
+        (self.root / "src/one.js").write_bytes(b"const one = 1;\n")
+        (self.root / "src/two.ts").write_bytes(b"const two: number = 2;\n")
+        (self.root / "src/absent.js").write_bytes(b"const absent = 3;\n")
+        self.make([("native/src/one.js", b"const one = 1;\n"),
+                   ("native/src/two.ts", b"const two: number = 2;\n")])
+        result = verify(self.archive, self.root,
+                        ["src/one.js", "src/two.ts", "src/absent.js"], "javascript-typescript")
+        self.assertEqual(result["files"], 2)
+        self.assertEqual(result["sourceCoverage"], {"javascript": 1, "typescript": 1})
+
+    def test_missing_selected_capability_remains_zero_not_estimated(self):
+        (self.root / "src/one.js").write_bytes(b"const one = 1;\n")
+        (self.root / "src/two.ts").write_bytes(b"const two: number = 2;\n")
+        self.make([("native/src/one.js", b"const one = 1;\n")])
+        result = verify(self.archive, self.root, ["src/one.js", "src/two.ts"], "javascript-typescript")
+        self.assertEqual(result["sourceCoverage"], {"javascript": 1, "typescript": 0})
+
+    def test_non_javascript_capability_and_unknown_language(self):
+        self.make([("native/src/main.py", b"print('source')\n")])
+        self.assertEqual(verify(self.archive, self.root, ["src/main.py"], "python")["sourceCoverage"],
+                         {"python": 1})
+        with self.assertRaisesRegex(ValueError, "Unknown native"):
+            verify(self.archive, self.root, ["src/main.py"], "invented")
+
     def test_no_source_is_not_success(self):
         self.make([("unrelated.py", b"print('source')\n")])
         with self.assertRaisesRegex(ValueError, "No selected"):
