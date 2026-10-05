@@ -44,16 +44,17 @@ def archived_hashes(archive, expected):
             matches = [filename for filename in expected if name == filename or name.endswith("/" + filename)]
             if not matches:
                 continue
-            if len(matches) != 1 or matches[0] in found or item.file_size > 20 * 1024 * 1024:
+            selected = max(matches, key=len)
+            if selected in found or item.file_size > 20 * 1024 * 1024:
                 raise ValueError("Ambiguous or oversized native extraction source")
-            current_prefix = name[:-len(matches[0])]
+            current_prefix = name[:-len(selected)]
             if prefix is not None and current_prefix != prefix:
                 raise ValueError("Native extraction source spans multiple archive roots")
             prefix = current_prefix
             value = native.read(item)
-            if hashlib.sha256(value).hexdigest() != expected[matches[0]]:
+            if hashlib.sha256(value).hexdigest() != expected[selected]:
                 raise ValueError("Native extracted source differs from the actual checkout")
-            found[matches[0]] = expected[matches[0]]
+            found[selected] = expected[selected]
     if not found:
         raise ValueError("No selected tracked source was genuinely archived by CodeQL")
     return found

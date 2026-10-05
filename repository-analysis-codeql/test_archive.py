@@ -62,6 +62,25 @@ class ArchiveTests(unittest.TestCase):
                    ("one/src/other.py", b"print('other')\n")])
         self.assertEqual(verify(self.archive, self.root, ["src/main.py", "src/other.py"])["files"], 2)
 
+    def test_overlapping_repository_suffixes_use_the_longest_candidate(self):
+        (self.root / "main.py").write_bytes(b"print('root')\n")
+        self.make([("native/main.py", b"print('root')\n"),
+                   ("native/src/main.py", b"print('source')\n")])
+        for candidates in [["main.py", "src/main.py"], ["src/main.py", "main.py"]]:
+            self.assertEqual(verify(self.archive, self.root, candidates)["files"], 2)
+
+    def test_overlapping_candidates_do_not_hide_multiple_roots_or_duplicates(self):
+        (self.root / "main.py").write_bytes(b"print('root')\n")
+        self.make([("one/main.py", b"print('root')\n"),
+                   ("two/src/main.py", b"print('source')\n")])
+        with self.assertRaisesRegex(ValueError, "multiple archive roots"):
+            verify(self.archive, self.root, ["main.py", "src/main.py"])
+        self.make([("native/main.py", b"print('root')\n"),
+                   ("native/src/main.py", b"print('source')\n"),
+                   ("foreign/src/main.py", b"print('source')\n")])
+        with self.assertRaisesRegex(ValueError, "Ambiguous"):
+            verify(self.archive, self.root, ["main.py", "src/main.py"])
+
 
 if __name__ == "__main__":
     unittest.main()

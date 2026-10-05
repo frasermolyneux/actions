@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
 import { validateUntrackedWorktree } from "../repository-analysis-context/source.mjs";
+import { extractorExtensions, matchesExtractor } from "./extractor.mjs";
 
 const env = process.env;
 const hash = (content) => createHash("sha256").update(content).digest("hex");
@@ -53,7 +54,10 @@ const expressions = {
 };
 const fixture = env.CODEQL_FIXTURE === "true";
 assert.ok(!fixture || env.GITHUB_REPOSITORY === "frasermolyneux/actions");
-const candidates = tracked.filter((file) => expressions[language].test(file) &&
+const extensions = language === "javascript-typescript" ? extractorExtensions(await readFile(
+  path.join(path.dirname(await realpath(env.CODEQL_COMMAND)), "javascript", "codeql-extractor.yml"), "utf8")) : [];
+const candidates = tracked.filter((file) => (expressions[language].test(file) ||
+  matchesExtractor(file, extensions)) &&
   (fixture ? file.startsWith(env.CODEQL_FIXTURE_DIRECTORY + "/") :
     !/(?:^|\/)(?:fixtures|node_modules|vendor|bin|obj)\//i.test(file)));
 assert.ok(candidates.length > 0, "Selected source cannot be inferred from successful commands");

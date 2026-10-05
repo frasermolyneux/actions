@@ -12,8 +12,12 @@ these jobs. Queries run without automatic database or SARIF publication.
 For maintained Actions, JavaScript and Python source, the verifier checks the
 actual checkout revision, unchanged tracked files, observed CLI version, queried
 SARIF invocation and native database archive. Selected archived source bytes must
-match their tracked checkout bytes under a single native archive root. The resolved
-database source location must identify the actual runner checkout.
+match their tracked checkout bytes under a single native archive root.
+Overlapping repository paths use the longest candidate suffix, retaining duplicate
+and mixed-root refusal. JavaScript candidate selection reads the actual pinned
+bundle's complete `file_types` declaration, including Vue, HTML/XHTML and data
+formats, rather than treating a hand-maintained JS/TS suffix subset as complete.
+The resolved database source location must identify the actual runner checkout.
 The shared source gate also rejects ordinary and Git-ignored untracked files
 outside known dependency/compiler output directories before proof creation and
 native publication. This gate does not infer safe source from a partial extension

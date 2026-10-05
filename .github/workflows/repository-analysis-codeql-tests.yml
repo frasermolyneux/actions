@@ -52,6 +52,8 @@ jobs:
           python-version: "3.12"
       - name: Exercise byte-bound extraction contracts
         run: python -m unittest discover -s repository-analysis-codeql -p 'test_*.py'
+      - name: Verify pinned extractor source-format contracts
+        run: node --test repository-analysis-codeql/extractor.test.mjs
       - id: init
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
