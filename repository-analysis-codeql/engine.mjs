@@ -137,6 +137,9 @@ function command(executable, args, env) {
 export function sourceCoverage(context, language, extracted) {
   const selected = selectedTools(context).find(({ id }) => id === `codeql/${language}`);
   requireValue(selected, "Source coverage requires a selected native language");
+  const files = extracted?.extraction?.files;
+  requireValue(Number.isSafeInteger(files) && files > 0,
+    "Native source coverage requires an actual positive archived file count");
   const counts = {};
   for (const capability of selected.capabilities) {
     counts[capability] = extracted.extraction?.sourceCoverage?.[capability];
@@ -144,8 +147,8 @@ export function sourceCoverage(context, language, extracted) {
       "Native source archive cannot prove an absent selected capability");
   }
   const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-  requireValue(language === "javascript-typescript" ? total <= extracted.extraction.files :
-    total === extracted.extraction.files, "Native capability counts exceed actual archived source");
+  requireValue(language === "javascript-typescript" ? total <= files :
+    total === files, "Native capability counts exceed actual archived source");
   return counts;
 }
 

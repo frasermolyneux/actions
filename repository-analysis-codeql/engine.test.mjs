@@ -157,6 +157,15 @@ test("every selected JS/TS capability needs genuinely archived source, not track
   assert.throws(() => validateArtifact(overflow, native, planned, "javascript-typescript", digest), /exceed/);
 });
 
+test("malformed archive evidence raises explicit coverage errors rather than accidental property exceptions", () => {
+  const { planned } = evidence("javascript-typescript");
+  for (const extracted of [undefined, {}, { extraction: null }, { extraction: { files: 0 } },
+    { extraction: { files: 1.5 } }, { extraction: { files: "3" } }]) {
+    assert.throws(() => sourceCoverage(planned.context, "javascript-typescript", extracted),
+      /actual positive archived file count/);
+  }
+});
+
 test("wrong source, definition, policy, fixture, attempt, producer or native state never completes", () => {
   const { planned, report, native } = evidence();
   for (const mutate of [

@@ -9,6 +9,11 @@ import stat
 import sys
 import zipfile
 
+CAPABILITY_PATTERNS = (
+    ("javascript", re.compile(r"\.(?:[cm]?js|jsx|es|es6)$", re.IGNORECASE)),
+    ("typescript", re.compile(r"\.(?:[cm]?ts|tsx)$", re.IGNORECASE)),
+)
+
 
 def source_hashes(root, candidates):
     expected = {}
@@ -70,10 +75,8 @@ def verify(archive, root, candidates, language=None):
         if language not in ("actions", "csharp", "cpp", "javascript-typescript", "python"):
             raise ValueError("Unknown native extraction language")
         result["sourceCoverage"] = (
-            {capability: sum(bool(re.search(pattern, filename, re.IGNORECASE)) for filename in found)
-             for capability, pattern in (
-                 ("javascript", r"\.(?:[cm]?js|jsx|es|es6)$"),
-                 ("typescript", r"\.(?:[cm]?ts|tsx)$"))}
+            {capability: sum(bool(pattern.search(filename)) for filename in found)
+             for capability, pattern in CAPABILITY_PATTERNS}
             if language == "javascript-typescript" else {language: len(found)})
     return result
 

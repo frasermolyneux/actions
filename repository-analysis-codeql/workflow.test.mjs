@@ -5,7 +5,7 @@ import { DEFINITION_FILES, definitionDigest, WORKFLOW_PATH } from "./engine.mjs"
 
 const text = await readFile(new URL("../" + WORKFLOW_PATH, import.meta.url), "utf8");
 const composite = await readFile(new URL("./action.yml", import.meta.url), "utf8");
-const version = JSON.parse(await readFile(new URL("./version.json", import.meta.url)));
+const version = JSON.parse(await readFile(new URL("./version.json", import.meta.url), "utf8"));
 const release = await readFile(new URL("../.github/workflows/actions-versioning.yml", import.meta.url), "utf8");
 
 test("planning has no source checkout, licensed initialization or write permissions", () => {
@@ -21,7 +21,7 @@ test("native execution retains setup-before-init, manual-only compiler and reaut
     "mode: build", "uses: github/codeql-action/analyze@", "mode: extract",
     "uses: github/codeql-action/upload-sarif@", "uses: $/repository-analysis-sarif", "mode: bind"];
   const indices = anchors.map((anchor) => text.indexOf(anchor));
-  assert.ok(indices.every((index) => index > 0));
+  assert.ok(indices.every((index) => index >= 0));
   assert.deepEqual(indices, [...indices].sort((a, b) => a - b));
   assert.match(text, /upload: never/);
   assert.match(text, /upload-database: false/);
