@@ -60,9 +60,8 @@ checks disabled and no Semgrep platform login or cloud publishing. Local analyze
 have pinned versions, actual source coverage and complete validated reports. An unsupported
 capability, execution failure, missing report or publication failure is never zero findings.
 Downloading public rules is distinct from sending repository source to a provider.
-The current estate has no private C/C++ target. If one is onboarded, the explicit
-unavailable capability requires a reviewed local backend decision; do not mark it clean,
-silently omit it or invoke unlicensed CodeQL.
+Private C/C++ remains an explicitly unavailable capability until a local backend is
+reviewed and approved; do not mark it clean, silently omit it or invoke unlicensed CodeQL.
 
 Caller-supplied visibility, entitlement and upload flags are rejected. The action reads
 only `GET /repos/{owner}/{repository}` with a metadata-capable token. Failed requests,
@@ -83,7 +82,9 @@ Use a reviewed immutable `repository-analysis-context/v1.X.Y` release (or the ex
 commit) from a pinned scanner workflow. Pass only the profile and repository metadata-read
 token, never an App private key, merge token, cloud credential or blanket inherited secrets.
 The action installs Node.js 22 before running the helper; standalone use needs Node.js 22
-or later. It fails before emitting outputs if metadata is invalid.
+or later. Automatic package-manager caching is disabled: caller npm metadata, lockfiles and
+dependency restoration are not preflight prerequisites. No application dependencies are
+installed or restored. It fails before emitting outputs if metadata is invalid.
 Do not execute the target repository's copy of the helper as trusted preflight code.
 
 ```powershell
