@@ -1,0 +1,276 @@
+name: Repository Sonar analysis
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Catalog repository-analysis-v1 public Sonar capability profile.
+        required: true
+        type: string
+      recipe:
+        description: Version-1 scanner/project/source/coverage recipe.
+        required: true
+        type: string
+      build:
+        description: Preserved analysis-only SDK, Framework, CMake or script build recipe.
+        required: true
+        type: string
+      expected-sha:
+        description: Exact actual workflow checkout SHA.
+        required: true
+        type: string
+    secrets:
+      SONAR_TOKEN:
+        description: Existing public project token; no App, merge or cloud credentials.
+        required: true
+    outputs:
+      artifact-id:
+        description: Originating-repository completed Sonar task evidence, not a full-profile result.
+        value: ${{ jobs.analyze.outputs.artifact-id }}
+
+permissions: {}
+
+jobs:
+  plan:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    outputs:
+      recipe: ${{ steps.plan.outputs.recipe }}
+      build: ${{ steps.plan.outputs.build }}
+      runner: ${{ steps.plan.outputs.runner }}
+      producer: ${{ steps.plan.outputs.producer }}
+      sdk: ${{ steps.plan.outputs.sdk }}
+    steps:
+      - id: context
+        uses: $/repository-analysis-context
+        with:
+          profile: ${{ inputs.profile }}
+          github-token: ${{ github.token }}
+      - name: Refuse unavailable Sonar before any source checkout or scanner installation
+        shell: bash
+        env:
+          SONAR_STATUS: ${{ steps.context.outputs.sonar-status }}
+        run: |
+          if [ "$SONAR_STATUS" != eligible ]; then
+            echo "::error::Sonar is not permitted by this live repository capability profile"
+            exit 1
+          fi
+      - name: Read the actual originating run attempt
+        id: run
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            const { data } = await github.request(
+              "GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}", {
+                ...context.repo, run_id: context.runId,
+                attempt_number: Number(process.env.GITHUB_RUN_ATTEMPT),
+              });
+            core.setOutput("run", JSON.stringify(data));
+      - name: Validate the preserved build and immutable executing definition
+        id: plan
+        uses: $/repository-analysis-sonar
+        with:
+          mode: plan
+          profile: ${{ inputs.profile }}
+          recipe: ${{ inputs.recipe }}
+          build: ${{ inputs.build }}
+          expected-sha: ${{ inputs.expected-sha }}
+          run: ${{ steps.run.outputs.run }}
+          github-token: ${{ github.token }}
+
+  analyze:
+    name: Code Quality
+    needs: plan
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ${{ needs.plan.outputs.runner }}
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ inputs.expected-sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install declared SDKs before installing or starting the .NET scanner
+        if: fromJson(needs.plan.outputs.build).kind == 'dotnet' || fromJson(needs.plan.outputs.build).kind == 'netfx'
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
+        with:
+          dotnet-version: ${{ needs.plan.outputs.sdk }}
+          global-json-file: ${{ fromJson(needs.plan.outputs.build).globalJson || '' }}
+      - name: Preserve the declared Node runtime
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: ${{ fromJson(needs.plan.outputs.build).nodeVersion || '22' }}
+          package-manager-cache: false
+      - name: Install the analysis JDK
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6
+        with:
+          java-version: "17"
+          distribution: zulu
+      - if: fromJson(needs.plan.outputs.build).kind == 'netfx'
+        uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
+      - if: fromJson(needs.plan.outputs.build).kind == 'netfx'
+        uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123
+      - name: Freeze this job's producer and supported report selection
+        id: producer
+        shell: bash
+        env:
+          PLANNED_PRODUCER: ${{ needs.plan.outputs.producer }}
+          SONAR_RECIPE: ${{ needs.plan.outputs.recipe }}
+        run: |
+          node --input-type=module <<'NODE'
+            import { appendFile } from "node:fs/promises";
+            import path from "node:path";
+            const producer = JSON.parse(process.env.PLANNED_PRODUCER);
+            if (JSON.parse(process.env.SONAR_RECIPE).coverage === "cobertura") {
+              producer.coveragePath = path.join(process.env.RUNNER_TEMP, "dotnet-test", "**", "coverage.cobertura.xml");
+            }
+            await appendFile(process.env.GITHUB_OUTPUT, `producer=${JSON.stringify(producer)}\n`);
+          NODE
+      - name: Revalidate live public project binding and allocate an isolated receipt
+        id: prepare
+        uses: $/repository-analysis-sonar
+        with:
+          mode: prepare
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          build: ${{ needs.plan.outputs.build }}
+          producer: ${{ steps.producer.outputs.producer }}
+          source-directory: "."
+          github-token: ${{ github.token }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+      - name: Install the exact .NET scanner, without mutable scanner caches
+        id: scanner
+        if: fromJson(needs.plan.outputs.recipe).driver == 'dotnet'
+        uses: $/repository-analysis-sonar
+        with:
+          mode: install
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          github-token: ${{ github.token }}
+      - name: Begin source-bound .NET analysis
+        if: fromJson(needs.plan.outputs.recipe).driver == 'dotnet'
+        uses: $/repository-analysis-sonar
+        with:
+          mode: begin
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          build: ${{ needs.plan.outputs.build }}
+          producer: ${{ steps.producer.outputs.producer }}
+          evidence-directory: ${{ steps.prepare.outputs.evidence-directory }}
+          github-token: ${{ github.token }}
+          command: ${{ steps.scanner.outputs.command }}
+          source-directory: ${{ steps.prepare.outputs.source-directory }}
+          properties: ${{ steps.prepare.outputs.properties }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+      - name: Build and validate only; never deploy, apply or publish
+        uses: $/repository-analysis-sonar
+        with:
+          mode: build
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          github-token: ${{ github.token }}
+          build: ${{ needs.plan.outputs.build }}
+          source-directory: ${{ steps.prepare.outputs.source-directory }}
+      - name: Collect the same-source existing unit selection with pinned native Cobertura
+        id: tests
+        if: fromJson(needs.plan.outputs.build).kind == 'dotnet' && fromJson(needs.plan.outputs.build).tests
+        uses: $/dotnet-test
+        with:
+          working-directory: ${{ steps.prepare.outputs.source-directory }}
+          project: ${{ fromJson(needs.plan.outputs.build).solution }}
+          suite: Unit
+          artifact-name: repository-analysis-sonar-unit-${{ github.run_attempt }}
+          source-path-pattern: '^(?:src|tests)/.+\.cs$'
+          coverage: "true"
+      - name: End successful .NET analysis
+        if: fromJson(needs.plan.outputs.recipe).driver == 'dotnet'
+        uses: $/repository-analysis-sonar
+        with:
+          mode: end
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          build: ${{ needs.plan.outputs.build }}
+          producer: ${{ steps.producer.outputs.producer }}
+          evidence-directory: ${{ steps.prepare.outputs.evidence-directory }}
+          github-token: ${{ github.token }}
+          command: ${{ steps.scanner.outputs.command }}
+          source-directory: ${{ steps.prepare.outputs.source-directory }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          coverage-report: ${{ steps.tests.outputs.coverage-report }}
+          test-report: ${{ steps.tests.outputs.report }}
+          coverage-directory: ${{ steps.tests.outputs.results-directory }}
+      - name: Assemble bounded CLI arguments from validated properties
+        id: cli
+        if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
+        shell: bash
+        env:
+          SONAR_PROPERTIES: ${{ steps.prepare.outputs.properties }}
+          SONAR_DRIVER: ${{ fromJson(needs.plan.outputs.recipe).driver }}
+          SONAR_SOURCE: ${{ steps.prepare.outputs.source-directory }}
+        run: |
+          node --input-type=module <<'NODE'
+            import { appendFile } from "node:fs/promises";
+            import path from "node:path";
+            const properties = JSON.parse(process.env.SONAR_PROPERTIES);
+            properties["sonar.sources"] = ".";
+            properties["sonar.exclusions"] = "**/node_modules/**,**/vendor/**,**/fixtures/**,**/build/**";
+            if (process.env.SONAR_DRIVER === "cpp") {
+              properties["sonar.cfamily.compile-commands"] = path.join(process.env.SONAR_SOURCE, "build", "compile_commands.json");
+            }
+            const args = Object.entries(properties).map(([key, value]) => {
+              if (/["\r\n]/.test(String(value))) throw new Error("Invalid scanner argument");
+              return `"-D${key}=${value}"`;
+            }).join(" ");
+            await appendFile(process.env.GITHUB_OUTPUT, `args=${args}\n`);
+          NODE
+      - name: Reauthorize unchanged CLI/C++ source and live project immediately before publication
+        if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
+        uses: $/repository-analysis-sonar
+        with:
+          mode: authorize
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          build: ${{ needs.plan.outputs.build }}
+          producer: ${{ steps.producer.outputs.producer }}
+          evidence-directory: ${{ steps.prepare.outputs.evidence-directory }}
+          github-token: ${{ github.token }}
+          source-directory: ${{ steps.prepare.outputs.source-directory }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+      - name: Scan substantive CLI/C++ source using signed pinned binaries
+        if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          scannerVersion: "8.1.0.6389"
+          projectBaseDir: ${{ steps.prepare.outputs.source-directory }}
+          args: ${{ steps.cli.outputs.args }}
+      - name: Require the actual current source/producer compute task to finish
+        id: verify
+        uses: $/repository-analysis-sonar
+        with:
+          mode: verify
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          build: ${{ needs.plan.outputs.build }}
+          producer: ${{ steps.producer.outputs.producer }}
+          source-directory: "."
+          evidence-directory: ${{ steps.prepare.outputs.evidence-directory }}
+          github-token: ${{ github.token }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
+          coverage-report: ${{ steps.tests.outputs.coverage-report }}
+          test-report: ${{ steps.tests.outputs.report }}
+          coverage-directory: ${{ steps.tests.outputs.results-directory }}
+      - name: Retain bound task evidence only in its originating repository
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repository-analysis-sonar-${{ github.run_attempt }}
+          path: ${{ steps.verify.outputs.proof-directory }}
+          if-no-files-found: error
+          retention-days: 14

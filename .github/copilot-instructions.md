@@ -45,4 +45,10 @@ actions to the reviewed workflow/action commit without executing a dynamically
 selected workspace checkout. Local/state/native-verifier releases include their
 commit-bound context dependency; external callers retain folder-scoped tags.
 
+`repository-analysis-sonar` likewise owns its reusable workflow and executable
+context/test/reporting closure. Align its definition digest, version filters and
+release detector; publish it after those dependencies. Native begin/end must retain
+prepared public/project/source/producer admission. Collected PR coverage is not
+server import, and this partial Sonar package is not estate rollout acceptance.
+
 See [`docs/action-versioning.md`](../docs/action-versioning.md) for tag behavior and [`docs/nerdbank-gitversioning.md`](../docs/nerdbank-gitversioning.md) for .NET checkout requirements.
