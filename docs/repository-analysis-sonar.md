@@ -194,6 +194,9 @@ node --test repository-analysis-sonar\sonar.test.mjs repository-analysis-sonar\b
 The hosted contracts exercise both OS families, genuine pinned installation, real
 SDK multi-target builds, Framework restore/MSBuild and C++ compilation/ctest.
 Fixtures never publish source or claim completed Sonar analysis.
+Direct initial-plan contracts cover push, schedule, manual and PR admission;
+independent checkout/run/caller mutations, foreign/draft PRs, and missing,
+ambiguous or mutable foreign definitions all fail before checkout.
 
 Release detection and NBGV cover the reusable workflow, all Sonar code, context and
 test/reporting dependencies. Nested reporting resolves from the executing definition

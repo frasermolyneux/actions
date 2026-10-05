@@ -1,10 +1,127 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateBuild } from "./build.mjs";
+import { plan, validateBuild } from "./build.mjs";
+import { recipeDigest, WORKFLOW_PATH } from "./sonar.mjs";
 
 const dotnet = { version: 1, driver: "dotnet", projectKey: "project", sourceDirectory: "src", coverage: "cobertura" };
 const build = { kind: "dotnet", sdk: ["9.0.x", "10.0.x"], globalJson: "global.json",
   solution: ".", skipFormat: true, tests: true };
+
+function admission(eventName = "push") {
+  const runtime = { repository: "frasermolyneux/example", repositoryId: 17,
+    runId: 23, attempt: 2, sha: "a".repeat(40), expectedSha: "a".repeat(40),
+    workflowSha: "a".repeat(40), workflowPath: ".github/workflows/codequality.yml",
+    event: eventName, refName: "main" };
+  const event = eventName === "pull_request" ? { pull_request: {
+    number: 7, draft: false, head: { sha: "c".repeat(40), ref: "feature/example",
+      repo: { full_name: runtime.repository } },
+  } } : {};
+  const run = { id: runtime.runId, run_attempt: runtime.attempt,
+    repository: { id: runtime.repositoryId, full_name: runtime.repository },
+    event: eventName, path: runtime.workflowPath,
+    head_sha: event.pull_request?.head.sha ?? runtime.sha,
+    run_started_at: "2026-10-05T12:00:00Z",
+    referenced_workflows: [{
+      path: `frasermolyneux/actions/${WORKFLOW_PATH}@repository-analysis-sonar/v1.0.0`,
+      ref: "refs/tags/repository-analysis-sonar/v1.0.0", sha: "b".repeat(40),
+    }],
+  };
+  return { runtime, event, run };
+}
+
+test("plan directly binds push/schedule/manual source, caller, attempt and immutable definition", () => {
+  for (const eventName of ["push", "schedule", "workflow_dispatch"]) {
+    const { run, runtime, event } = admission(eventName);
+    const result = plan(run, runtime, event, dotnet, build);
+    assert.equal(result.runner, "ubuntu-latest");
+    assert.deepEqual(result.recipe, dotnet);
+    assert.deepEqual(result.build, build);
+    assert.equal(result.definitionSha, "b".repeat(40));
+    assert.deepEqual(result.producer, {
+      repository: runtime.repository, repositoryId: 17, projectKey: "project",
+      sourceSha: runtime.sha, runId: 23, attempt: 2,
+      workflowPath: runtime.workflowPath, workflowSha: runtime.workflowSha,
+      definitionSha: "b".repeat(40), recipeDigest: recipeDigest(dotnet, build),
+      branch: "main", pullRequest: null, startedAt: run.run_started_at,
+      driver: "dotnet", coveragePath: null,
+    });
+  }
+});
+
+test("plan keeps actual PR merge checkout separate from its logical current head", () => {
+  const { run, runtime, event } = admission("pull_request");
+  const result = plan(run, runtime, event, dotnet, build);
+  assert.equal(result.producer.sourceSha, runtime.sha);
+  assert.notEqual(result.producer.sourceSha, run.head_sha);
+  assert.equal(result.producer.branch, event.pull_request.head.ref);
+  assert.equal(result.producer.pullRequest, 7);
+  assert.equal(result.producer.workflowSha, runtime.workflowSha);
+});
+
+test("plan rejects mutation of each initial source/run/caller binding before checkout", () => {
+  const mutations = [
+    (value) => { value.runtime.expectedSha = "d".repeat(40); },
+    (value) => { value.runtime.sha = value.runtime.expectedSha = "invalid"; },
+    (value) => { value.runtime.event = "pull_request_target"; },
+    (value) => { value.run.id++; },
+    (value) => { value.run.run_attempt++; },
+    (value) => { value.run.repository.id++; },
+    (value) => { value.run.repository.full_name = "other/repository"; },
+    (value) => { value.run.event = "schedule"; },
+    (value) => { value.run.path = ".github/workflows/other.yml"; },
+    (value) => { value.run.head_sha = "d".repeat(40); },
+  ];
+  for (const mutate of mutations) {
+    const value = admission();
+    mutate(value);
+    assert.throws(() => plan(value.run, value.runtime, value.event, dotnet, build),
+      /exact supported run\/source/);
+  }
+  const pr = admission("pull_request");
+  pr.run.head_sha = pr.runtime.sha;
+  assert.throws(() => plan(pr.run, pr.runtime, pr.event, dotnet, build),
+    /exact supported run\/source/);
+});
+
+test("plan refuses foreign and draft PR sources during initial admission", () => {
+  for (const mutate of [
+    (event) => { event.pull_request.head.repo.full_name = "other/repository"; },
+    (event) => { event.pull_request.draft = true; },
+  ]) {
+    const { run, runtime, event } = admission("pull_request");
+    mutate(event);
+    assert.throws(() => plan(run, runtime, event, dotnet, build), /foreign or draft/);
+  }
+});
+
+test("plan refuses missing/ambiguous/invalid or mutable foreign executing definitions", () => {
+  for (const mutate of [
+    (run) => { run.referenced_workflows = []; },
+    (run) => { run.referenced_workflows.push({ ...run.referenced_workflows[0] }); },
+    (run) => { run.referenced_workflows[0].sha = "invalid"; },
+    (run) => { run.referenced_workflows[0].path = "other/actions/" + WORKFLOW_PATH + "@main"; },
+    (run) => { run.referenced_workflows[0].ref = "refs/heads/main"; },
+    (run) => { run.referenced_workflows[0].ref = "repository-analysis-sonar/v1"; },
+    (run) => { run.referenced_workflows[0].ref = "b".repeat(40); },
+  ]) {
+    const { run, runtime, event } = admission();
+    mutate(run);
+    assert.throws(() => plan(run, runtime, event, dotnet, build), /definition/);
+  }
+  const { run, runtime, event } = admission();
+  delete run.referenced_workflows[0].ref;
+  assert.equal(plan(run, runtime, event, dotnet, build).definitionSha, "b".repeat(40));
+});
+
+test("plan confines branch/merge contract definitions to the shared Actions repository", () => {
+  for (const reference of ["refs/heads/estate-analysis", "refs/pull/46/merge"]) {
+    const { run, runtime, event } = admission();
+    run.referenced_workflows[0].ref = reference;
+    assert.throws(() => plan(run, runtime, event, dotnet, build), /mutable foreign definition/);
+    runtime.repository = run.repository.full_name = "frasermolyneux/actions";
+    assert.equal(plan(run, runtime, event, dotnet, build).definitionSha, "b".repeat(40));
+  }
+});
 
 test("canonical SDK/Framework/CLI/CMake families preserve explicit original build selections", () => {
   assert.deepEqual(validateBuild(build, dotnet), build);
