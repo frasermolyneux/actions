@@ -43,3 +43,14 @@ test("production workflow uses exact vendor pins and commit-bound internal execu
   assert.match(text, /scannerVersion: "8\.1\.0\.6389"/);
   assert.ok(!text.includes("skipSignatureVerification:"));
 });
+
+test("CLI publication repeats source/producer/live-project authorization after repository builds", () => {
+  const build = text.indexOf("- name: Build and validate only");
+  const authorize = text.indexOf("- name: Reauthorize unchanged CLI/C++ source");
+  const publication = text.indexOf("- name: Scan substantive CLI/C++ source");
+  assert.ok(build > 0 && authorize > build && publication > authorize);
+  const step = text.slice(authorize, publication);
+  assert.match(step, /mode: authorize/);
+  assert.match(step, /producer: \$\{\{ steps.producer.outputs.producer \}\}/);
+  assert.match(step, /evidence-directory: \$\{\{ steps.prepare.outputs.evidence-directory \}\}/);
+});

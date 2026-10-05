@@ -224,6 +224,19 @@ jobs:
             }).join(" ");
             await appendFile(process.env.GITHUB_OUTPUT, `args=${args}\n`);
           NODE
+      - name: Reauthorize unchanged CLI/C++ source and live project immediately before publication
+        if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
+        uses: $/repository-analysis-sonar
+        with:
+          mode: authorize
+          profile: ${{ inputs.profile }}
+          recipe: ${{ needs.plan.outputs.recipe }}
+          build: ${{ needs.plan.outputs.build }}
+          producer: ${{ steps.producer.outputs.producer }}
+          evidence-directory: ${{ steps.prepare.outputs.evidence-directory }}
+          github-token: ${{ github.token }}
+          source-directory: ${{ steps.prepare.outputs.source-directory }}
+          sonar-token: ${{ secrets.SONAR_TOKEN }}
       - name: Scan substantive CLI/C++ source using signed pinned binaries
         if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9

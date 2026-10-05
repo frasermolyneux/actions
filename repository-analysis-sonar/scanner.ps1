@@ -35,7 +35,7 @@ try {
     $output = & $env:SONAR_SCANNER_COMMAND @arguments 2>&1
     $exitCode = $LASTEXITCODE
     foreach ($line in $output) {
-        Write-Host ([string]$line).Replace($env:SONAR_TOKEN, '***')
+        Write-Output ([string]$line).Replace($env:SONAR_TOKEN, '***')
     }
     if ($exitCode -ne 0) { throw "Pinned Sonar .NET $Mode failed (exit $exitCode)." }
 }

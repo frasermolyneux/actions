@@ -2,7 +2,7 @@ name: Repository Sonar evidence
 description: Preflight permitted public Sonar analysis and verify an exact-source, completed compute task.
 inputs:
   mode:
-    description: plan, prepare, install, begin, build, end or verify; none changes provider settings.
+    description: plan, prepare, authorize, install, begin, build, end or verify; none changes provider settings.
     required: true
   profile:
     description: Catalog repository-analysis-v1 profile.
@@ -95,11 +95,12 @@ runs:
       env:
         SONAR_MODE: capability
         SONAR_PROFILE: ${{ inputs.profile }}
+        SONAR_RECIPE: ${{ inputs.recipe }}
         GH_TOKEN: ${{ inputs.github-token }}
         SONAR_SCRIPT: ${{ github.action_path }}/sonar.mjs
       run: node "$SONAR_SCRIPT"
     - name: Independently authorize the prepared producer before native analysis
-      if: inputs.mode == 'begin' || inputs.mode == 'end'
+      if: inputs.mode == 'begin' || inputs.mode == 'end' || inputs.mode == 'authorize'
       shell: bash
       env:
         SONAR_MODE: authorize
@@ -142,7 +143,7 @@ runs:
           node "$SONAR_SCRIPT"
         fi
     - id: scanner
-      if: inputs.mode != 'plan' && inputs.mode != 'prepare' && inputs.mode != 'verify'
+      if: inputs.mode != 'plan' && inputs.mode != 'prepare' && inputs.mode != 'verify' && inputs.mode != 'authorize'
       shell: pwsh
       env:
         SONAR_MODE: ${{ inputs.mode }}

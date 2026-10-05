@@ -13,6 +13,9 @@ the existing `SONAR_TOKEN` secret. It reads live GitHub repository visibility be
 checkout or installation. Private, exempt, foreign-PR and draft-PR execution is
 refused, not reported as a successful empty scan. Installation/build entry points
 also recheck public eligibility; native begin/end require the prepared producer.
+The driver must match the catalog source languages: C# for .NET, C++ for CFamily,
+and JavaScript/TypeScript/Python/PHP for the CLI. Fixture acceptance declares its
+fixture language explicitly without changing Actions' estate source profile.
 
 The actual run attempt independently binds repository ID, caller path/revision,
 actual checkout, logical PR head and the executing reusable definition. Foreign
@@ -47,6 +50,8 @@ Scanner recipe:
 
 Supported drivers are `dotnet`, `cli` and `cpp`. Source directories must be
 repository-relative and physically inside the exact unchanged Git worktree.
+CLI/C++ reauthorize that unchanged tree, producer and live project immediately
+after repository build scripts and before the token-bearing upload.
 Supported coverage is C# `cobertura` or explicit `not-applicable`.
 The recipe digest includes the declared build recipe, not just project/source.
 
@@ -65,6 +70,8 @@ SDK build recipe:
 
 Declared SDKs and the repository's actual `global.json` SDK are installed
 **before** installing or beginning the pinned Sonar .NET scanner **11.3.0**.
+The final SDK-selection filename must be exactly `global.json`, not a matching
+suffix that the .NET CLI would not discover.
 Restore, original format policy and Release/CI build are preserved. Successful
 unit tests use the existing `FullyQualifiedName!~IntegrationTests` selection and
 pinned native `dotnet-coverage` **18.11.2**, without test-package dependency changes.
@@ -114,6 +121,9 @@ revision against unique exact-date historical `lines_to_cover`/`uncovered_lines`
 points, then rechecks that analysis after reading the metrics. Latest component
 measures alone are never called analysis-bound import proof. Ambiguous dates,
 superseded analyses and absent import evidence fail explicitly.
+An instrumented report with zero covered lines remains **collected**, even when
+the provider has exact-source 0% metrics: that metric shape cannot distinguish an
+imported report from missing coverage.
 
 **Remaining acceptance boundary:** PR collection is recorded as collected, not
 server-imported. The project-analysis history API has no PR selector; borrowing

@@ -20,7 +20,7 @@ export function validateBuild(value, recipeInput) {
   if (["dotnet", "netfx"].includes(value.kind)) {
     requireValue(Array.isArray(value.sdk) && value.sdk.length > 0 && value.sdk.length <= 4 &&
       value.sdk.every((sdk) => /^\d+\.\d+\.(?:x|\d+|[1-9]xx)$/.test(sdk)) &&
-      (value.globalJson === null || (relative(value.globalJson) && value.globalJson.endsWith("global.json"))) &&
+      (value.globalJson === null || (relative(value.globalJson) && value.globalJson.split("/").at(-1) === "global.json")) &&
       relative(value.solution) && typeof value.skipFormat === "boolean" && typeof value.tests === "boolean" &&
       (recipe.coverage === "cobertura") === value.tests &&
       (value.kind !== "netfx" || (!value.tests && value.skipFormat)),

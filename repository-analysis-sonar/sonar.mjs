@@ -112,7 +112,7 @@ export function validateInput(input) {
     /^[A-Za-z0-9_.:-]{1,200}$/.test(input.projectKey ?? "") &&
     /^\.github\/workflows\/[A-Za-z0-9_.-]+\.ya?ml$/.test(input.workflowPath ?? "") &&
     typeof input.branch === "string" && input.branch.length > 0 && input.branch.length <= 200 &&
-    !/[\x00-\x20\\~^:?*\[]/.test(input.branch) &&
+    !/[\x00-\x20\\~^:?*[]/.test(input.branch) &&
     (input.pullRequest === null || (Number.isSafeInteger(input.pullRequest) && input.pullRequest > 0)) &&
     ["dotnet", "cli", "cpp"].includes(input.driver) &&
     Number.isFinite(Date.parse(input.startedAt)) &&
@@ -122,12 +122,20 @@ export function validateInput(input) {
   return input;
 }
 
+export function validateDriver(context, driver) {
+  const supported = { dotnet: ["csharp"], cpp: ["cpp"], cli: ["javascript", "typescript", "python", "php"] };
+  requireValue(Object.hasOwn(supported, driver) && Array.isArray(context?.profile?.languages) &&
+    context.profile.languages.some((language) => supported[driver].includes(language)),
+  "Sonar driver must match this catalog source capability profile");
+}
+
 function eligible(context, input) {
   const { policyDigest, ...material } = context ?? {};
   requireValue(context?.visibility === "public" && context.sonar?.status === "eligible" &&
     context.repository === input.repository && context.repositoryId === input.repositoryId &&
     hash(JSON.stringify(material)) === policyDigest,
   "Sonar execution requires a live public eligible repository");
+  validateDriver(context, input.driver);
 }
 
 export function validateProject(project, context, input) {
@@ -243,19 +251,19 @@ export async function verify(context, input, taskId, token, {
   requireValue(ID.test(taskId ?? ""), "A valid Sonar compute-task receipt is required");
   validateProject(await getJson(`/api/navigation/component?component=${encodeURIComponent(input.projectKey)}`,
     token, request), context, input);
-  let result;
-  for (let attempt = 0; attempt < 120; attempt++) {
+  const poll = async (attempt) => {
     const { task } = await getJson(`/api/ce/task?id=${taskId}&additionalFields=scannerContext,warnings`, token, request);
     requireValue(task?.id === taskId && task.componentKey === input.projectKey &&
       ["PENDING", "IN_PROGRESS", "SUCCESS"].includes(task.status),
     "Sonar compute task failed, disappeared or changed identity");
     if (task.status === "SUCCESS") {
-      result = validateTask(task, input, taskId);
-      break;
+      return validateTask(task, input, taskId);
     }
-    if (attempt < 119) await sleep(5000);
-  }
-  requireValue(result, "Sonar compute task did not complete within ten minutes");
+    requireValue(attempt < 119, "Sonar compute task did not complete within ten minutes");
+    await sleep(5000);
+    return poll(attempt + 1);
+  };
+  const result = await poll(0);
   requireValue(Date.parse(result.executedAt) <= now() + 5 * 60 * 1000,
     "Sonar compute completion is in the future");
   return {
@@ -337,6 +345,10 @@ export async function verifyBranchImport(input, proof, collection, token, reques
   const after = await getJson(`/api/project_analyses/search?${parameters}`, token, request);
   requireValue(after.analyses?.[0]?.key === analysis.key && after.analyses[0].revision === input.sourceSha &&
     after.analyses[0].date === analysis.date, "Sonar analysis changed while verifying historical coverage");
+  if (collection.lines.covered === 0) {
+    return { ...collection, status: "collected",
+      reason: "Zero covered lines cannot distinguish report import from missing server coverage" };
+  }
   return { ...collection, status: "imported", analysisId: analysis.key, analysisDate: analysis.date,
     providerLines: { total: values.lines_to_cover, covered: values.lines_to_cover - values.uncovered_lines } };
 }
@@ -351,7 +363,8 @@ async function boundedFile(filename, limit) {
 }
 
 function git(root, args) {
-  const result = spawnSync("git", ["-C", root, ...args], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
+  const command = process.platform === "win32" ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git";
+  const result = spawnSync(command, ["-C", root, ...args], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
   requireValue(result.status === 0, "Cannot validate the unchanged Sonar source checkout");
   return result.stdout.trim();
 }
@@ -374,6 +387,7 @@ export async function main(env = process.env) {
     requireValue(context.repositoryId === Number(env.GITHUB_REPOSITORY_ID) &&
       context.visibility === "public" && context.sonar.status === "eligible",
     "Sonar scanner installation requires this live public eligible repository");
+    validateDriver(context, validateRecipe(JSON.parse(env.SONAR_RECIPE ?? "")).driver);
     return;
   }
   const recipe = validateRecipe(JSON.parse(env.SONAR_RECIPE ?? ""));

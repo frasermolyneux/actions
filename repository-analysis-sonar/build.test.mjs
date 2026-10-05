@@ -22,10 +22,16 @@ test("canonical SDK/Framework/CLI/CMake families preserve explicit original buil
 test("build/source/coverage family mismatches cannot execute success-shaped validation", () => {
   for (const patch of [{ kind: "netfx" }, { tests: false }, { solution: "../outside.sln" },
     { solution: "file;deploy" }, { sdk: ["main"] }, { sdk: ["10.0.x\ninjection"] },
-    { globalJson: "../global.json" }, { publish: true }, { skipFormat: "true" }]) {
+    { globalJson: "../global.json" }, { globalJson: "notglobal.json" },
+    { globalJson: "src/notglobal.json" }, { publish: true }, { skipFormat: "true" }]) {
     assert.throws(() => validateBuild({ ...build, ...patch }, dotnet));
   }
   assert.throws(() => validateBuild({ kind: "cmake", configureArgs: ["-DOTHER=ON"],
     buildArgs: ["--config", "Release"], testArgs: ["--output-on-failure"] },
   { ...dotnet, driver: "cpp", coverage: "not-applicable" }));
+});
+
+test("SDK discovery uses the exact root or nested global.json basename", () => {
+  assert.equal(validateBuild(build, dotnet).globalJson, "global.json");
+  assert.equal(validateBuild({ ...build, globalJson: "src/global.json" }, dotnet).globalJson, "src/global.json");
 });

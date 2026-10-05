@@ -37,14 +37,14 @@ jobs:
         uses: $/repository-analysis-sonar
         with:
           mode: install
-          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          profile: '{"version":"repository-analysis-v1","languages":["csharp"],"sonar":true}'
           recipe: '{"version":1,"driver":"dotnet","projectKey":"fixture-not-published","sourceDirectory":"dotnet-test/fixtures","coverage":"cobertura"}'
           github-token: ${{ github.token }}
       - name: Preserve actual SDK multi-target builds without credentials or publication
         uses: $/repository-analysis-sonar
         with:
           mode: build
-          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          profile: '{"version":"repository-analysis-v1","languages":["csharp"],"sonar":true}'
           recipe: '{"version":1,"driver":"dotnet","projectKey":"fixture-not-published","sourceDirectory":"dotnet-test/fixtures","coverage":"cobertura"}'
           build: '{"kind":"dotnet","sdk":["9.0.x","10.0.x"],"globalJson":null,"solution":".","skipFormat":true,"tests":true}'
           source-directory: ${{ github.workspace }}/dotnet-test/fixtures
@@ -64,7 +64,7 @@ jobs:
         uses: $/repository-analysis-sonar
         with:
           mode: build
-          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          profile: '{"version":"repository-analysis-v1","languages":["csharp"],"sonar":true}'
           recipe: '{"version":1,"driver":"dotnet","projectKey":"fixture-not-published","sourceDirectory":"repository-analysis-sonar/fixtures/netfx","coverage":"not-applicable"}'
           build: '{"kind":"netfx","sdk":["10.0.x"],"globalJson":null,"solution":"Fixture.sln","skipFormat":true,"tests":false}'
           source-directory: ${{ github.workspace }}/repository-analysis-sonar/fixtures/netfx
@@ -82,7 +82,7 @@ jobs:
         uses: $/repository-analysis-sonar
         with:
           mode: build
-          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          profile: '{"version":"repository-analysis-v1","languages":["cpp"],"sonar":true}'
           recipe: '{"version":1,"driver":"cpp","projectKey":"fixture-not-published","sourceDirectory":"repository-analysis-sonar/fixtures/cpp","coverage":"not-applicable"}'
           build: '{"kind":"cmake","configureArgs":["-DCMAKE_BUILD_TYPE=Release","-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"],"buildArgs":["--config","Release"],"testArgs":["--output-on-failure","--build-config","Release"]}'
           source-directory: ${{ github.workspace }}/repository-analysis-sonar/fixtures/cpp

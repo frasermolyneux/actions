@@ -51,6 +51,8 @@ Documentation-only Copilot configuration changes do not require action integrati
   native processing verification and exact source/tool/publication identities.
 - [`docs/repository-analysis-sonar.md`](docs/repository-analysis-sonar.md) - Pinned
   build-aware public Sonar tasks and explicit collected/imported coverage boundaries.
+- [`docs/repository-analysis-codeql.md`](docs/repository-analysis-codeql.md) - Genuine
+  native extraction and build-family acceptance; not full-profile rollout evidence.
 - [`docs/repository-publication-origin.md`](docs/repository-publication-origin.md) - Trusted
   metadata-only publication admission and bounded originating-repository lineage proofs.
 - [`docs/dotnet-test-reporting.md`](docs/dotnet-test-reporting.md) - .NET test setup/execution, optional native coverage, bounded TRX reporting and isolated PR summary publishing.

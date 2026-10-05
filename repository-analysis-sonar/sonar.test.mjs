@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { selectAnalysis } from "../repository-analysis-context/policy.mjs";
 import { HOST, properties, receipt, recipeDigest, rootProperties, validateInput,
-  validateProject, validateRecipe, validateTask, verify } from "./sonar.mjs";
+  validateProject, validateRecipe, validateTask, validateDriver, verify } from "./sonar.mjs";
 import { validateProducerRun, WORKFLOW_PATH } from "./sonar.mjs";
 import { createHash } from "node:crypto";
 import { historicalMeasures, validateCollection, verifyBranchImport } from "./sonar.mjs";
@@ -79,6 +79,30 @@ test("branch import proof binds exact analysis key, revision and immutable histo
   assert.equal(imported.status, "imported");
   assert.equal(imported.analysisId, task.analysisId);
   assert.deepEqual(imported.providerLines, { total: 8, covered: 6 });
+});
+
+test("zero native coverage remains collected even when historical provider measures are zero", async () => {
+  const zero = { ...collection, lines: { total: 10, covered: 0 } };
+  const result = await verifyBranchImport(input, { processing: { analysisId: task.analysisId } },
+    zero, "token", async (url) => response(url.includes("search_history") ?
+      { ...metrics, measures: [
+        { metric: "lines_to_cover", history: [{ date: analysis.date, value: "8" }] },
+        { metric: "uncovered_lines", history: [{ date: analysis.date, value: "8" }] },
+      ] } : { analyses: [analysis] }));
+  assert.equal(result.status, "collected");
+  assert.ok(!Object.hasOwn(result, "analysisId"));
+  assert.match(result.reason, /cannot distinguish/);
+});
+
+test("each scanner family requires its real declared catalog source capability", () => {
+  for (const [driver, languages] of [
+    ["dotnet", ["csharp"]], ["cpp", ["cpp"]], ["cli", ["javascript", "typescript", "python", "php"]],
+  ]) {
+    for (const language of languages) validateDriver({ profile: { languages: [language] } }, driver);
+    for (const unsupported of ["actions", "terraform", ...(driver === "dotnet" ? ["javascript"] : ["csharp"])]) {
+      assert.throws(() => validateDriver({ profile: { languages: [unsupported] } }, driver), /catalog/);
+    }
+  }
 });
 
 test("superseded, same-date ambiguous, foreign-source and PR history are not branch import evidence", async () => {
