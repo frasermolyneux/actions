@@ -94,6 +94,12 @@ test("zero native coverage remains collected even when historical provider measu
   assert.match(result.reason, /cannot distinguish/);
 });
 
+test("not-applicable coverage cannot accept undeclared root scanner report paths", () => {
+  const noCoverage = { ...input, coveragePath: null };
+  validateTask({ ...task, scannerContext: scannerContext(noCoverage) }, noCoverage, task.id);
+  assert.throws(() => validateTask(task, noCoverage, task.id), /coverage report/);
+});
+
 test("each scanner family requires its real declared catalog source capability", () => {
   for (const [driver, languages] of [
     ["dotnet", ["csharp"]], ["cpp", ["cpp"]], ["cli", ["javascript", "typescript", "python", "php"]],

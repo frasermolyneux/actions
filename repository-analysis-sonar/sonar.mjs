@@ -189,8 +189,9 @@ export function validateTask(task, input, taskId) {
     requireValue(properties["sonar.branch.name"] === input.branch &&
       !properties["sonar.pullrequest.key"], "Sonar branch analysis identity mismatch");
   }
-  requireValue(input.coveragePath === null ||
-    properties["sonar.cs.cobertura.reportsPaths"] === input.coveragePath,
+  requireValue(input.coveragePath === null
+    ? properties["sonar.cs.cobertura.reportsPaths"] === undefined
+    : properties["sonar.cs.cobertura.reportsPaths"] === input.coveragePath,
   "Sonar task did not select this invocation's coverage report");
   return { id: task.id, analysisId: task.analysisId, executedAt: task.executedAt };
 }

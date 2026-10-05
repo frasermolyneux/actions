@@ -7,10 +7,19 @@ const text = await readFile(new URL("../" + WORKFLOW_PATH, import.meta.url), "ut
 const release = await readFile(new URL("../.github/workflows/actions-versioning.yml", import.meta.url), "utf8");
 const version = JSON.parse(await readFile(new URL("./version.json", import.meta.url)));
 
+function positions(source, anchors) {
+  const indices = anchors.map((anchor) => source.indexOf(anchor));
+  assert.ok(indices.every((index) => index >= 0), "Every required workflow anchor must exist");
+  return indices;
+}
+
 test("SDK provisioning precedes installation and begin; tokens are not shared with tests/builds", () => {
-  assert.ok(text.indexOf("Install declared SDKs") < text.indexOf("Install the exact .NET scanner"));
-  assert.ok(text.indexOf("Install the exact .NET scanner") < text.indexOf("Begin source-bound"));
-  const build = text.slice(text.indexOf("- name: Build and validate only"), text.indexOf("- name: End successful"));
+  const [sdk, scanner, begin, buildStart, buildEnd] = positions(text, [
+    "Install declared SDKs", "Install the exact .NET scanner", "Begin source-bound",
+    "- name: Build and validate only", "- name: End successful",
+  ]);
+  assert.ok(sdk < scanner && scanner < begin && begin < buildStart && buildStart < buildEnd);
+  const build = text.slice(buildStart, buildEnd);
   assert.ok(!build.includes("secrets."));
   assert.ok(!text.includes("inherit"));
   assert.ok(!text.includes("id-token:"));
@@ -27,8 +36,11 @@ test("immutable definition closure matches all release filters and dependency or
       filename.startsWith(filter.slice(2) + "/")), `Missing version closure: ${filename}`);
   }
   const packages = /ACTIONS=\(([\s\S]*?)\)/.exec(release)[1].trim().split(/\s+/);
+  const packageIndex = packages.indexOf("repository-analysis-sonar");
+  assert.ok(packageIndex >= 0, "Sonar package must remain in the release set");
   for (const dependency of ["repository-analysis-context", "dotnet-test", "dotnet-test-report"]) {
-    assert.ok(packages.indexOf(dependency) < packages.indexOf("repository-analysis-sonar"));
+    const dependencyIndex = packages.indexOf(dependency);
+    assert.ok(dependencyIndex >= 0 && dependencyIndex < packageIndex, `${dependency} must release before Sonar`);
   }
   const detection = new RegExp(/PATTERN='(\^\(repository-analysis-sonar[^']+)'/.exec(release)[1]);
   for (const filename of DEFINITION_FILES) {
@@ -53,4 +65,12 @@ test("CLI publication repeats source/producer/live-project authorization after r
   assert.match(step, /mode: authorize/);
   assert.match(step, /producer: \$\{\{ steps.producer.outputs.producer \}\}/);
   assert.match(step, /evidence-directory: \$\{\{ steps.prepare.outputs.evidence-directory \}\}/);
+});
+
+test("deleted provisioning or build anchors cannot satisfy workflow safety assertions", () => {
+  const anchors = ["Install declared SDKs", "Install the exact .NET scanner", "Begin source-bound",
+    "- name: Build and validate only", "- name: End successful"];
+  for (const anchor of anchors) {
+    assert.throws(() => positions(text.replace(anchor, "removed"), anchors), /must exist/);
+  }
 });
