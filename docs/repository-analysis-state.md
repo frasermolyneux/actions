@@ -23,7 +23,7 @@ The `assemble` operation accepts a bounded JSON file beneath `RUNNER_TEMP`, cont
 | `run` | Actual run ID/attempt/event, caller workflow path/definition SHA and UTC start/completion |
 | `pins` | Exactly one ID/version/rule revision/engine digest for every selected tool/category |
 | `results` | Actual tool state, analyzed source SHA, matching pins, per-capability source counts, finding count, processing/publication identities and completion time |
-| `coverage` | Explicit suite/import/unavailability evidence for the analyzed source; absence is not zero coverage |
+| `coverage` | Explicit suite/collection/import/unavailability evidence for the analyzed source; absence is not zero coverage |
 | `finishedHeadSha` | Independently observed logical head after analysis; never relabel the actual analyzed source |
 
 Assembly inputs and emitted compact result files are bounded to 128 KiB. Freshness
@@ -65,7 +65,7 @@ and target/base revisions separate.
 
 ## Coverage
 
-Each suite declares `imported`, `unavailable`, `not-applicable` or `failed`. Imported
+Each suite declares `collected`, `imported`, `unavailable`, `not-applicable` or `failed`. Imported
 OpenCover, VS coverage XML, Cobertura, LCOV or gcov evidence needs nonempty hashed report paths, positive instrumented
 line/test counts, consistent passing executed-test totals and the same completed Sonar
 analysis ID. Zero covered lines is a legitimate measurable result; zero instrumentation
@@ -73,6 +73,14 @@ or all-skipped tests is not evidence of an import. Scanner engines must validate
 report contents, passing test invocation and actual provider import.
 Report paths must be repository-relative, use forward slashes, and exclude traversal,
 drive-qualified paths, backslashes and alternate data streams.
+
+`collected` preserves the same genuine hashed native reports, instrumented-line
+counts and passing executed tests, but requires a null `analysisId` and an explicit
+reason why provider import is unverified. A successful PR compute task does not
+upgrade collection to import. A zero-covered native report can likewise remain
+collected when server import cannot be independently distinguished from missing
+coverage. This explicit state is not failed collection and introduces no new
+historical coverage gate; PR-only results still cannot satisfy default freshness.
 
 Every active profile needs at least one explicit suite entry, including workflow-only and
 private profiles with a documented inapplicable/unavailable coverage provider. Omitting
