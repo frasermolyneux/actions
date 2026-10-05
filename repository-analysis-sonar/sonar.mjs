@@ -144,6 +144,10 @@ export function rootProperties(scannerContext) {
     const key = line.slice(4, offset);
     requireValue(!seen.has(key), "Duplicate root Sonar scanner property");
     seen.add(key);
+    const coverageImport = /(?:coverage|opencover|cobertura|lcov|gcov|jacoco)/i.test(key) &&
+      /report(?:s?Paths?|s)/i.test(key);
+    requireValue(!coverageImport || key === "sonar.cs.cobertura.reportsPaths",
+      "Alternate Sonar coverage import properties cannot prove the selected native report");
     if (ALLOWED_PROPERTIES.has(key)) result[key] = line.slice(offset + 1);
   }
   requireValue(sections === 1, "Missing root Sonar scanner section");
@@ -419,11 +423,25 @@ function git(root, args) {
   return result.stdout.trim();
 }
 
-async function source(root, recipe, sha) {
+export function validateUntracked(files, driver) {
+  const outputs = new Set(driver === "dotnet"
+    ? ["bin", "obj", ".sonarqube"]
+    : ["node_modules", "vendor", "fixtures", "build", ".scannerwork"]);
+  const sourceFile = /\.(?:cs|vb|c|cc|cpp|cxx|h|hh|hpp|hxx|[cm]?js|jsx|[cm]?ts|tsx|py|php|html|css|scss|sass|json|xml|ya?ml|tf|bicep|sh|ps1|props|targets)$/i;
+  requireValue(files.every((filename) => !sourceFile.test(filename) ||
+    filename.split("/").some((part) => outputs.has(part))),
+  "Untracked analyzable files outside known excluded build outputs cannot be published");
+}
+
+export async function validateSource(root, recipe, sha) {
   const physical = await realpath(root);
   requireValue(physical === await realpath(git(root, ["rev-parse", "--show-toplevel"])) &&
     git(root, ["rev-parse", "HEAD"]) === sha, "Sonar requires the exact complete Git worktree");
   git(root, ["diff", "--exit-code", "HEAD", "--"]);
+  const untracked = ["--exclude-standard", "--ignored"].flatMap((selection) =>
+    git(root, ["ls-files", "--others", ...(selection === "--ignored"
+      ? ["--ignored", "--exclude-standard"] : [selection]), "-z"]).split("\0").filter(Boolean));
+  validateUntracked(untracked, recipe.driver);
   const directory = await realpath(path.join(root, recipe.sourceDirectory));
   requireValue(directory === physical || directory.startsWith(physical + path.sep),
     "Sonar base directory escapes the authenticated source");
@@ -460,7 +478,7 @@ export async function main(env = process.env) {
     env.GH_TOKEN, fetch);
   validateProducerRun(run, input, runtime, event);
   const trust = await authorizeSource(input, run, event, env.GH_TOKEN);
-  const directory = await source(env.SONAR_SOURCE_DIRECTORY, recipe, input.sourceSha);
+  const directory = await validateSource(env.SONAR_SOURCE_DIRECTORY, recipe, input.sourceSha);
   if (env.SONAR_MODE === "authorize") {
     const stored = JSON.parse(await boundedFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "producer.json"), 16 * 1024));
     requireValue(JSON.stringify(stored) === JSON.stringify(input) &&

@@ -36,6 +36,7 @@ assert.equal(Object.keys(databases).length, 1);
 const database = databases[aliases[language]];
 assert.ok(path.isAbsolute(database));
 const resolved = JSON.parse(run(env.CODEQL_COMMAND, ["resolve", "database", database, "--format=json"]));
+assert.equal(await realpath(resolved.sourceLocationPrefix), root, "Native database must identify this actual source root");
 const archive = path.join(database, "src.zip");
 const info = await lstat(archive);
 assert.ok(info.isFile() && !info.isSymbolicLink() && info.size > 0 && info.size <= 512 * 1024 * 1024);

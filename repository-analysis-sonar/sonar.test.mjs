@@ -7,6 +7,12 @@ import { validateProducerRun, WORKFLOW_PATH } from "./sonar.mjs";
 import { createHash } from "node:crypto";
 import { historicalMeasures, validateCollection, verifyBranchImport } from "./sonar.mjs";
 import { authorizeSource, trustedSource } from "./sonar.mjs";
+import { validateUntracked } from "./sonar.mjs";
+import { validateSource } from "./sonar.mjs";
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
+import path from "node:path";
 
 const recipe = { version: 1, driver: "dotnet", projectKey: "owner_project", sourceDirectory: "src",
   coverage: "cobertura" };
@@ -168,6 +174,49 @@ test("not-applicable coverage cannot accept undeclared root scanner report paths
   const noCoverage = { ...input, coveragePath: null };
   validateTask({ ...task, scannerContext: scannerContext(noCoverage) }, noCoverage, task.id);
   assert.throws(() => validateTask(task, noCoverage, task.id), /coverage report/);
+});
+
+test("alternate coverage imports are rejected without retaining their configured values", () => {
+  for (const key of ["sonar.cs.opencover.reportsPaths", "sonar.javascript.lcov.reportPaths",
+    "sonar.coverageReportPaths", "sonar.python.coverage.reportPaths", "sonar.coverage.jacoco.xmlReportPaths"]) {
+    const alternate = scannerContext().replace("Project scanner properties:",
+      `Project scanner properties:\n  - ${key}=unretained-value`);
+    assert.throws(() => rootProperties(alternate), /Alternate Sonar coverage/);
+  }
+});
+
+test("generated analyzable files cannot expand the authenticated commit outside excluded outputs", () => {
+  validateUntracked(["src/Project/obj/Generated.cs", "src/Project/bin/Release/compiled.js",
+    ".sonarqube/out/generated.json"], "dotnet");
+  validateUntracked(["src/node_modules/package/index.js", "src/build/compiled.cpp",
+    "src/fixtures/sample.py", ".scannerwork/scanner.json"], "cli");
+  for (const driver of ["dotnet", "cli", "cpp"]) {
+    for (const filename of ["src/untracked.cs", "src/untracked.js", "src/ignored-by-git/added.py"]) {
+      assert.throws(() => validateUntracked([filename], driver), /Untracked analyzable/);
+    }
+  }
+});
+
+test("actual Git source admission rejects ignored untracked files, not only tracked diffs", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sonar-source-contract-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const command = process.platform === "win32" ? String.raw`C:\Program Files\Git\cmd\git.exe` : "/usr/bin/git";
+  const git = (...args) => execFileSync(command, ["-C", root, ...args], { encoding: "utf8" }).trim();
+  await mkdir(path.join(root, "src"));
+  await writeFile(path.join(root, "src", "tracked.js"), "export const value = 1;\n");
+  await writeFile(path.join(root, ".gitignore"), "ignored/\nnode_modules/\n");
+  git("init", "--quiet");
+  git("add", ".");
+  git("-c", "user.name=Contract", "-c", "user.email=contract@example.invalid", "commit", "--quiet", "-m", "fixture");
+  const sha = git("rev-parse", "HEAD");
+  const selection = { ...recipe, driver: "cli", coverage: "not-applicable" };
+  assert.ok(await validateSource(root, selection, sha));
+  await mkdir(path.join(root, "src", "node_modules"));
+  await writeFile(path.join(root, "src", "node_modules", "dependency.js"), "dependency\n");
+  assert.ok(await validateSource(root, selection, sha));
+  await mkdir(path.join(root, "src", "ignored"));
+  await writeFile(path.join(root, "src", "ignored", "untracked.js"), "uncommitted source\n");
+  await assert.rejects(validateSource(root, selection, sha), /Untracked analyzable/);
 });
 
 test("each scanner family requires its real declared catalog source capability", () => {

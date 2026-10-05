@@ -12,7 +12,9 @@ these jobs. Queries run without automatic database or SARIF publication.
 For maintained Actions, JavaScript and Python source, the verifier checks the
 actual checkout revision, unchanged tracked files, observed CLI version, queried
 SARIF invocation and native database archive. Selected archived source bytes must
-match their tracked checkout bytes. Estimated baseline lines are not extraction
+match their tracked checkout bytes under a single native archive root. The resolved
+database source location must identify the actual runner checkout.
+Estimated baseline lines are not extraction
 evidence. Archive file counts are not evaluated-line or coverage percentages.
 Live-public eligibility is checked again before the validated SARIF upload; the
 existing native verifier independently binds processing, source and publication.

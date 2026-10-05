@@ -74,6 +74,10 @@ Supported drivers are `dotnet`, `cli` and `cpp`. Source directories must be
 repository-relative and physically inside the exact unchanged Git worktree.
 CLI/C++ reauthorize that unchanged tree, producer and live project immediately
 after repository build scripts and before the token-bearing upload.
+Tracked-file changes and untracked analyzable files (including Git-ignored
+source) outside the driver's known excluded/generated output directories fail
+before publication. A lifecycle hook cannot silently add scanned source to the
+authenticated commit.
 Supported coverage is C# `cobertura` or explicit `not-applicable`.
 The recipe digest includes the declared build recipe, not just project/source.
 
@@ -127,6 +131,8 @@ Only the exact `Project scanner properties:` section supplies identity.
 Server settings and repeated `Scanner properties of module:` sections may contain
 different project keys; they cannot override the root. Duplicate root sections or
 keys fail. Raw scanner context is parsed in memory and **never logged or retained**.
+Alternate coverage-import properties are rejected without retaining their values;
+another configured coverage source cannot supply the selected report's measures.
 
 The output binds the actual task/analysis ID, repository/source/policy/recipe,
 caller/definition and originating run attempt. It explicitly retains

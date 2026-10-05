@@ -28,6 +28,7 @@ def source_hashes(root, candidates):
 
 def archived_hashes(archive, expected):
     found = {}
+    prefix = None
     with zipfile.ZipFile(archive) as native:
         entries = native.infolist()
         if len(entries) > 200_000 or sum(item.file_size for item in entries) > 1024 * 1024 * 1024:
@@ -45,6 +46,10 @@ def archived_hashes(archive, expected):
                 continue
             if len(matches) != 1 or matches[0] in found or item.file_size > 20 * 1024 * 1024:
                 raise ValueError("Ambiguous or oversized native extraction source")
+            current_prefix = name[:-len(matches[0])]
+            if prefix is not None and current_prefix != prefix:
+                raise ValueError("Native extraction source spans multiple archive roots")
+            prefix = current_prefix
             value = native.read(item)
             if hashlib.sha256(value).hexdigest() != expected[matches[0]]:
                 raise ValueError("Native extracted source differs from the actual checkout")

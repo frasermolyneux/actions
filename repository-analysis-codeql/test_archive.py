@@ -49,6 +49,19 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "escapes"):
             verify(self.archive, self.root, ["../src/main.py"])
 
+    def test_different_candidates_cannot_borrow_different_native_roots(self):
+        (self.root / "src/other.py").write_bytes(b"print('other')\n")
+        self.make([("one/src/main.py", b"print('source')\n"),
+                   ("two/src/other.py", b"print('other')\n")])
+        with self.assertRaisesRegex(ValueError, "multiple archive roots"):
+            verify(self.archive, self.root, ["src/main.py", "src/other.py"])
+
+    def test_different_candidates_share_one_genuine_native_root(self):
+        (self.root / "src/other.py").write_bytes(b"print('other')\n")
+        self.make([("one/src/main.py", b"print('source')\n"),
+                   ("one/src/other.py", b"print('other')\n")])
+        self.assertEqual(verify(self.archive, self.root, ["src/main.py", "src/other.py"])["files"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()
