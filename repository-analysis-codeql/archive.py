@@ -2,14 +2,14 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import stat
 import sys
 import zipfile
 
 
-def verify(archive, root, candidates):
-    root = Path(root).resolve(strict=True)
+def source_hashes(root, candidates):
     expected = {}
     for filename in candidates:
         if not isinstance(filename, str) or "\\" in filename or "\0" in filename:
@@ -23,6 +23,10 @@ def verify(archive, root, candidates):
         if location.resolve(strict=True) != location.absolute():
             raise ValueError("Extraction source has a linked ancestor")
         expected[filename] = hashlib.sha256(location.read_bytes()).hexdigest()
+    return expected
+
+
+def archived_hashes(archive, expected):
     found = {}
     with zipfile.ZipFile(archive) as native:
         entries = native.infolist()
@@ -47,6 +51,12 @@ def verify(archive, root, candidates):
             found[matches[0]] = expected[matches[0]]
     if not found:
         raise ValueError("No selected tracked source was genuinely archived by CodeQL")
+    return found
+
+
+def verify(archive, root, candidates):
+    root = Path(root).resolve(strict=True)
+    found = archived_hashes(archive, source_hashes(root, candidates))
     return {"files": len(found), "sourceDigest": hashlib.sha256(
         json.dumps(sorted(found.items()), separators=(",", ":")).encode()).hexdigest()}
 
@@ -54,7 +64,11 @@ def verify(archive, root, candidates):
 if __name__ == "__main__":
     try:
         request = json.load(sys.stdin)
-        print(json.dumps(verify(request["archive"], request["root"], request["files"])))
-    except (ValueError, KeyError, OSError, zipfile.BadZipFile) as error:
+        root = os.environ["GITHUB_WORKSPACE"]
+        print(json.dumps(verify(request["archive"], root, request["files"])))
+    except (ValueError, zipfile.BadZipFile) as error:
         print(f"::error::CodeQL extraction archive validation failed ({type(error).__name__}): {error}", file=sys.stderr)
+        sys.exit(1)
+    except (KeyError, OSError) as error:
+        print(f"::error::CodeQL extraction inputs or filesystem unavailable ({type(error).__name__})", file=sys.stderr)
         sys.exit(1)

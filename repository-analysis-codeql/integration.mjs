@@ -18,11 +18,15 @@ assert.equal(context.repositoryId, Number(env.GITHUB_REPOSITORY_ID));
 assert.equal(context.visibility, "public");
 assert.ok(context.codeql.languages.includes(language), "CodeQL language must be public and selected");
 const root = await realpath(env.GITHUB_WORKSPACE);
-const git = process.platform === "win32" ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git";
+const git = process.platform === "win32" ? String.raw`C:\Program Files\Git\cmd\git.exe` : "/usr/bin/git";
 const run = (command, args, input) => {
   assert.ok(path.isAbsolute(command), "Evidence commands must not resolve through repository-controlled PATH");
   const result = spawnSync(command, args, { cwd: root, encoding: "utf8", input, maxBuffer: 8 * 1024 * 1024 });
-  assert.equal(result.status, 0, `CodeQL evidence command failed: ${path.basename(command)}`);
+  if (result.status !== 0) {
+    const reason = result.error?.code ?? `exit ${result.status}`;
+    if (result.stderr) console.error(result.stderr.slice(0, 4096));
+    throw new Error(`CodeQL evidence command failed: ${path.basename(command)} (${reason})`);
+  }
   return result.stdout;
 };
 assert.equal(run(git, ["rev-parse", "HEAD"]).trim(), env.GITHUB_SHA);
@@ -51,7 +55,7 @@ const candidates = tracked.filter((file) => expressions[language].test(file) &&
 assert.ok(candidates.length > 0, "Selected source cannot be inferred from successful commands");
 const extracted = JSON.parse(run(env.CODEQL_PYTHON, [
   path.join(path.dirname(fileURLToPath(import.meta.url)), "archive.py"),
-], JSON.stringify({ archive, root, files: candidates })));
+], JSON.stringify({ archive, files: candidates })));
 const output = env.CODEQL_SARIF_DIRECTORY;
 const filename = path.join(output, aliases[language] + ".sarif");
 const bytes = await readFile(filename);
@@ -72,7 +76,7 @@ await writeFile(path.join(directory, "proof.json"), JSON.stringify({
   repository: env.GITHUB_REPOSITORY, repositoryId: context.repositoryId, visibility: "public",
   sourceSha: env.GITHUB_SHA, language, version: "2.27.1", ruleRevision: "2.27.1",
   run: { id: Number(env.GITHUB_RUN_ID), attempt: Number(env.GITHUB_RUN_ATTEMPT) },
-  extraction: extracted, resolvedDatabaseFields: Object.keys(resolved).sort(),
+  extraction: extracted, resolvedDatabaseFields: Object.keys(resolved).sort((left, right) => left.localeCompare(right, "en")),
   sarif: { sha256: hash(bytes), findingCount: analysis.results.length },
   publication: fixture ? "not-requested-fixture-source" : "await-independent-native-processing-proof",
 }) + "\n");

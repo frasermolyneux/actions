@@ -206,7 +206,7 @@ jobs:
           ANALYSIS_PROFILE: '{"version":"repository-analysis-v1","languages":["${{ matrix.language }}"],"sonar":true}'
           GH_TOKEN: ${{ github.token }}
         run: |
-          $env:CODEQL_PYTHON = (Get-Command python -CommandType Application).Source
+          $env:CODEQL_PYTHON = Join-Path $env:pythonLocation $(if ($IsWindows) { 'python.exe' } else { 'bin/python' })
           node repository-analysis-codeql/integration.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

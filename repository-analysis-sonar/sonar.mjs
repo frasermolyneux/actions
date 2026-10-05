@@ -363,7 +363,7 @@ async function boundedFile(filename, limit) {
 }
 
 function git(root, args) {
-  const command = process.platform === "win32" ? "C:\\Program Files\\Git\\cmd\\git.exe" : "/usr/bin/git";
+  const command = process.platform === "win32" ? String.raw`C:\Program Files\Git\cmd\git.exe` : "/usr/bin/git";
   const result = spawnSync(command, ["-C", root, ...args], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
   requireValue(result.status === 0, "Cannot validate the unchanged Sonar source checkout");
   return result.stdout.trim();
