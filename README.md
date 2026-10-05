@@ -6,6 +6,8 @@
 [![Devops Secure Scanning](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml)
 
 ## Documentation
+- [docs/workflow-linting.md](docs/workflow-linting.md) - Released-parser compatibility
+  for commit-bound self references without disabling workflow or ShellCheck rules.
 - [docs/action-versioning.md](docs/action-versioning.md) - Tagging strategy and guidance for selecting version pins.
 - [docs/codequality.md](docs/codequality.md) - Reusable workflow that wires SonarCloud, CodeQL, and composite builds.
 - [docs/repository-analysis.md](docs/repository-analysis.md) - Visibility-aware scanner selection

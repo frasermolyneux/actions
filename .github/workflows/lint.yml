@@ -20,6 +20,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
+      - name: Set up lint parser
+        shell: bash
+        run: |
+          python3 -m pip install --quiet --disable-pip-version-check \
+            --only-binary :all: "pyyaml==6.0.3"
+
       - name: Run actionlint
         shell: bash
         env:
@@ -48,7 +54,8 @@ jobs:
           # `.github/workflows/*.yml` file's `run:` steps. actionlint does
           # not lint composite action metadata (top-level action.yml files),
           # so those are checked separately below.
-          ./actionlint -color
+          ACTIONLINT="$PWD/actionlint" python3 -m unittest discover -s scripts -p 'test_actionlint_compat.py'
+          python3 scripts/actionlint_compat.py --actionlint "$PWD/actionlint"
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
@@ -74,12 +81,9 @@ jobs:
           # in the critical path across ~58 repos; extending this to every
           # action.yml in the repo is a reasonable follow-up but is a much
           # larger, separate cleanup (many pre-existing findings elsewhere).
-          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep repository-analysis-context repository-analysis-local repository-analysis-state repository-publication-origin"
+          COMPOSITE_ACTION_DIRS: "approve-copilot-workflow-runs delegate-failed-checks stale-branch-sweep repository-analysis-context repository-analysis-local repository-analysis-state repository-analysis-sarif repository-analysis repository-publication-origin"
         run: |
           set -euo pipefail
-
-          python3 -m pip install --quiet --disable-pip-version-check \
-            --only-binary :all: "pyyaml==6.0.3"
 
           python3 - "$COMPOSITE_ACTION_DIRS" <<'PY'
           import os
