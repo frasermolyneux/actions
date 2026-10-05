@@ -146,6 +146,19 @@ test("native report bytes and genuine passing TRX execution bind coverage collec
   assert.throws(() => validateCollection(collection, tests, input, Buffer.from("changed")));
 });
 
+test("collector version matches the producer pin including supported build metadata", () => {
+  for (const toolVersion of ["18.11.2", "18.11.2+abc", "18.11.2+commit.123-abc"]) {
+    const result = validateCollection({ ...collection, toolVersion }, tests, input, bytes);
+    assert.equal(result.status, "collected");
+    assert.equal(result.toolVersion, toolVersion);
+  }
+  for (const toolVersion of ["18.11.3+abc", "18.11.20+abc", "18.11.2-preview",
+    "18.11.2+", "18.11.2+abc_def", "18.11.2+abc\n", "18.11.2+abc def", null]) {
+    assert.throws(() => validateCollection({ ...collection, toolVersion }, tests, input, bytes),
+      /pinned native Cobertura/);
+  }
+});
+
 test("the recursive report glob cannot import an extra nested report or a foreign invocation", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "sonar-coverage-contract-"));
   try {

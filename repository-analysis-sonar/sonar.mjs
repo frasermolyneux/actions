@@ -42,6 +42,7 @@ const ALLOWED_PROPERTIES = new Set([...Object.values(BINDING),
   "sonar.pullrequest.base", "sonar.cs.cobertura.reportsPaths"]);
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
+const coveragePin = JSON.parse(await readFile(new URL("../dotnet-test/coverage-tools.json", import.meta.url), "utf8"));
 const APPROVED_PR_AUTOMATION = [
   { id: 198982749, login: "Copilot", type: "Bot", origin: "copilot" },
   { id: 49699333, login: "dependabot[bot]", type: "Bot", origin: "dependabot" },
@@ -364,9 +365,16 @@ export function properties(input, metadataPath) {
   return values;
 }
 
+function matchesCollectorPin(version) {
+  if (version === coveragePin.version) return true;
+  if (typeof version !== "string" || !version.startsWith(coveragePin.version + "+")) return false;
+  const metadata = version.slice(coveragePin.version.length + 1);
+  return metadata.length > 0 && !/[^A-Za-z0-9.-]/.test(metadata);
+}
+
 export function validateCollection(coverage, tests, input, bytes) {
   requireValue(coverage?.schema === 1 && coverage.status === "collected" && coverage.format === "cobertura" &&
-    coverage.sourceSha === input.sourceSha && coverage.toolVersion === "18.11.2" &&
+    coverage.sourceSha === input.sourceSha && matchesCollectorPin(coverage.toolVersion) &&
     coverage.sha256 === hash(bytes) && Number.isSafeInteger(coverage.lines?.total) && coverage.lines.total > 0 &&
     Number.isSafeInteger(coverage.lines.covered) && coverage.lines.covered >= 0 &&
     coverage.lines.covered <= coverage.lines.total,
@@ -376,7 +384,8 @@ export function validateCollection(coverage, tests, input, bytes) {
     Number.isSafeInteger(tests.passed) && tests.passed === tests.executed && tests.failed === 0 &&
     Number.isSafeInteger(tests.skipped) && tests.skipped >= 0,
   "Coverage requires actual successful executed tests, not missing or all-skipped tests");
-  return { status: "collected", format: "cobertura", sourceSha: input.sourceSha, sha256: coverage.sha256,
+  return { status: "collected", format: "cobertura", sourceSha: input.sourceSha,
+    toolVersion: coverage.toolVersion, sha256: coverage.sha256,
     lines: coverage.lines, tests: { executed: tests.executed, passed: tests.passed, failed: 0, skipped: tests.skipped } };
 }
 

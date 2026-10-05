@@ -109,6 +109,8 @@ values that could make restore/build return successful help without compilation.
 Restore, original format policy and Release/CI build are preserved. Successful
 unit tests use the existing `FullyQualifiedName!~IntegrationTests` selection and
 pinned native `dotnet-coverage` **18.11.2**, without test-package dependency changes.
+Verification reads the producer's same package pin, accepts its supported native
+build-metadata suffix, and preserves the observed version without admitting another package version.
 Separate existing integration/browser jobs and runsettings are not replaced.
 Repositories with no declared tests select `tests: false` and
 `coverage: not-applicable`; no zero-test success is fabricated.
