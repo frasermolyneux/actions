@@ -16,12 +16,14 @@ const files = {
   "packages/app/src/main.mts": "export function run(value: string) { return eval(value); }\n",
   "Main.cs": "using System.Diagnostics;\nclass Fixture {\n public static void Run(string value) { Process.Start(value); }\n}\n",
   "main.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
+  ".github/scripts/fixture.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
   "main.ps1": "Write-Host 'fixture'\n",
   "automation/check": "#!/usr/bin/env pwsh\nWrite-Host 'extensionless fixture'\n",
   "operations/health": "#!/bin/sh\necho $FIXTURE_VALUE\n",
   "operations/health.bash": "#!/bin/bash\necho $FIXTURE_VALUE\n",
   "operations/health.dash": "#!/bin/dash\necho $FIXTURE_VALUE\n",
   "operations/health.ksh": "#!/bin/ksh\necho $FIXTURE_VALUE\n",
+  "operations/style.sh": "#!/bin/sh\ncat fixture.txt | grep fixture\n",
   "--exclude=SC2086": "#!/bin/sh\necho $FIXTURE_VALUE\n",
   "main.tf": "resource \"azurerm_storage_account\" \"fixture\" {\n  name = \"fixture\"\n  resource_group_name = \"fixture\"\n  location = \"uksouth\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  min_tls_version = \"TLS1_0\"\n}\n",
   "json/main.tf.json": JSON.stringify({ resource: { azurerm_storage_account: { fixture: {
@@ -109,8 +111,25 @@ if (tool === "checkov") {
   assert.ok(native.every((entry) => entry.summary.failed > 0), "Each IaC framework fixture must detect a real finding");
 }
 if (tool === "psscriptanalyzer") {
+  const severityEnum = JSON.parse(execFileSync("/usr/bin/pwsh", [
+    "-NoProfile", "-NonInteractive", "-Command",
+    '$ErrorActionPreference = "Stop"; Import-Module $env:FIXTURE_MODULE; ' +
+      '$type = [Microsoft.Windows.PowerShell.ScriptAnalyzer.Generic.DiagnosticSeverity]; ' +
+      '$values = [ordered]@{}; foreach ($name in @("Information", "Warning", "Error", "ParseError")) ' +
+      '{ $values[$name] = [int][Enum]::Parse($type, $name) }; $values | ConvertTo-Json -Compress',
+  ], { encoding: "utf8", env: {
+    PATH: process.env.PATH,
+    HOME: root,
+    FIXTURE_MODULE: path.join(installed.modules, "PSScriptAnalyzer", report.toolVersion, "PSScriptAnalyzer.psd1"),
+  } }));
+  assert.deepEqual(severityEnum, { Information: 0, Warning: 1, Error: 2, ParseError: 3 },
+    "Severity conversion must match the actual installed pinned module, not a guessed enum");
   assert.ok(native.results.some((entry) => entry.ScriptPath.endsWith("/automation/check")),
     "The extensionless PowerShell fixture must actually be analyzed");
+}
+if (tool === "bandit") {
+  assert.ok(native.results.some((entry) => entry.filename === "./.github/scripts/fixture.py"),
+    "Bandit must actually scan selected GitHub automation rather than excluding .github as .git");
 }
 if (tool === "semgrep-ce") {
   const findings = native.flatMap((entry) => entry.results);
@@ -119,6 +138,10 @@ if (tool === "semgrep-ce") {
   }
 }
 if (tool === "shellcheck") {
+  assert.ok(native.comments.some((entry) => entry.file === "operations/style.sh" && entry.level === "style"),
+    "The pinned engine must emit a real style diagnostic");
+  assert.ok(sarif.runs[0].results.some((entry) => entry.properties.originalSeverity === "style" && entry.level === "note"),
+    "Actual native style diagnostics must publish as informational notes");
   assert.ok(native.comments.some((entry) => entry.file === "--exclude=SC2086" && entry.code === 2086),
     "An option-shaped filename must be analyzed, not interpreted as a suppression");
 }

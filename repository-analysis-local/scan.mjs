@@ -59,7 +59,7 @@ export function command(tool, version, files, rules, source, moduleRoot, bin = "
       return [path.join(bin, "checkov"), ["--directory", ".", "--framework", ...checkovFrameworks(source.languages, files),
         "--skip-download", "--download-external-modules", "false", "--output", "json"]];
     case "bandit":
-      return [path.join(bin, "bandit"), ["--format", "json", "--quiet", "--", ...files]];
+      return [path.join(bin, "bandit"), ["--format", "json", "--quiet", "--exclude", "", "--", ...files]];
     case "shellcheck":
       return [path.join(bin, "shellcheck"), ["--norc", "--format=json1", "--", ...files]];
     case "psscriptanalyzer":

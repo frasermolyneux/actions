@@ -51,6 +51,10 @@ completed PowerShell reports must identify every selected file, not just match a
 Every selected capability needs nonempty source.
 First-party monorepo source under `packages/` is included. TypeScript module files
 (`.mts`, `.cts`) and Bash/Dash/Ksh file extensions are included.
+Bandit receives no additional native filename exclusions: the isolated tracked
+inventory already defines its source set. Its default `.git` substring exclusion
+would otherwise silently omit selected `.github` Python automation. Per-file
+completion remains mandatory; missing metrics never become clean evidence.
 
 The runner verifies actual engine versions and native report structure, counts, parsing
 errors, selected framework completeness and available per-file evidence. A second checkout
@@ -63,6 +67,10 @@ Outputs point to `report.json`, the native report in `native.json` and finding-p
 SARIF in `analysis.sarif` (`sarif-file`). Conversion retains actual rule/message/location
 identities, version and counts; incomplete native output or unanalysed finding paths
 cannot become completed SARIF. File-level diagnostics do not invent line numbers.
+ShellCheck style diagnostics retain their original severity and publish as notes.
+PowerShell numeric severities follow the pinned module's actual enum
+(`Information=0`, `Warning=1`, `Error=2`); parsing errors fail, rather than being
+represented as completed security findings.
 The `source-directory` input defaults to the workspace and can select a separate target
 checkout, keeping trusted shared helpers outside the scanned Git tree. The bounded local
 result identifies repository/visibility, frozen source SHA, policy/engine/rule digests,
@@ -99,7 +107,9 @@ keep them private when the originating repository is private.
 The `Local analysis contracts` workflow runs portable policy/analyzer contracts on both
 Ubuntu and Windows, and executes all six real pinned tools on Linux against synthetic
 private-policy fixtures with deliberately detectable findings, including both Terraform
-representations, supported Ansible certificate-validation policies and an uninitialized
+representations, selected `.github` Python automation, native ShellCheck style
+diagnostics, the actual installed PowerShell severity enum, supported Ansible
+certificate-validation policies and an uninitialized
 dependency gitlink. Those fixtures do not contain
 private repository source and are not evidence that the estate callers have been migrated.
 Negative contract tests cover invalid selection, credential isolation and malformed,

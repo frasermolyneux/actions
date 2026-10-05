@@ -127,6 +127,16 @@ test("tracked filenames cannot inject options into positional-input analyzers", 
   }
 });
 
+test("Bandit cannot silently exclude selected GitHub automation through its .git substring default", () => {
+  const files = [".github/scripts/fixture.py", "src/main.py"];
+  const args = command("bandit", "1", files, [], {})[1];
+  assert.equal(args[args.indexOf("--exclude") + 1], "");
+  assert.deepEqual(args.slice(args.indexOf("--") + 1), files);
+  assert.throws(() => validateReport("bandit", {
+    errors: [], results: [], metrics: { _totals: { loc: 0 } },
+  }, "1", files), /every selected source file/);
+});
+
 test("argument batches cover every input within a byte bound, including rule options", () => {
   const files = Array.from({ length: 6000 }, (_, index) => `packages/app-${index}/src/${"x".repeat(100)}.ts`);
   const base = command("semgrep-ce", "1", [], ["rules.yaml"], {});

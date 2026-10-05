@@ -113,6 +113,17 @@ test("actual PowerShell numeric diagnostic severity retains its original enum va
   }
 });
 
+test("every native ShellCheck severity retains its identity and correct SARIF level", () => {
+  for (const [severity, level] of [["error", "error"], ["warning", "warning"],
+    ["info", "note"], ["style", "note"]]) {
+    const report = structuredClone(fixtures.shellcheck);
+    report.comments[0].level = severity;
+    const result = convert("shellcheck", report).runs[0].results[0];
+    assert.equal(result.level, level);
+    assert.equal(result.properties.originalSeverity, severity);
+  }
+});
+
 test("invalid ranges and missing native identity fail without dropping a finding", () => {
   for (const patch of [
     { start: { line: -1 } }, { end: { line: 1 } }, { start: { line: 2, col: 0 } },

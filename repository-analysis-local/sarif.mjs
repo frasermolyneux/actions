@@ -61,7 +61,7 @@ function level(value, tool) {
     "Native finding has an invalid severity");
   switch (value?.toLowerCase()) {
     case "error": case "high": case "critical": return "error";
-    case "note": case "low": case "info": case "information": return "note";
+    case "note": case "low": case "info": case "information": case "style": return "note";
     default: return "warning";
   }
 }
