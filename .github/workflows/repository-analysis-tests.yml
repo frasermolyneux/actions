@@ -7,6 +7,71 @@ on:
 permissions:
   contents: read
 jobs:
+  context-cache-independence:
+    strategy:
+      fail-fast: false
+      matrix:
+        declaration: [packageManager, devEngines]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: analysis-definition
+          persist-credentials: false
+      - name: Prepare npm metadata without any lockfile or dependency restore
+        shell: python
+        env:
+          DECLARATION: ${{ matrix.declaration }}
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          declaration = os.environ["DECLARATION"]
+          metadata = (
+              {"packageManager": "npm@10.9.3"}
+              if declaration == "packageManager"
+              else {"devEngines": {"packageManager": {"name": "npm", "version": "10.9.3"}}}
+          )
+          Path("package.json").write_text(json.dumps(metadata), encoding="utf-8")
+          assert not Path("package-lock.json").exists()
+          assert not Path("npm-shrinkwrap.json").exists()
+          assert not Path("node_modules").exists()
+      - name: Confirm released preflight exposes the lockfile regression
+        id: previous
+        continue-on-error: true
+        uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.0.1
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
+          github-token: ${{ github.token }}
+      - name: Exercise actual metadata-only preflight
+        id: context
+        uses: ./analysis-definition/repository-analysis-context
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
+          github-token: ${{ github.token }}
+      - name: Verify live identity without introducing package state
+        shell: python
+        env:
+          ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+          PREVIOUS_OUTCOME: ${{ steps.previous.outcome }}
+        run: |
+          import json
+          import os
+          from pathlib import Path
+
+          context = json.loads(os.environ["ANALYSIS_CONTEXT"])
+          assert os.environ["PREVIOUS_OUTCOME"] == "failure"
+          assert context["repository"] == os.environ["GITHUB_REPOSITORY"]
+          assert context["repositoryId"] == int(os.environ["GITHUB_REPOSITORY_ID"])
+          assert context["contract"] == "repository-analysis-v1"
+          assert context["codeql"]["status"] == "eligible"
+          assert context["sonar"]["status"] == "not-applicable"
+          assert context["policyDigest"]
+          assert not Path("package-lock.json").exists()
+          assert not Path("npm-shrinkwrap.json").exists()
+          assert not Path("node_modules").exists()
+
   local-contracts:
     strategy:
       fail-fast: false
