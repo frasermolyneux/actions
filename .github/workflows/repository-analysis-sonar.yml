@@ -121,7 +121,7 @@ jobs:
           PLANNED_PRODUCER: ${{ needs.plan.outputs.producer }}
           SONAR_RECIPE: ${{ needs.plan.outputs.recipe }}
         run: |
-          node --input-type=module -e '
+          node --input-type=module <<'NODE'
             import { appendFile } from "node:fs/promises";
             import path from "node:path";
             const producer = JSON.parse(process.env.PLANNED_PRODUCER);
@@ -129,7 +129,7 @@ jobs:
               producer.coveragePath = path.join(process.env.RUNNER_TEMP, "dotnet-test", "**", "coverage.cobertura.xml");
             }
             await appendFile(process.env.GITHUB_OUTPUT, `producer=${JSON.stringify(producer)}\n`);
-          '
+          NODE
       - name: Revalidate live public project binding and allocate an isolated receipt
         id: prepare
         uses: $/repository-analysis-sonar
@@ -209,7 +209,7 @@ jobs:
           SONAR_DRIVER: ${{ fromJson(needs.plan.outputs.recipe).driver }}
           SONAR_SOURCE: ${{ steps.prepare.outputs.source-directory }}
         run: |
-          node --input-type=module -e '
+          node --input-type=module <<'NODE'
             import { appendFile } from "node:fs/promises";
             import path from "node:path";
             const properties = JSON.parse(process.env.SONAR_PROPERTIES);
@@ -223,7 +223,7 @@ jobs:
               return `"-D${key}=${value}"`;
             }).join(" ");
             await appendFile(process.env.GITHUB_OUTPUT, `args=${args}\n`);
-          '
+          NODE
       - name: Scan substantive CLI/C++ source using signed pinned binaries
         if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9
