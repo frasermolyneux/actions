@@ -423,5 +423,5 @@ test("near-limit results stay bounded when emitted and fit the freshness envelop
 test("version height uses the action's repository-root filter", async () => {
   const version = JSON.parse(await readFile(new URL("./version.json", import.meta.url), "utf8"));
   assert.equal(version.inherit, false);
-  assert.deepEqual(version.pathFilters, [":/repository-analysis-state"]);
+  assert.deepEqual(version.pathFilters, [":/repository-analysis-state", ":/repository-analysis-context"]);
 });

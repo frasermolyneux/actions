@@ -128,6 +128,8 @@ test("artifact binding requires exact attempt, logical head, caller and called d
 test("native completion must be an exact public selected-tool producer proof", () => {
   const selected = context("public");
   validateProcessing(proof(selected), report(selected), selected, "shellcheck", runtime);
+  assert.throws(() => validateProcessing(proof(context()), report(), context(), "shellcheck", runtime),
+    /not bound to this public/);
   for (const mutate of [
     (value) => { value.processing.status = "pending"; },
     (value) => { value.run.attempt = 1; },
@@ -156,8 +158,10 @@ test("workflow release and digest cover actual executable source dependencies", 
   const pattern = release.match(/PATTERN='([^']+)'/)[1];
   for (const prefix of RELEASE_PATHS) {
     const filename = prefix.endsWith("/") ? `${prefix}action.yml` : prefix;
-    assert.ok(version.pathFilters.some((filter) => filter.endsWith("/**")
-      ? filename.startsWith(filter.slice(0, -2)) : filename === filter), filename);
+    assert.ok(version.pathFilters.some((filter) => {
+      const prefix = filter.slice(2);
+      return filename === prefix || filename.startsWith(prefix + "/");
+    }), filename);
     assert.ok(new RegExp(pattern).test(filename), filename);
   }
   assert.ok(!new RegExp(pattern).test(".github/workflows/codequality.yml"));
@@ -165,7 +169,7 @@ test("workflow release and digest cover actual executable source dependencies", 
 
 test("actual bootstrap rejects a mutable external definition before any checkout or execution", async () => {
   const workflow = await readFile(new URL("../.github/workflows/repository-analysis-local.yml", import.meta.url), "utf8");
-  const source = workflow.replace(/\r\n/g, "\n").split("          script: |\n")[1].split("      - uses:")[0]
+  const source = workflow.replace(/\r\n/g, "\n").split("          script: |\n")[1].split("\n      - ")[0]
     .split("\n").map((line) => line.slice(12)).join("\n");
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   const bootstrap = new AsyncFunction("github", "context", "core", "process", source);
@@ -185,6 +189,21 @@ test("actual bootstrap rejects a mutable external definition before any checkout
   }
   await assert.rejects(bootstrap({}, current, core, { env: { ...environment, EXPECTED_SHA: definitionSha } }),
     /exact supported workflow source/);
+});
+
+test("native self-repository action resolution replaces every executable metadata checkout", async () => {
+  const workflow = await readFile(new URL("../.github/workflows/repository-analysis-local.yml", import.meta.url), "utf8");
+  assert.doesNotMatch(workflow, /repository: frasermolyneux\/actions|path: analysis-definition/);
+  assert.match(workflow, /uses: \$\/repository-analysis-context/);
+  assert.match(workflow, /uses: \$\/repository-analysis-local/);
+  assert.match(workflow, /uses: \$\/repository-analysis-sarif/);
+  assert.match(workflow, /uses: \$\/repository-analysis\r?\n/);
+  for (const name of ["local", "state", "sarif"]) {
+    const composite = await readFile(new URL(`../repository-analysis-${name}/action.yml`, import.meta.url), "utf8");
+    const version = JSON.parse(await readFile(new URL(`../repository-analysis-${name}/version.json`, import.meta.url)));
+    assert.match(composite, /uses: \$\/repository-analysis-context/);
+    assert.ok(version.pathFilters.includes(":/repository-analysis-context"));
+  }
 });
 
 async function fixture(callback, selected = context()) {
@@ -252,7 +271,7 @@ test("assembly requires the exact selected tool set and distinguishes backend co
     assert.equal(result.tools[0].nativeProcessing, null);
     assert.equal(result.publication, "originating-repository-artifact-only");
     await assert.rejects(main({ ...env, ANALYSIS_MODE: "assemble", ANALYSIS_DIRECTORY: aggregate,
-      ANALYSIS_NATIVE_PUBLICATION: "true" }), /selected-tool artifact/);
+      ANALYSIS_NATIVE_PUBLICATION: "true" }), /ineligible native publication/);
     await mkdir(path.join(aggregate, "local-unexpected-2"));
     await assert.rejects(main({ ...env, ANALYSIS_MODE: "assemble", ANALYSIS_DIRECTORY: aggregate,
       ANALYSIS_NATIVE_PUBLICATION: "false" }), /selected-tool artifact/);

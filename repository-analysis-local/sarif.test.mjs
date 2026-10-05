@@ -166,6 +166,24 @@ test("native zizmor cannot bind a batch result to a different batch's source", (
   ]), /outside the actual/);
 });
 
+test("zizmor preserves actual successful native invocations and never fabricates missing completion", () => {
+  for (const invocations of [undefined, [], [{}], [{ executionSuccessful: false }],
+    [{ executionSuccessful: true }, {}]]) {
+    const report = structuredClone(fixtures.zizmor);
+    if (invocations === undefined) delete report.runs[0].invocations;
+    else report.runs[0].invocations = invocations;
+    assert.throws(() => convert("zizmor", report), /invocation/i);
+  }
+  const first = structuredClone(fixtures.zizmor);
+  first.runs[0].invocations[0].startTimeUtc = "2026-01-01T00:00:00Z";
+  const second = structuredClone(fixtures.zizmor);
+  second.runs[0].invocations[0].startTimeUtc = "2026-01-01T00:01:00Z";
+  const actual = convert("zizmor", [first, second], [file], [{ files: [file] }, { files: [file] }]);
+  assert.deepEqual(actual.runs[0].invocations, [
+    ...first.runs[0].invocations, ...second.runs[0].invocations,
+  ]);
+});
+
 test("observed engine identity is mandatory and native driver mismatches are rejected", () => {
   assert.throws(() => toSarif("bandit", fixtures.bandit, "", [{ files: [file] }], root), /actual version/);
   const report = structuredClone(fixtures.zizmor);

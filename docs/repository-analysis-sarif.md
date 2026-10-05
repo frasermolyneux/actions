@@ -4,7 +4,8 @@
 acknowledgement or the uploader step's conclusion. The pinned CodeQL action can stop waiting
 after a timeout or metadata-request error; those cases are not completed estate analysis.
 
-The helper re-evaluates `repository-analysis-context/v1.0.2`, then independently reads live
+The helper re-evaluates its commit-bound sibling context via `$/repository-analysis-context`,
+then independently reads live
 repository metadata, the current run attempt, the exact SARIF processing identity and its
 processed native analyses. Private, exempt, archived, foreign or unselected targets fail
 before code-scanning metadata access. This action performs only authenticated reads.

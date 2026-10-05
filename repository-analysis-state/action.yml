@@ -25,7 +25,7 @@ runs:
   steps:
     - name: Re-evaluate live analysis capabilities
       id: context
-      uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.0.2
+      uses: $/repository-analysis-context
       with:
         profile: ${{ inputs.profile }}
         github-token: ${{ inputs.github-token }}

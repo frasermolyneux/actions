@@ -157,7 +157,7 @@ export function toSarif(tool, native, version, executions, sourceRoot) {
     }
     runs = [{ tool: { driver: { ...driver, rules: [...rules.values()] } },
       automationDetails: { id: "/tool:zizmor/" }, results,
-      invocations: [{ executionSuccessful: true }] }];
+      invocations: original.flatMap((run) => run.invocations) }];
   } else {
     const rules = new Map();
     const results = findings.map(({ finding, files }) => {

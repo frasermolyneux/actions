@@ -3,11 +3,11 @@
   "version": "1.0",
   "inherit": false,
   "pathFilters": [
-    "repository-analysis/**",
-    ".github/workflows/repository-analysis-local.yml",
-    "repository-analysis-context/**",
-    "repository-analysis-local/**",
-    "repository-analysis-sarif/**"
+    ":/repository-analysis",
+    ":/.github/workflows/repository-analysis-local.yml",
+    ":/repository-analysis-context",
+    ":/repository-analysis-local",
+    ":/repository-analysis-sarif"
   ],
   "publicReleaseRefSpec": ["^refs/heads/main$"]
 }

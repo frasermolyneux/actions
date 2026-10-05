@@ -67,8 +67,10 @@ The `source-directory` input defaults to the workspace and can select a separate
 checkout, keeping trusted shared helpers outside the scanned Git tree. The bounded local
 result identifies repository/visibility, frozen source SHA, policy/engine/rule digests,
 actual tool/package versions, source coverage, finding count and completion time.
-The engine digest includes a filename/length-delimited hash manifest of the composite and
-all execution helpers. Positional inputs use an end-of-options delimiter and byte-bounded
+The engine digest includes a filename/length-delimited hash manifest of the composite,
+all execution helpers and its commit-bound sibling context action/policy.
+The preflight uses native `$/` self-repository resolution rather than a mutable ref
+or target workspace helper. Positional inputs use an end-of-options delimiter and byte-bounded
 batches; every native batch must validate before completion. `native.json` retains a report
 collection for language-scoped or multi-batch execution, without suppressing partial failures.
 Publication is **originating-repository artifact only**; callers must keep private artifacts
@@ -101,7 +103,9 @@ representations, supported Ansible certificate-validation policies and an uninit
 dependency gitlink. Those fixtures do not contain
 private repository source and are not evidence that the estate callers have been migrated.
 Negative contract tests cover invalid selection, credential isolation and malformed,
-incomplete or parsing-error reports. Actual private-repository execution remains a rollout
+incomplete or parsing-error reports. Native zizmor completion requires nonempty
+invocations with explicit success, and conversion preserves those invocations rather
+than fabricating successful completion. Actual private-repository execution remains a rollout
 acceptance requirement.
 
 ```powershell

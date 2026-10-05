@@ -308,7 +308,8 @@ async function executeScans(tool, pin, selected, inventory, source, environment,
 }
 
 export async function engineDigest() {
-  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "sarif.mjs", "tools.json", "powershell-scan.ps1"]
+  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "sarif.mjs", "tools.json", "powershell-scan.ps1",
+    "../repository-analysis-context/action.yml", "../repository-analysis-context/policy.mjs"]
     .map(async (filename) => {
       const content = await readFile(path.join(directory, filename));
       return { filename, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };

@@ -65,15 +65,9 @@ jobs:
             core.setOutput("sha", matches[0].sha);
             core.setOutput("logical-sha", logical);
             core.setOutput("run", JSON.stringify(run));
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: frasermolyneux/actions
-          ref: ${{ steps.definition.outputs.sha }}
-          path: analysis-definition
-          persist-credentials: false
       - name: Resolve fresh live visibility and capabilities
         id: context
-        uses: ./analysis-definition/repository-analysis-context
+        uses: $/repository-analysis-context
         with:
           profile: ${{ inputs.profile }}
           github-token: ${{ github.token }}
@@ -85,7 +79,7 @@ jobs:
           ANALYSIS_DEFINITION_SHA: ${{ steps.definition.outputs.sha }}
           ANALYSIS_LOGICAL_SHA: ${{ steps.definition.outputs.logical-sha }}
           ANALYSIS_RUN: ${{ steps.definition.outputs.run }}
-        run: node analysis-definition/repository-analysis/workflow.mjs
+        uses: $/repository-analysis
 
   local:
     needs: plan
@@ -103,15 +97,9 @@ jobs:
           path: source
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: frasermolyneux/actions
-          ref: ${{ needs.plan.outputs.definition }}
-          path: analysis-definition
-          persist-credentials: false
       - name: Execute the selected local tool without provider credentials
         id: scan
-        uses: ./analysis-definition/repository-analysis-local
+        uses: $/repository-analysis-local
         with:
           profile: ${{ inputs.profile }}
           tool: ${{ matrix.tool }}
@@ -126,7 +114,7 @@ jobs:
           ANALYSIS_DIRECTORY: ${{ steps.scan.outputs.report-directory }}
           ANALYSIS_DEFINITION_SHA: ${{ needs.plan.outputs.definition }}
           ANALYSIS_LOGICAL_SHA: ${{ needs.plan.outputs.logical-sha }}
-        run: node analysis-definition/repository-analysis/workflow.mjs
+        uses: $/repository-analysis
       - name: Retain originating-repository-only local evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -161,15 +149,9 @@ jobs:
           path: source
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: frasermolyneux/actions
-          ref: ${{ needs.plan.outputs.definition }}
-          path: analysis-definition
-          persist-credentials: false
       - name: Recheck live public eligibility before downloading or publishing SARIF
         id: context
-        uses: ./analysis-definition/repository-analysis-context
+        uses: $/repository-analysis-context
         with:
           profile: ${{ inputs.profile }}
           github-token: ${{ github.token }}
@@ -198,7 +180,7 @@ jobs:
           ANALYSIS_DIRECTORY: ${{ runner.temp }}/local-evidence
           ANALYSIS_DEFINITION_SHA: ${{ needs.plan.outputs.definition }}
           ANALYSIS_LOGICAL_SHA: ${{ needs.plan.outputs.logical-sha }}
-        run: node analysis-definition/repository-analysis/workflow.mjs
+        uses: $/repository-analysis
       - name: Upload actual public findings, without adding a historical-backlog gate
         id: upload
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
@@ -211,7 +193,7 @@ jobs:
           wait-for-processing: true
       - name: Independently require successful native processing for this exact source
         id: proof
-        uses: ./analysis-definition/repository-analysis-sarif
+        uses: $/repository-analysis-sarif
         with:
           profile: ${{ inputs.profile }}
           github-token: ${{ github.token }}
@@ -239,14 +221,8 @@ jobs:
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          repository: frasermolyneux/actions
-          ref: ${{ needs.plan.outputs.definition }}
-          path: analysis-definition
-          persist-credentials: false
       - id: context
-        uses: ./analysis-definition/repository-analysis-context
+        uses: $/repository-analysis-context
         with:
           profile: ${{ inputs.profile }}
           github-token: ${{ github.token }}
@@ -270,7 +246,7 @@ jobs:
           ANALYSIS_DEFINITION_SHA: ${{ needs.plan.outputs.definition }}
           ANALYSIS_LOGICAL_SHA: ${{ needs.plan.outputs.logical-sha }}
           ANALYSIS_NATIVE_PUBLICATION: ${{ needs.plan.outputs.publish }}
-        run: node analysis-definition/repository-analysis/workflow.mjs
+        uses: $/repository-analysis
       - name: Retain the selected-tool set only in the originating repository
         id: upload
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

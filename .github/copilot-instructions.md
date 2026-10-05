@@ -35,10 +35,14 @@ Nerdbank.GitVersioning operates independently in each action folder. Update that
 
 When adding an action, include both required files and add its folder name to the workflow's `ACTIONS` array.
 
-`repository-analysis` is an explicit reusable-workflow package, not a composite.
+`repository-analysis` is an explicit reusable-workflow package with an internal evidence composite.
 Its version filters, release detector and definition digest must all cover its
 workflow and executable context/local/native-verifier dependency closure. Keep
 that package after its dependencies in release order; callers use an exact patch
 tag. See `docs/repository-analysis-workflows.md` for its partial-backend scope.
+Its implementation composition uses native `$/` references, binding sibling
+actions to the reviewed workflow/action commit without executing a dynamically
+selected workspace checkout. Local/state/native-verifier releases include their
+commit-bound context dependency; external callers retain folder-scoped tags.
 
 See [`docs/action-versioning.md`](../docs/action-versioning.md) for tag behavior and [`docs/nerdbank-gitversioning.md`](../docs/nerdbank-gitversioning.md) for .NET checkout requirements.

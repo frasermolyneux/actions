@@ -10,7 +10,9 @@ post-merge finding-resolution proof, publication permission or freshness cache.
 
 Invoke once per workflow run, using an exact reviewed `repository-analysis/vX.Y.Z`
 tag. The package owns this reusable workflow and its helper/dependency closure,
-rather than a composite `action.yml`. Folder-scoped immutable and rolling tags
+including an internal evidence composite in `repository-analysis/action.yml`.
+That composite is an implementation helper, not the workflow's consumer API.
+Folder-scoped immutable and rolling tags
 are published by the existing release workflow, but this analysis caller accepts
 only immutable patch tags outside the shared repository's own integration tests.
 
@@ -38,8 +40,13 @@ No historical finding-count merge gate is introduced.
 ## Definition, source and publication
 
 Authenticated current-attempt run metadata resolves the SHA of the actual called
-first-party workflow. The definition is checked out separately from target source;
-target repositories cannot supply execution helpers through their own checkout.
+first-party workflow. GitHub's native `$/` self-repository references resolve helper
+actions directly at that definition's commit; no metadata-selected definition
+checkout is executed. Target source is checked out separately, and target
+repositories cannot supply execution helpers through their own checkout.
+Sibling preflights also resolve at the enclosing composite's exact commit.
+This requires GitHub.com and runner 2.336.0 or later; the shared workflow uses
+GitHub-hosted runners. See [GitHub's self-repository reference announcement](https://github.blog/changelog/2026-07-30-reference-same-repository-actions-with-self-repository-syntax/).
 Source is frozen to the workflow's actual SHA, not confused with a PR's logical
 head SHA. Local analyzers retain their existing isolated-source, credential
 allowlist, exact native-version and positive capability-coverage checks.
@@ -73,6 +80,9 @@ actual context/local/native-verifier execution dependency closure. The release
 detector and NBGV path filters include that closure, so a dependency change cannot
 leave an installed workflow silently using an unversioned implementation.
 The package is released after its composite dependencies.
+Local/state/native-verifier composites similarly release when their commit-bound
+context dependency changes. External consumers retain folder-scoped release tags;
+`$/` is used only for same-repository implementation composition.
 
 `Analysis workflow contracts` executes the actual reusable workflow against this
 public repository's maintained Actions, shell and PowerShell source, verifies real

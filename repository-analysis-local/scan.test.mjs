@@ -142,7 +142,8 @@ test("argument batches cover every input within a byte bound, including rule opt
 });
 
 test("engine identity hashes a filename and length delimited manifest including the composite", async () => {
-  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "sarif.mjs", "tools.json", "powershell-scan.ps1"]
+  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "sarif.mjs", "tools.json", "powershell-scan.ps1",
+    "../repository-analysis-context/action.yml", "../repository-analysis-context/policy.mjs"]
     .map(async (filename) => {
       const content = await readFile(new URL(filename, import.meta.url));
       return { filename, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };
@@ -228,7 +229,7 @@ test("Checkov consistency and real policy evaluation are mandatory", () => {
 
 test("native SARIF failures do not pass even when they contain an empty result list", () => {
   const report = { version: "2.1.0", runs: [{
-    tool: { driver: { name: "zizmor" } }, results: [],
+    tool: { driver: { name: "zizmor" } }, results: [], invocations: [{ executionSuccessful: true }],
   }] };
   assert.deepEqual(validateReport("zizmor", report, "1", ["ci.yml"]), []);
   assert.throws(() => validateReport("zizmor", {

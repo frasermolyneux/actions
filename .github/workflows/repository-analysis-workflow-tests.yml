@@ -33,7 +33,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: ./.github/workflows/repository-analysis-local.yml
+    uses: $/.github/workflows/repository-analysis-local.yml
     with:
       profile: '{"version":"repository-analysis-v1","languages":["actions","powershell","shell"],"sonar":false}'
       expected-sha: ${{ github.sha }}

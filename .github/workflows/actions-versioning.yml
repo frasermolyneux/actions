@@ -87,6 +87,8 @@ jobs:
           for ACTION in "${ACTIONS[@]}"; do
             if [[ "$ACTION" == "repository-analysis" ]]; then
               PATTERN='^(repository-analysis(-context|-local|-sarif)?/|\.github/workflows/repository-analysis-local\.yml$)'
+            elif [[ "$ACTION" == "repository-analysis-local" || "$ACTION" == "repository-analysis-sarif" || "$ACTION" == "repository-analysis-state" ]]; then
+              PATTERN="^(${ACTION}|repository-analysis-context)/"
             else
               PATTERN="^${ACTION}/"
             fi

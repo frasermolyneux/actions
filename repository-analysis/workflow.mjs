@@ -42,7 +42,7 @@ export function definitionFromRun(run, runtime) {
 export async function definitionDigest() {
   const base = new URL("../", import.meta.url);
   const filenames = [
-    WORKFLOW_PATH, "repository-analysis/workflow.mjs", "repository-analysis/version.json",
+    WORKFLOW_PATH, "repository-analysis/action.yml", "repository-analysis/workflow.mjs", "repository-analysis/version.json",
     "repository-analysis-context/action.yml", "repository-analysis-context/policy.mjs",
     "repository-analysis-local/action.yml", "repository-analysis-local/scan.mjs",
     "repository-analysis-local/reports.mjs", "repository-analysis-local/sarif.mjs",
@@ -91,7 +91,8 @@ export function validateReport(report, sarif, context, tool, runtime, expectedEn
     run.tool?.driver?.name === NAMES[tool] && run.tool.driver.version === report.toolVersion &&
     run.automationDetails?.id === `/tool:${tool}/` &&
     Array.isArray(run.results) && run.results.length === report.findingCount &&
-    run.invocations?.length === 1 && run.invocations[0].executionSuccessful === true,
+    Array.isArray(run.invocations) && run.invocations.length > 0 &&
+    run.invocations.every((invocation) => invocation.executionSuccessful === true),
   "Actual SARIF finding count, tool, category or completion identity mismatch");
   return report;
 }
@@ -142,7 +143,8 @@ function runtimeFromEnvironment(env) {
 }
 
 export function validateProcessing(proof, report, context, tool, runtime) {
-  requireValue(proof?.schema === "repository-analysis-sarif-proof-v1" &&
+  requireValue(context.visibility === "public" && context.publication?.sarif === "github-security" &&
+    proof?.schema === "repository-analysis-sarif-proof-v1" &&
     proof.repository === runtime.repository && proof.repositoryId === runtime.repositoryId &&
     proof.visibility === "public" && proof.policyDigest === context.policyDigest &&
     proof.toolId === `local/${tool}` && proof.sourceSha === runtime.sourceSha &&
@@ -209,6 +211,8 @@ export async function main(env = process.env) {
   const expected = selected.map(({ tool }) => `local-${tool}-${runtime.attempt}`);
   const nativeExpected = env.ANALYSIS_NATIVE_PUBLICATION === "true"
     ? selected.map(({ tool }) => `native-${tool}-${runtime.attempt}`) : [];
+  requireValue(!nativeExpected.length || (context.visibility === "public" &&
+    context.publication?.sarif === "github-security"), "Private or ineligible native publication is forbidden");
   requireValue(actual.length === expected.length + nativeExpected.length &&
     [...expected, ...nativeExpected].every((filename) => actual.includes(filename)),
   "Missing, unexpected or duplicated selected-tool artifact");
