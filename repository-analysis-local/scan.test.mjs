@@ -127,6 +127,16 @@ test("tracked filenames cannot inject options into positional-input analyzers", 
   }
 });
 
+test("Bandit cannot silently exclude selected GitHub automation through its .git substring default", () => {
+  const files = [".github/scripts/fixture.py", "src/main.py"];
+  const args = command("bandit", "1", files, [], {})[1];
+  assert.equal(args[args.indexOf("--exclude") + 1], "");
+  assert.deepEqual(args.slice(args.indexOf("--") + 1), files);
+  assert.throws(() => validateReport("bandit", {
+    errors: [], results: [], metrics: { _totals: { loc: 0 } },
+  }, "1", files), /every selected source file/);
+});
+
 test("argument batches cover every input within a byte bound, including rule options", () => {
   const files = Array.from({ length: 6000 }, (_, index) => `packages/app-${index}/src/${"x".repeat(100)}.ts`);
   const base = command("semgrep-ce", "1", [], ["rules.yaml"], {});
@@ -142,7 +152,8 @@ test("argument batches cover every input within a byte bound, including rule opt
 });
 
 test("engine identity hashes a filename and length delimited manifest including the composite", async () => {
-  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "tools.json", "powershell-scan.ps1"]
+  const manifest = await Promise.all(["action.yml", "scan.mjs", "reports.mjs", "sarif.mjs", "tools.json", "powershell-scan.ps1",
+    "../repository-analysis-context/action.yml", "../repository-analysis-context/policy.mjs"]
     .map(async (filename) => {
       const content = await readFile(new URL(filename, import.meta.url));
       return { filename, bytes: content.length, sha256: createHash("sha256").update(content).digest("hex") };
@@ -228,7 +239,7 @@ test("Checkov consistency and real policy evaluation are mandatory", () => {
 
 test("native SARIF failures do not pass even when they contain an empty result list", () => {
   const report = { version: "2.1.0", runs: [{
-    tool: { driver: { name: "zizmor" } }, results: [],
+    tool: { driver: { name: "zizmor" } }, results: [], invocations: [{ executionSuccessful: true }],
   }] };
   assert.deepEqual(validateReport("zizmor", report, "1", ["ci.yml"]), []);
   assert.throws(() => validateReport("zizmor", {

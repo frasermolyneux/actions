@@ -1,0 +1,259 @@
+name: Repository local analysis
+
+on:
+  workflow_call:
+    inputs:
+      profile:
+        description: Catalog repository-analysis-v1 capability profile.
+        type: string
+        required: true
+      expected-sha:
+        description: Actual workflow checkout SHA; custom source revisions are not supported.
+        type: string
+        required: true
+    outputs:
+      artifact-id:
+        description: Originating-repository selected-local-tool evidence; not a complete profile.
+        value: ${{ jobs.assemble.outputs.artifact-id }}
+
+permissions: {}
+
+jobs:
+  plan:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    outputs:
+      definition: ${{ steps.definition.outputs.sha }}
+      logical-sha: ${{ steps.definition.outputs.logical-sha }}
+      context: ${{ steps.context.outputs.context }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has-tools: ${{ steps.plan.outputs.has-tools }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - name: Resolve the actual called definition from authenticated run metadata
+        id: definition
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        env:
+          EXPECTED_SHA: ${{ inputs.expected-sha }}
+        with:
+          script: |
+            if (process.env.EXPECTED_SHA !== context.sha ||
+                !["pull_request", "push", "schedule", "workflow_dispatch"].includes(context.eventName)) {
+              throw new Error("An exact supported workflow source is required");
+            }
+            const { data: run } = await github.request(
+              "GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}", {
+                ...context.repo, run_id: context.runId,
+                attempt_number: Number(process.env.GITHUB_RUN_ATTEMPT),
+              });
+            const logical = context.payload.pull_request?.head.sha ?? context.sha;
+            if (run.head_sha !== logical) throw new Error("Unexpected logical source head");
+            const matches = run.referenced_workflows?.filter((entry) =>
+              entry.path?.startsWith("frasermolyneux/actions/.github/workflows/repository-analysis-local.yml@"));
+            if (matches?.length !== 1 || !/^[a-f0-9]{40}$/.test(matches[0].sha ?? "")) {
+              throw new Error("Missing or ambiguous called workflow definition");
+            }
+            const reference = matches[0].ref ?? matches[0].path.split("@")[1];
+            const immutable = /^(?:refs\/tags\/)?repository-analysis\/v\d+\.\d+\.\d+$/.test(reference);
+            const ownContract = process.env.GITHUB_REPOSITORY === "frasermolyneux/actions" &&
+              /^refs\/(?:heads\/[A-Za-z0-9_./-]+|pull\/[1-9]\d*\/merge)$/.test(reference);
+            if (!immutable && !ownContract) {
+              throw new Error("Reject an unreviewed mutable definition before checkout or execution");
+            }
+            core.setOutput("sha", matches[0].sha);
+            core.setOutput("logical-sha", logical);
+            core.setOutput("run", JSON.stringify(run));
+      - name: Resolve fresh live visibility and capabilities
+        id: context
+        uses: $/repository-analysis-context
+        with:
+          profile: ${{ inputs.profile }}
+          github-token: ${{ github.token }}
+      - name: Validate the called definition and selected-tool matrix
+        id: plan
+        env:
+          ANALYSIS_MODE: plan
+          ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+          ANALYSIS_DEFINITION_SHA: ${{ steps.definition.outputs.sha }}
+          ANALYSIS_LOGICAL_SHA: ${{ steps.definition.outputs.logical-sha }}
+          ANALYSIS_RUN: ${{ steps.definition.outputs.run }}
+        uses: $/repository-analysis
+
+  local:
+    needs: plan
+    if: needs.plan.outputs.has-tools == 'true'
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: source
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Execute the selected local tool without provider credentials
+        id: scan
+        uses: $/repository-analysis-local
+        with:
+          profile: ${{ inputs.profile }}
+          tool: ${{ matrix.tool }}
+          source-directory: source
+          expected-sha: ${{ inputs.expected-sha }}
+          github-token: ${{ github.token }}
+      - name: Bind unchanged scanner output to this exact definition and run attempt
+        env:
+          ANALYSIS_MODE: attest
+          ANALYSIS_CONTEXT: ${{ needs.plan.outputs.context }}
+          ANALYSIS_TOOL: ${{ matrix.tool }}
+          ANALYSIS_DIRECTORY: ${{ steps.scan.outputs.report-directory }}
+          ANALYSIS_DEFINITION_SHA: ${{ needs.plan.outputs.definition }}
+          ANALYSIS_LOGICAL_SHA: ${{ needs.plan.outputs.logical-sha }}
+        uses: $/repository-analysis
+      - name: Retain originating-repository-only local evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: local-${{ matrix.tool }}-${{ github.run_attempt }}
+          path: ${{ steps.scan.outputs.report-directory }}
+          if-no-files-found: error
+          retention-days: 14
+      - name: Retain failed native diagnostics only in the originating repository
+        if: failure() && steps.scan.outputs.diagnostic-directory != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: local-diagnostic-${{ matrix.tool }}-${{ github.run_attempt }}
+          path: ${{ steps.scan.outputs.diagnostic-directory }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-public:
+    needs: [plan, local]
+    if: needs.plan.outputs.has-tools == 'true' && needs.plan.outputs.publish == 'true'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: source
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Recheck live public eligibility before downloading or publishing SARIF
+        id: context
+        uses: $/repository-analysis-context
+        with:
+          profile: ${{ inputs.profile }}
+          github-token: ${{ github.token }}
+      - name: Fail closed if visibility, eligibility or the frozen policy changed
+        shell: bash
+        env:
+          CURRENT_CONTEXT: ${{ steps.context.outputs.context }}
+          PLANNED_CONTEXT: ${{ needs.plan.outputs.context }}
+        run: |
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            const current = JSON.parse(process.env.CURRENT_CONTEXT);
+            assert.equal(current.visibility, "public");
+            assert.equal(current.publication.sarif, "github-security");
+            assert.equal(current.policyDigest, JSON.parse(process.env.PLANNED_CONTEXT).policyDigest);
+          '
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: local-${{ matrix.tool }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/local-evidence
+      - name: Validate current-attempt artifact hashes, source, tool pins and definition
+        id: artifact
+        env:
+          ANALYSIS_MODE: validate
+          ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+          ANALYSIS_TOOL: ${{ matrix.tool }}
+          ANALYSIS_DIRECTORY: ${{ runner.temp }}/local-evidence
+          ANALYSIS_DEFINITION_SHA: ${{ needs.plan.outputs.definition }}
+          ANALYSIS_LOGICAL_SHA: ${{ needs.plan.outputs.logical-sha }}
+        uses: $/repository-analysis
+      - name: Upload actual public findings, without adding a historical-backlog gate
+        id: upload
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          sarif_file: ${{ runner.temp }}/local-evidence/analysis.sarif
+          checkout_path: ${{ github.workspace }}/source
+          ref: ${{ github.ref }}
+          sha: ${{ inputs.expected-sha }}
+          category: /tool:${{ matrix.tool }}
+          wait-for-processing: true
+      - name: Independently require successful native processing for this exact source
+        id: proof
+        uses: $/repository-analysis-sarif
+        with:
+          profile: ${{ inputs.profile }}
+          github-token: ${{ github.token }}
+          tool-id: local/${{ matrix.tool }}
+          tool-version: ${{ steps.artifact.outputs.tool-version }}
+          source-sha: ${{ inputs.expected-sha }}
+          sarif-id: ${{ steps.upload.outputs.sarif-id }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-${{ matrix.tool }}-${{ github.run_attempt }}
+          path: ${{ steps.proof.outputs.proof-directory }}
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    needs: [plan, local, publish-public]
+    if: >-
+      always() && needs.plan.result == 'success' &&
+      (needs.local.result == 'success' || needs.local.result == 'skipped') &&
+      (needs.publish-public.result == 'success' || needs.publish-public.result == 'skipped')
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - id: context
+        uses: $/repository-analysis-context
+        with:
+          profile: ${{ inputs.profile }}
+          github-token: ${{ github.token }}
+      - shell: bash
+        run: mkdir "$RUNNER_TEMP/selected-local-evidence"
+      - if: needs.plan.outputs.has-tools == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          pattern: local-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/selected-local-evidence
+      - if: needs.plan.outputs.has-tools == 'true' && needs.plan.outputs.publish == 'true'
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          pattern: native-*-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/selected-local-evidence
+      - name: Require every selected tool and all applicable native completion proofs
+        id: result
+        env:
+          ANALYSIS_MODE: assemble
+          ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
+          ANALYSIS_DIRECTORY: ${{ runner.temp }}/selected-local-evidence
+          ANALYSIS_DEFINITION_SHA: ${{ needs.plan.outputs.definition }}
+          ANALYSIS_LOGICAL_SHA: ${{ needs.plan.outputs.logical-sha }}
+          ANALYSIS_NATIVE_PUBLICATION: ${{ needs.plan.outputs.publish }}
+        uses: $/repository-analysis
+      - name: Retain the selected-tool set only in the originating repository
+        id: upload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repository-analysis-local-set-${{ github.run_attempt }}
+          path: ${{ steps.result.outputs.result-directory }}
+          if-no-files-found: error
+          retention-days: 14

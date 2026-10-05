@@ -33,7 +33,10 @@ These alternatives are not claimed to be CodeQL-equivalent.
 ## Source and result boundaries
 
 The actual Git checkout must match `expected-sha` and the immutable workflow repository
-identity. Tracked changes are rejected. Index modes distinguish owned source from
+identity. Tracked changes are rejected.
+The selected directory must be the actual Git worktree root, not a same-commit
+subtree that would omit other maintained source.
+Index modes distinguish owned source from
 submodule gitlinks; dependencies are not recursed or copied, and selected tracked symlinks
 are rejected even if a checkout materializes the link as a regular file.
 Selected maintained source is copied into an
@@ -51,6 +54,10 @@ completed PowerShell reports must identify every selected file, not just match a
 Every selected capability needs nonempty source.
 First-party monorepo source under `packages/` is included. TypeScript module files
 (`.mts`, `.cts`) and Bash/Dash/Ksh file extensions are included.
+Bandit receives no additional native filename exclusions: the isolated tracked
+inventory already defines its source set. Its default `.git` substring exclusion
+would otherwise silently omit selected `.github` Python automation. Per-file
+completion remains mandatory; missing metrics never become clean evidence.
 
 The runner verifies actual engine versions and native report structure, counts, parsing
 errors, selected framework completeness and available per-file evidence. A second checkout
@@ -59,17 +66,33 @@ Failed execution, malformed output, missing source coverage and no evaluated IaC
 fail explicitly. Findings are valid completed results,
 not scanner failures. This component does not impose a new historical-backlog merge gate.
 
-Outputs point to `report.json` and the native report in `native.json`. The bounded local
+Outputs point to `report.json`, the native report in `native.json` and finding-preserving
+SARIF in `analysis.sarif` (`sarif-file`). Conversion retains actual rule/message/location
+identities, version and counts; incomplete native output or unanalysed finding paths
+cannot become completed SARIF. File-level diagnostics do not invent line numbers.
+Semgrep, Bandit and ShellCheck require actual positive start lines; truncated
+positions cannot be relabeled as file-level diagnostics. Formats supporting genuine
+file-level diagnostics retain that distinction without fabricating line one.
+ShellCheck style diagnostics retain their original severity and publish as notes.
+PowerShell numeric severities follow the pinned module's actual enum
+(`Information=0`, `Warning=1`, `Error=2`); parsing errors fail, rather than being
+represented as completed security findings.
+The `source-directory` input defaults to the workspace and can select a separate target
+checkout, keeping trusted shared helpers outside the scanned Git tree. The bounded local
 result identifies repository/visibility, frozen source SHA, policy/engine/rule digests,
 actual tool/package versions, source coverage, finding count and completion time.
-The engine digest includes a filename/length-delimited hash manifest of the composite and
-all execution helpers. Positional inputs use an end-of-options delimiter and byte-bounded
+The engine digest includes a filename/length-delimited hash manifest of the composite,
+all execution helpers and its commit-bound sibling context action/policy.
+The preflight uses native `$/` self-repository resolution rather than a mutable ref
+or target workspace helper. Positional inputs use an end-of-options delimiter and byte-bounded
 batches; every native batch must validate before completion. `native.json` retains a report
 collection for language-scoped or multi-batch execution, without suppressing partial failures.
 Publication is **originating-repository artifact only**; callers must keep private artifacts
 and summaries private. Never send these native reports or finding excerpts to public estate
 reporting. The shared public/native publication and aggregate result workflows are separate
 migration packages.
+The [selected local workflow](repository-analysis-workflows.md) implements the local
+tool matrix and public-native publishing portion; it is not full-profile completion.
 Failed native runs also expose an originating-repository-only diagnostic directory.
 Diagnostics are never completed scan evidence and may contain source/finding excerpts;
 keep them private when the originating repository is private.
@@ -90,14 +113,18 @@ keep them private when the originating repository is private.
 The `Local analysis contracts` workflow runs portable policy/analyzer contracts on both
 Ubuntu and Windows, and executes all six real pinned tools on Linux against synthetic
 private-policy fixtures with deliberately detectable findings, including both Terraform
-representations, supported Ansible certificate-validation policies and an uninitialized
+representations, selected `.github` Python automation, native ShellCheck style
+diagnostics, the actual installed PowerShell severity enum, supported Ansible
+certificate-validation policies and an uninitialized
 dependency gitlink. Those fixtures do not contain
 private repository source and are not evidence that the estate callers have been migrated.
 Negative contract tests cover invalid selection, credential isolation and malformed,
-incomplete or parsing-error reports. Actual private-repository execution remains a rollout
+incomplete or parsing-error reports. Native zizmor completion requires nonempty
+invocations with explicit success, and conversion preserves those invocations rather
+than fabricating successful completion. Actual private-repository execution remains a rollout
 acceptance requirement.
 
 ```powershell
-node --test repository-analysis-local\scan.test.mjs
+node --test repository-analysis-local\scan.test.mjs repository-analysis-local\sarif.test.mjs
 git diff --check
 ```

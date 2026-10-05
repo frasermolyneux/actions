@@ -10,6 +10,10 @@ inputs:
   expected-sha:
     description: Frozen SHA that must match the actual checkout.
     required: true
+  source-directory:
+    description: Target Git worktree root, separate from the trusted definition; source subtrees are rejected.
+    required: false
+    default: "."
   github-token:
     description: Repository metadata-read token, used only by the live preflight.
     required: true
@@ -23,12 +27,15 @@ outputs:
   diagnostic-directory:
     description: Originating-repository-only native diagnostics; not completed or clean scan evidence.
     value: ${{ steps.scan.outputs.diagnostic-directory }}
+  sarif-file:
+    description: Validated actual-finding SARIF; upload only after fresh public/event eligibility.
+    value: ${{ steps.scan.outputs.report-directory }}/analysis.sarif
 runs:
   using: composite
   steps:
     - name: Resolve live analysis policy
       id: context
-      uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.0.1
+      uses: $/repository-analysis-context
       with:
         profile: ${{ inputs.profile }}
         github-token: ${{ inputs.github-token }}
@@ -61,6 +68,7 @@ runs:
         ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
         ANALYSIS_TOOL: ${{ inputs.tool }}
         ANALYSIS_EXPECTED_SHA: ${{ inputs.expected-sha }}
+        ANALYSIS_SOURCE_DIR: ${{ inputs.source-directory }}
         ANALYSIS_RULES: ${{ steps.install.outputs.rules-directory }}
         ANALYSIS_PS_MODULE_ROOT: ${{ steps.install.outputs.module-root }}
         ANALYSIS_SCANNER_BIN: ${{ steps.install.outputs.scanner-path }}

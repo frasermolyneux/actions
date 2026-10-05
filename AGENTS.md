@@ -31,6 +31,9 @@ Documentation-only Copilot configuration changes do not require action integrati
 - Use Azure OIDC or managed identity for Azure authentication. Do not add client secrets, connection strings, tokens, or subscription GUIDs to repository files.
 - Update an action folder's `version.json` for feature or breaking changes. Patch tags are generated from commit history.
 - Add a new action folder to the `ACTIONS` array in `.github/workflows/actions-versioning.yml`.
+- The `repository-analysis` reusable-workflow package is an explicit folder-isolation
+  exception; keep its executable dependency digest, version path filters and release
+  detector aligned when changing the bundled workflows/helpers.
 
 ## Scoped documentation
 
@@ -40,6 +43,8 @@ Documentation-only Copilot configuration changes do not require action integrati
   selection and private execution/publication boundaries for the estate migration.
 - [`docs/repository-analysis-local.md`](docs/repository-analysis-local.md) - Pinned local
   scanner execution, source isolation and native-report validation.
+- [`docs/repository-analysis-workflows.md`](docs/repository-analysis-workflows.md) - Released
+  selected-local-tool matrix, private artifacts and verified public native publishing.
 - [`docs/repository-analysis-state.md`](docs/repository-analysis-state.md) - Complete
   selected-tool results, explicit coverage gaps and exact-source weekly freshness.
 - [`docs/repository-analysis-sarif.md`](docs/repository-analysis-sarif.md) - Live-public

@@ -2,6 +2,12 @@
   "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
   "version": "1.0",
   "inherit": false,
-  "pathFilters": [":/repository-analysis-state", ":/repository-analysis-context"],
+  "pathFilters": [
+    ":/repository-analysis",
+    ":/.github/workflows/repository-analysis-local.yml",
+    ":/repository-analysis-context",
+    ":/repository-analysis-local",
+    ":/repository-analysis-sarif"
+  ],
   "publicReleaseRefSpec": ["^refs/heads/main$"]
 }

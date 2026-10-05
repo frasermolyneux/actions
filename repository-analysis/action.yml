@@ -1,0 +1,26 @@
+name: Repository Analysis Workflow Evidence
+description: Internal selected-local-workflow envelope helper, resolved at the exact shared definition commit.
+outputs:
+  matrix:
+    description: Selected-local-tool matrix.
+    value: ${{ steps.evidence.outputs.matrix }}
+  has-tools:
+    description: Whether local tools are selected.
+    value: ${{ steps.evidence.outputs.has-tools }}
+  publish:
+    description: Fresh public/event publication selection.
+    value: ${{ steps.evidence.outputs.publish }}
+  tool-version:
+    description: Validated actual native engine version.
+    value: ${{ steps.evidence.outputs.tool-version }}
+  result-directory:
+    description: Originating-repository-only selected-local-set result.
+    value: ${{ steps.evidence.outputs.result-directory }}
+runs:
+  using: composite
+  steps:
+    - id: evidence
+      shell: bash
+      env:
+        EVIDENCE_SCRIPT: ${{ github.action_path }}/workflow.mjs
+      run: node "$EVIDENCE_SCRIPT"

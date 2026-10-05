@@ -16,12 +16,14 @@ const files = {
   "packages/app/src/main.mts": "export function run(value: string) { return eval(value); }\n",
   "Main.cs": "using System.Diagnostics;\nclass Fixture {\n public static void Run(string value) { Process.Start(value); }\n}\n",
   "main.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
+  ".github/scripts/fixture.py": "import subprocess\n\ndef run_command(value):\n    return subprocess.run(value, shell=True)\n",
   "main.ps1": "Write-Host 'fixture'\n",
   "automation/check": "#!/usr/bin/env pwsh\nWrite-Host 'extensionless fixture'\n",
   "operations/health": "#!/bin/sh\necho $FIXTURE_VALUE\n",
   "operations/health.bash": "#!/bin/bash\necho $FIXTURE_VALUE\n",
   "operations/health.dash": "#!/bin/dash\necho $FIXTURE_VALUE\n",
   "operations/health.ksh": "#!/bin/ksh\necho $FIXTURE_VALUE\n",
+  "operations/style.sh": "#!/bin/sh\n# shellcheck enable=useless-use-of-cat\ncat fixture.txt | grep fixture\n",
   "--exclude=SC2086": "#!/bin/sh\necho $FIXTURE_VALUE\n",
   "main.tf": "resource \"azurerm_storage_account\" \"fixture\" {\n  name = \"fixture\"\n  resource_group_name = \"fixture\"\n  location = \"uksouth\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  min_tls_version = \"TLS1_0\"\n}\n",
   "json/main.tf.json": JSON.stringify({ resource: { azurerm_storage_account: { fixture: {
@@ -59,7 +61,8 @@ const context = selectAnalysis({
   archived: false, fork: false, owner: { type: "User" },
 }, "fixture/sandbox");
 const environment = {
-  ...process.env, GITHUB_WORKSPACE: root, GITHUB_REPOSITORY: "fixture/sandbox", GITHUB_REPOSITORY_ID: "123",
+  ...process.env, GITHUB_WORKSPACE: path.dirname(root), ANALYSIS_SOURCE_DIR: path.basename(root),
+  GITHUB_REPOSITORY: "fixture/sandbox", GITHUB_REPOSITORY_ID: "123",
   ANALYSIS_CONTEXT: JSON.stringify(context), ANALYSIS_TOOL: tool, ANALYSIS_EXPECTED_SHA: sha,
   GITHUB_OUTPUT: path.join(root, "outputs"), GITHUB_STEP_SUMMARY: path.join(root, "summary"),
   GH_TOKEN: "fixture-credential-must-never-reach-scanners",
@@ -92,12 +95,41 @@ assert.ok(report.findingCount > 0, "The deliberately insecure fixture must produ
 const outputs = await readFile(environment.GITHUB_OUTPUT, "utf8");
 const result = outputs.split("\n").find((line) => line.startsWith("report-directory="));
 const native = JSON.parse(await readFile(path.join(result.slice("report-directory=".length), "native.json"), "utf8"));
+const sarif = JSON.parse(await readFile(path.join(result.slice("report-directory=".length), "analysis.sarif"), "utf8"));
+assert.equal(sarif.version, "2.1.0");
+assert.equal(sarif.runs.length, 1);
+assert.equal(sarif.runs[0].automationDetails.id, `/tool:${tool}/`);
+assert.equal(sarif.runs[0].tool.driver.version, report.toolVersion);
+assert.equal(sarif.runs[0].results.length, report.findingCount);
+assert.ok(sarif.runs[0].results.every((finding) => finding.ruleId &&
+  finding.message?.text && finding.locations?.every((location) =>
+    location.physicalLocation.artifactLocation.uri &&
+    !location.physicalLocation.artifactLocation.uri.startsWith("/") &&
+    !location.physicalLocation.artifactLocation.uri.includes(root))));
+assert.doesNotMatch(JSON.stringify(sarif), /fixture-credential/);
 if (tool === "checkov") {
   assert.ok(native.every((entry) => entry.summary.failed > 0), "Each IaC framework fixture must detect a real finding");
 }
 if (tool === "psscriptanalyzer") {
+  const severityEnum = JSON.parse(execFileSync("/usr/bin/pwsh", [
+    "-NoProfile", "-NonInteractive", "-Command",
+    '$ErrorActionPreference = "Stop"; Import-Module $env:FIXTURE_MODULE; ' +
+      '$type = [Microsoft.Windows.PowerShell.ScriptAnalyzer.Generic.DiagnosticSeverity]; ' +
+      '$values = [ordered]@{}; foreach ($name in @("Information", "Warning", "Error", "ParseError")) ' +
+      '{ $values[$name] = [int][Enum]::Parse($type, $name) }; $values | ConvertTo-Json -Compress',
+  ], { encoding: "utf8", env: {
+    PATH: process.env.PATH,
+    HOME: root,
+    FIXTURE_MODULE: path.join(installed.modules, "PSScriptAnalyzer", report.toolVersion, "PSScriptAnalyzer.psd1"),
+  } }));
+  assert.deepEqual(severityEnum, { Information: 0, Warning: 1, Error: 2, ParseError: 3 },
+    "Severity conversion must match the actual installed pinned module, not a guessed enum");
   assert.ok(native.results.some((entry) => entry.ScriptPath.endsWith("/automation/check")),
     "The extensionless PowerShell fixture must actually be analyzed");
+}
+if (tool === "bandit") {
+  assert.ok(native.results.some((entry) => entry.filename === "./.github/scripts/fixture.py"),
+    "Bandit must actually scan selected GitHub automation rather than excluding .github as .git");
 }
 if (tool === "semgrep-ce") {
   const findings = native.flatMap((entry) => entry.results);
@@ -106,11 +138,24 @@ if (tool === "semgrep-ce") {
   }
 }
 if (tool === "shellcheck") {
+  assert.ok(native.comments.some((entry) => entry.file === "operations/style.sh" && entry.level === "style"),
+    "The pinned engine must emit a real style diagnostic");
+  assert.ok(sarif.runs[0].results.some((entry) => entry.properties.originalSeverity === "style" && entry.level === "note"),
+    "Actual native style diagnostics must publish as informational notes");
   assert.ok(native.comments.some((entry) => entry.file === "--exclude=SC2086" && entry.code === 2086),
     "An option-shaped filename must be analyzed, not interpreted as a suppression");
 }
 assert.doesNotMatch(JSON.stringify(report), /fixture-credential/);
 assert.doesNotMatch(await readFile(environment.GITHUB_STEP_SUMMARY, "utf8"), /fixture-credential/);
+if (tool === "bandit") {
+  await assert.rejects(scan({
+    ...environment,
+    ANALYSIS_SOURCE_DIR: path.join(path.basename(root), ".github"),
+    ANALYSIS_SCANNER_BIN: installed.bin,
+  }), /Git worktree root/);
+  assert.equal((await readFile(environment.GITHUB_OUTPUT, "utf8")).match(/^report-directory=/gm).length, 1,
+    "A same-commit subtree cannot emit another completed repository result");
+}
 if (tool === "checkov") {
   await writeFile(path.join(root, "json", "terraform.tfvars"), 'fixture_tls = "TLS1_0"\n');
   execFileSync("/usr/bin/git", ["-C", root, "add", "json/terraform.tfvars"]);
@@ -125,4 +170,5 @@ if (tool === "checkov") {
   assert.equal((await readFile(environment.GITHUB_OUTPUT, "utf8")).match(/^report-directory=/gm).length, 1,
     "Unsupported input must not emit another completed result");
 }
-console.log(JSON.stringify({ tool, fixture: true, sourceCoverage: report.sourceCoverage, findings: report.findingCount }));
+console.log(JSON.stringify({ tool, fixture: true, sourceCoverage: report.sourceCoverage,
+  findings: report.findingCount, sarifFindings: sarif.runs[0].results.length }));

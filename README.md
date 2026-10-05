@@ -6,12 +6,16 @@
 [![Devops Secure Scanning](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml)
 
 ## Documentation
+- [docs/workflow-linting.md](docs/workflow-linting.md) - Released-parser compatibility
+  for commit-bound self references without disabling workflow or ShellCheck rules.
 - [docs/action-versioning.md](docs/action-versioning.md) - Tagging strategy and guidance for selecting version pins.
 - [docs/codequality.md](docs/codequality.md) - Reusable workflow that wires SonarCloud, CodeQL, and composite builds.
 - [docs/repository-analysis.md](docs/repository-analysis.md) - Visibility-aware scanner selection
   and private result boundaries for the estate analysis migration.
 - [docs/repository-analysis-local.md](docs/repository-analysis-local.md) - Pinned local
   analyzers, isolated source execution and truthful native result validation.
+- [docs/repository-analysis-workflows.md](docs/repository-analysis-workflows.md) - Reusable
+  selected-local-tool matrix, private artifacts and verified public SARIF publication.
 - [docs/repository-analysis-state.md](docs/repository-analysis-state.md) - Complete
   per-tool results, actual coverage provenance and bounded default-branch freshness.
 - [docs/repository-analysis-sarif.md](docs/repository-analysis-sarif.md) - Native SARIF

@@ -1,0 +1,79 @@
+name: Analysis workflow contracts
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  contracts:
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - shell: bash
+        run: node --test repository-analysis/workflow.test.mjs
+
+  actual-shared-workflow:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: $/.github/workflows/repository-analysis-local.yml
+    with:
+      profile: '{"version":"repository-analysis-v1","languages":["actions","powershell","python","shell"],"sonar":false}'
+      expected-sha: ${{ github.sha }}
+
+  actual-shared-evidence:
+    needs: actual-shared-workflow
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          artifact-ids: ${{ needs.actual-shared-workflow.outputs.artifact-id }}
+          path: ${{ runner.temp }}/local-set
+      - name: Verify the real selected-tool execution and native publication boundary
+        shell: bash
+        env:
+          ACTUAL_SOURCE: ${{ github.sha }}
+        run: |
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import { readFile } from "node:fs/promises";
+            import path from "node:path";
+            const report = JSON.parse(await readFile(path.join(process.env.RUNNER_TEMP, "local-set", "local-results.json")));
+            assert.equal(report.status, "local-tools-completed");
+            assert.equal(report.sourceSha, process.env.ACTUAL_SOURCE);
+            assert.equal(report.fullProfileEvidence, false);
+            assert.deepEqual(report.tools.map((tool) => tool.tool).sort(), ["bandit", "psscriptanalyzer", "shellcheck", "zizmor"]);
+            const native = process.env.GITHUB_EVENT_NAME !== "pull_request" || report.publication === "github-security";
+            for (const tool of report.tools) {
+              assert(Object.values(tool.sourceCoverage).every((count) => count > 0));
+              assert.equal(tool.artifact.run.id, Number(process.env.GITHUB_RUN_ID));
+              assert.equal(tool.artifact.run.attempt, Number(process.env.GITHUB_RUN_ATTEMPT));
+              if (native) {
+                assert.equal(tool.nativeProcessing.processing.status, "completed");
+                assert.match(tool.nativeProcessing.publication.id, /^[1-9]\d*$/);
+              } else {
+                assert.equal(tool.nativeProcessing, null);
+              }
+            }
+          '

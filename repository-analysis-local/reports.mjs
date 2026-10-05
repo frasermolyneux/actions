@@ -17,7 +17,8 @@ function validateSarif(report) {
     throw new Error("Missing or malformed SARIF document");
   }
   return report.runs.flatMap((run) => {
-    if (!run.tool?.driver?.name || run.invocations?.some((entry) => entry.executionSuccessful === false)) {
+    if (!run.tool?.driver?.name || !array(run.invocations, "SARIF invocations").length ||
+        run.invocations.some((entry) => entry.executionSuccessful !== true)) {
       throw new Error("Incomplete SARIF invocation");
     }
     return array(run.results, "SARIF results");
