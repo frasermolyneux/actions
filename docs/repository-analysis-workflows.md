@@ -85,7 +85,7 @@ context dependency changes. External consumers retain folder-scoped release tags
 `$/` is used only for same-repository implementation composition.
 
 `Analysis workflow contracts` executes the actual reusable workflow against this
-public repository's maintained Actions, shell and PowerShell source, verifies real
+public repository's maintained Actions, shell, PowerShell and Python source, verifies real
 native processing and checks the returned artifact. It runs envelope/definition/
 source/visibility/hash/count contracts on Linux and Windows. `Local analysis
 contracts` additionally executes all six pinned native tools against deliberately

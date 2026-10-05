@@ -35,7 +35,7 @@ jobs:
       security-events: write
     uses: $/.github/workflows/repository-analysis-local.yml
     with:
-      profile: '{"version":"repository-analysis-v1","languages":["actions","powershell","shell"],"sonar":false}'
+      profile: '{"version":"repository-analysis-v1","languages":["actions","powershell","python","shell"],"sonar":false}'
       expected-sha: ${{ github.sha }}
 
   actual-shared-evidence:
@@ -61,7 +61,7 @@ jobs:
             assert.equal(report.status, "local-tools-completed");
             assert.equal(report.sourceSha, process.env.ACTUAL_SOURCE);
             assert.equal(report.fullProfileEvidence, false);
-            assert.deepEqual(report.tools.map((tool) => tool.tool).sort(), ["psscriptanalyzer", "shellcheck", "zizmor"]);
+            assert.deepEqual(report.tools.map((tool) => tool.tool).sort(), ["bandit", "psscriptanalyzer", "shellcheck", "zizmor"]);
             const native = process.env.GITHUB_EVENT_NAME !== "pull_request" || report.publication === "github-security";
             for (const tool of report.tools) {
               assert(Object.values(tool.sourceCoverage).every((count) => count > 0));

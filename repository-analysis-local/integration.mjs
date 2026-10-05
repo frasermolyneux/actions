@@ -23,7 +23,7 @@ const files = {
   "operations/health.bash": "#!/bin/bash\necho $FIXTURE_VALUE\n",
   "operations/health.dash": "#!/bin/dash\necho $FIXTURE_VALUE\n",
   "operations/health.ksh": "#!/bin/ksh\necho $FIXTURE_VALUE\n",
-  "operations/style.sh": "#!/bin/sh\ncat fixture.txt | grep fixture\n",
+  "operations/style.sh": "#!/bin/sh\n# shellcheck enable=useless-use-of-cat\ncat fixture.txt | grep fixture\n",
   "--exclude=SC2086": "#!/bin/sh\necho $FIXTURE_VALUE\n",
   "main.tf": "resource \"azurerm_storage_account\" \"fixture\" {\n  name = \"fixture\"\n  resource_group_name = \"fixture\"\n  location = \"uksouth\"\n  account_tier = \"Standard\"\n  account_replication_type = \"LRS\"\n  min_tls_version = \"TLS1_0\"\n}\n",
   "json/main.tf.json": JSON.stringify({ resource: { azurerm_storage_account: { fixture: {

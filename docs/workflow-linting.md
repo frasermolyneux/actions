@@ -17,7 +17,7 @@ not independently validate arbitrary local action inputs.
 The copy retains line/column positions for the supported literal references.
 
 Self references must use literal, unanchored paths with alphanumeric, dot,
-underscore or hyphen segments. Traversal, mutable `@` suffixes, YAML aliases,
+underscore or hyphen segments. Traversal, mutable `@` suffixes, anchored/aliased scalars,
 escaped self-reference spellings and non-workflow job references fail explicitly.
 Unsupported syntax must not silently become a successful validation.
 
