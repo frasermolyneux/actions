@@ -6,6 +6,7 @@ import { HOST, properties, receipt, recipeDigest, rootProperties, validateInput,
 import { validateProducerRun, WORKFLOW_PATH } from "./sonar.mjs";
 import { createHash } from "node:crypto";
 import { historicalMeasures, validateCollection, verifyBranchImport } from "./sonar.mjs";
+import { authorizeSource, trustedSource } from "./sonar.mjs";
 
 const recipe = { version: 1, driver: "dotnet", projectKey: "owner_project", sourceDirectory: "src",
   coverage: "cobertura" };
@@ -47,6 +48,75 @@ const metrics = { paging: { total: 1 }, measures: [
   { metric: "lines_to_cover", history: [{ date: analysis.date, value: "8" }] },
   { metric: "uncovered_lines", history: [{ date: analysis.date, value: "2" }] },
 ] };
+const owner = { id: 789, login: "owner", type: "User" };
+const publicRepository = { id: input.repositoryId, full_name: input.repository,
+  private: false, visibility: "public", owner, default_branch: "main" };
+const copilot = { id: 198982749, login: "Copilot", type: "Bot" };
+const dependabot = { id: 49699333, login: "dependabot[bot]", type: "Bot" };
+const githubActions = { id: 41898282, login: "github-actions[bot]", type: "Bot" };
+const pullInput = { ...input, pullRequest: 42 };
+const pullEvent = { pull_request: { head: { sha: "d".repeat(40) } } };
+const pull = { number: 42, state: "open", draft: false, user: owner,
+  head: { sha: pullEvent.pull_request.head.sha, repo: { id: input.repositoryId, full_name: input.repository } },
+  base: { repo: { id: input.repositoryId } } };
+
+test("owner-approved trust boundary accepts only exact owner and approved author/actor pairs", () => {
+  for (const [author, actor, origin] of [
+    [owner, owner, "owner"], [copilot, copilot, "copilot"], [copilot, owner, "copilot"],
+    [dependabot, dependabot, "dependabot"], [dependabot, githubActions, "dependabot"],
+  ]) {
+    const trust = trustedSource(publicRepository, { actor },
+      { ...pull, user: author }, pullInput, pullEvent);
+    assert.equal(trust.origin, origin);
+    assert.equal(trust.isolation, "same-runner-risk-accepted");
+    assert.equal(trust.logicalHeadSha, pullEvent.pull_request.head.sha);
+  }
+});
+
+test("third-party identities, generic bots, spoofed service names and mismatched actors are denied", () => {
+  for (const [author, actor] of [
+    [{ ...owner, id: 987 }, owner], [{ ...copilot, id: 987 }, copilot],
+    [{ ...copilot, type: "User" }, copilot], [githubActions, githubActions],
+    [copilot, githubActions], [owner, copilot], [dependabot, { ...dependabot, id: 987 }],
+  ]) assert.throws(() => trustedSource(publicRepository, { actor },
+    { ...pull, user: author }, pullInput, pullEvent), /author|actor/);
+});
+
+test("trust admission refuses forks, superseded heads, closed/draft PRs and account/visibility changes", () => {
+  for (const candidate of [
+    { ...pull, draft: true }, { ...pull, state: "closed" },
+    { ...pull, head: { ...pull.head, sha: "e".repeat(40) } },
+    { ...pull, head: { ...pull.head, repo: { id: 987, full_name: input.repository } } },
+    { ...pull, base: { repo: { id: 987 } } },
+  ]) assert.throws(() => trustedSource(publicRepository, { actor: owner },
+    candidate, pullInput, pullEvent), /foreign|superseded/);
+  for (const patch of [{ private: true }, { visibility: "private" }, { id: 987 },
+    { owner: { ...owner, type: "Organization" } }]) {
+    assert.throws(() => trustedSource({ ...publicRepository, ...patch },
+      { actor: owner }, pull, pullInput, pullEvent), /personal-owner/);
+  }
+});
+
+test("default sources and explicit owner dispatch are distinct from untrusted manual branches", () => {
+  assert.equal(trustedSource(publicRepository, { head_branch: "main" }, null, input, {}).origin,
+    "default-or-owner-dispatch");
+  assert.equal(trustedSource(publicRepository,
+    { head_branch: "feature", event: "workflow_dispatch", actor: owner }, null, input, {}).origin,
+  "default-or-owner-dispatch");
+  assert.throws(() => trustedSource(publicRepository,
+    { head_branch: "feature", event: "workflow_dispatch", actor: copilot }, null, input, {}), /owner dispatch/);
+});
+
+test("fresh authenticated PR metadata authorizes the exact logical source independently of merge checkout", async () => {
+  const requests = [];
+  const trust = await authorizeSource(pullInput, { actor: copilot }, pullEvent, "token", async (url) => {
+    requests.push(url);
+    return response(url.endsWith("/pulls/42") ? { ...pull, user: copilot } : publicRepository);
+  });
+  assert.equal(requests.length, 2);
+  assert.equal(trust.origin, "copilot");
+  assert.notEqual(trust.logicalHeadSha, pullInput.sourceSha);
+});
 
 test("native report bytes and genuine passing TRX execution bind coverage collection", () => {
   assert.equal(validateCollection(collection, tests, input, bytes).status, "collected");

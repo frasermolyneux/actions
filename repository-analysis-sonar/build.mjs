@@ -1,6 +1,6 @@
 import { appendFile, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { recipeDigest, validateRecipe, WORKFLOW_PATH } from "./sonar.mjs";
+import { authorizeSource, recipeDigest, validateRecipe, WORKFLOW_PATH } from "./sonar.mjs";
 
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
 const relative = (value) => typeof value === "string" &&
@@ -88,9 +88,11 @@ export async function main(env = process.env) {
     workflowPath: env.GITHUB_WORKFLOW_REF?.slice(repository.length + 1).split("@")[0],
     workflowSha: env.GITHUB_WORKFLOW_SHA, event: env.GITHUB_EVENT_NAME,
     expectedSha: env.SONAR_EXPECTED_SHA, refName: env.GITHUB_REF_NAME };
-  const result = plan(JSON.parse(env.SONAR_RUN), runtime,
-    JSON.parse(await readFile(env.GITHUB_EVENT_PATH, "utf8")),
+  const run = JSON.parse(env.SONAR_RUN);
+  const event = JSON.parse(await readFile(env.GITHUB_EVENT_PATH, "utf8"));
+  const result = plan(run, runtime, event,
     JSON.parse(env.SONAR_RECIPE), JSON.parse(env.SONAR_BUILD));
+  await authorizeSource(result.producer, run, event, env.GH_TOKEN);
   await appendFile(env.GITHUB_OUTPUT, Object.entries(result).map(([key, value]) =>
     `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`).join("\n") + "\n" +
     `sdk<<SDK_VERSIONS\n${result.build.sdk?.join("\n") ?? ""}\nSDK_VERSIONS\n`);

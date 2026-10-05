@@ -40,6 +40,55 @@ const ALLOWED_PROPERTIES = new Set([...Object.values(BINDING),
   "sonar.pullrequest.base", "sonar.cs.cobertura.reportsPaths"]);
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
+const APPROVED_PR_AUTOMATION = [
+  { id: 198982749, login: "Copilot", type: "Bot", origin: "copilot" },
+  { id: 49699333, login: "dependabot[bot]", type: "Bot", origin: "dependabot" },
+];
+const GITHUB_ACTIONS_ACTOR = { id: 41898282, login: "github-actions[bot]", type: "Bot" };
+const sameIdentity = (actual, expected) => actual?.id === expected.id &&
+  actual.login === expected.login && actual.type === expected.type;
+
+export function trustedSource(repository, run, pullRequest, input, event) {
+  const owner = repository?.owner;
+  requireValue(repository?.id === input.repositoryId && repository.full_name === input.repository &&
+    repository.visibility === "public" && repository.private === false &&
+    owner?.type === "User" && Number.isSafeInteger(owner.id) &&
+    owner.login === input.repository.split("/")[0],
+  "Sonar trusted-first-party policy requires this live public personal-owner repository");
+  const actor = run?.actor;
+  if (input.pullRequest === null) {
+    requireValue(run.head_branch === repository.default_branch ||
+      (run.event === "workflow_dispatch" && sameIdentity(actor, owner)),
+    "Token-bearing analysis requires the default branch or explicit owner dispatch");
+    return { policy: "trusted-first-party-v1", origin: "default-or-owner-dispatch",
+      isolation: "same-runner-risk-accepted", logicalHeadSha: input.sourceSha };
+  }
+  const logicalHeadSha = event.pull_request?.head.sha;
+  requireValue(pullRequest?.number === input.pullRequest && pullRequest.state === "open" &&
+    pullRequest.draft === false && pullRequest.head?.repo?.id === input.repositoryId &&
+    pullRequest.head.repo.full_name === input.repository &&
+    pullRequest.head.sha === logicalHeadSha && SHA.test(logicalHeadSha ?? "") &&
+    pullRequest.base?.repo?.id === input.repositoryId,
+  "Sonar cannot authorize a foreign, draft, closed or superseded PR source");
+  const author = pullRequest.user;
+  const automation = APPROVED_PR_AUTOMATION.find((identity) => sameIdentity(author, identity));
+  const ownerAuthored = sameIdentity(author, owner);
+  requireValue(ownerAuthored || automation, "PR author is not the verified owner or approved automation");
+  requireValue(sameIdentity(actor, owner) || (automation && sameIdentity(actor, automation)) ||
+    (automation?.origin === "dependabot" && sameIdentity(actor, GITHUB_ACTIONS_ACTOR)),
+  "PR analysis actor is not authorized for this trusted author/source pair");
+  return { policy: "trusted-first-party-v1", origin: ownerAuthored ? "owner" : automation.origin,
+    isolation: "same-runner-risk-accepted", logicalHeadSha,
+    authorId: author.id, actorId: actor.id, pullRequest: input.pullRequest };
+}
+
+export async function authorizeSource(input, run, event, token, request = fetch) {
+  const base = `https://api.github.com/repos/${input.repository}`;
+  const repository = await readJson(base, token, request);
+  const pullRequest = input.pullRequest === null ? null :
+    await readJson(`${base}/pulls/${input.pullRequest}`, token, request);
+  return trustedSource(repository, run, pullRequest, input, event);
+}
 
 export async function definitionDigest() {
   const manifest = await Promise.all(DEFINITION_FILES.map(async (filename) => {
@@ -410,6 +459,7 @@ export async function main(env = process.env) {
   const run = await readJson(`https://api.github.com/repos/${input.repository}/actions/runs/${input.runId}/attempts/${input.attempt}`,
     env.GH_TOKEN, fetch);
   validateProducerRun(run, input, runtime, event);
+  const trust = await authorizeSource(input, run, event, env.GH_TOKEN);
   const directory = await source(env.SONAR_SOURCE_DIRECTORY, recipe, input.sourceSha);
   if (env.SONAR_MODE === "authorize") {
     const stored = JSON.parse(await boundedFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "producer.json"), 16 * 1024));
@@ -441,6 +491,7 @@ export async function main(env = process.env) {
   const taskId = receipt((await boundedFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "report-task.txt"), 16 * 1024)).toString(),
     input.projectKey);
   const proof = await verify(context, input, taskId, env.SONAR_TOKEN);
+  proof.trust = trust;
   if (recipe.coverage === "cobertura") {
     const root = path.join(env.RUNNER_TEMP, "dotnet-test");
     const directories = await readdir(root);

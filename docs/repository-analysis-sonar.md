@@ -23,6 +23,28 @@ callers must use an immutable `repository-analysis-sonar/vX.Y.Z` release. Only
 Actions' own contracts can use an executing branch/merge definition. Production
 admission is not relaxed for candidate acceptance.
 
+### Accepted first-party trust boundary
+
+The estate owner explicitly chose the **trusted-first-party** policy rather than
+isolated publication. Withholding tokens from build/test environment variables is
+credential minimization, **not process isolation**: trusted build code on the same
+runner can alter the scanner or observe a later token-bearing process. This
+residual risk is accepted only inside the following authenticated boundary.
+
+Before source checkout in planning, and again before prepare/begin/end/CLI upload,
+live originating metadata must authorize the exact current PR head, repository
+and personal owner. PR authors must be the repository owner or the exact GitHub
+Copilot/Dependabot service identities (login, immutable ID and bot type). The run
+actor must be that owner or matching approved automation; `github-actions[bot]`
+is accepted only when paired with a verified Dependabot author. Other bots,
+collaborators, fork authors, draft/closed PRs and superseded heads are denied.
+Outside PRs, analysis is confined to the default branch or explicit owner dispatch.
+Completed proofs record this trust policy and accepted same-runner boundary.
+
+This policy does not authorize generic bot publication or change deployment,
+account, visibility or human-final-merge rules. New automation origins require a
+separate explicit policy decision; denials are surfaced rather than reported clean.
+
 Sonar's live project metadata must show a public project in `frasermolyneux`,
 the exact GitHub repository binding and `autoscanEnabled: false`. Permission
 errors, unknown method state and ownership/visibility changes fail explicitly.
