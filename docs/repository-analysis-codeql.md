@@ -21,7 +21,13 @@ preserves original compilation commands and receives no Sonar or deployment toke
 Each selected language must genuinely archive unchanged maintained source before
 publication. JavaScript and TypeScript capability counts come from separately
 identified **archived** files, not tracked candidates, estimates or diagnostic
-SARIF result counts. A missing selected capability cannot complete. Reauthorization
+SARIF result counts. Archived Vue and HTML/XHTML containers are classified from
+their byte-verified embedded script language/type and actual inline content;
+ordinary data, external-script references, empty or unsupported-language sections
+do not fabricate JS/TS coverage. Each file counts at most once per capability, and
+a container with both languages can legitimately count once for each. Native
+archive counts remain source-file evidence, not evaluated-line or AST percentages.
+A missing selected capability cannot complete. Reauthorization
 precedes upload; independently verified native processing supplies the actual
 finding count, analysis ID, source and producing job. The isolated per-language
 reports and selected set bind the exact originating run/attempt, policy and
@@ -41,6 +47,9 @@ CodeQL action at `2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2` and the exact
 including the actual selected-native reusable for maintained source, not adoption
 of a complete estate profile. Existing SDK/Framework/C++ fixture acceptance remains
 compiler-family evidence, not a foreign production scan.
+Separate Vue JavaScript-only and TypeScript-only fixture jobs require genuine
+CodeQL database archive bytes and distinct capability counts. They also disable
+database/SARIF publication and are fixture acceptance, never full-profile evidence.
 
 Live metadata must identify a public repository with the selected language before
 initialization. Private, unknown and foreign pull-request sources cannot enter

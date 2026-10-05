@@ -146,9 +146,9 @@ export function sourceCoverage(context, language, extracted) {
     requireValue(Number.isSafeInteger(counts[capability]) && counts[capability] > 0,
       "Native source archive cannot prove an absent selected capability");
   }
-  const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
-  requireValue(language === "javascript-typescript" ? total <= files :
-    total === files, "Native capability counts exceed actual archived source");
+  requireValue(language === "javascript-typescript"
+    ? Object.values(counts).every((count) => count <= files)
+    : counts[language] === files, "Native capability counts exceed actual archived source");
   return counts;
 }
 

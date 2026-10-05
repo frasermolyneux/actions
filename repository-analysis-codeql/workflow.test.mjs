@@ -7,6 +7,7 @@ const text = await readFile(new URL("../" + WORKFLOW_PATH, import.meta.url), "ut
 const composite = await readFile(new URL("./action.yml", import.meta.url), "utf8");
 const version = JSON.parse(await readFile(new URL("./version.json", import.meta.url), "utf8"));
 const release = await readFile(new URL("../.github/workflows/actions-versioning.yml", import.meta.url), "utf8");
+const acceptance = await readFile(new URL("../.github/workflows/repository-analysis-codeql-tests.yml", import.meta.url), "utf8");
 
 test("planning has no source checkout, licensed initialization or write permissions", () => {
   const planning = text.slice(text.indexOf("\n  plan:"), text.indexOf("\n  native:"));
@@ -60,4 +61,17 @@ test("only actual current-attempt report/native evidence is retained; databases 
     assert.match(step, /if-no-files-found: error/);
   }
   assert.match(text, /retention-days: 14/);
+});
+
+test("container acceptance requires genuine native JS/TS fixture extraction without public findings", () => {
+  const source = acceptance.slice(acceptance.indexOf("\n  actual-container-fixtures:"));
+  assert.match(source, /capability: \[javascript, typescript\]/);
+  assert.match(source, /context\.visibility, "public"/);
+  assert.match(source, /build-mode: none/);
+  assert.match(source, /upload: never/);
+  assert.match(source, /upload-database: false/);
+  assert.match(source, /assert\.equal\(proof\.extraction\.files, 1\)/);
+  assert.match(source, /CODEQL_FIXTURE: "true"/);
+  assert.match(source, /codeql-container-\$\{\{ matrix\.capability \}\}/);
+  assert.doesNotMatch(source, /security-events:|upload-sarif@/);
 });

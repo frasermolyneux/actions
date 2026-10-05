@@ -153,8 +153,16 @@ test("every selected JS/TS capability needs genuinely archived source, not track
   estimate.sourceCoverage.javascript = 20;
   assert.throws(() => validateArtifact(estimate, native, planned, "javascript-typescript", digest), /genuinely archived/);
   const overflow = structuredClone(report);
-  overflow.extraction.extraction.files = 2;
+  overflow.extraction.extraction.files = 1;
   assert.throws(() => validateArtifact(overflow, native, planned, "javascript-typescript", digest), /exceed/);
+});
+
+test("one genuinely archived container can independently contain both JS and TS source", () => {
+  const { planned, report, native } = evidence("javascript-typescript");
+  report.extraction.extraction.files = 1;
+  report.sourceCoverage = { javascript: 1, typescript: 1 };
+  report.extraction.extraction.sourceCoverage = structuredClone(report.sourceCoverage);
+  validateArtifact(report, native, planned, "javascript-typescript", digest);
 });
 
 test("malformed archive evidence raises explicit coverage errors rather than accidental property exceptions", () => {
