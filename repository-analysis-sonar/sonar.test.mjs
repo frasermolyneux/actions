@@ -11,7 +11,8 @@ import { validateUntracked } from "./sonar.mjs";
 import { validateSource } from "./sonar.mjs";
 import { validateCoverageSelection } from "./sonar.mjs";
 import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import os from "node:os";
 import path from "node:path";
 
@@ -66,6 +67,29 @@ const pullEvent = { pull_request: { head: { sha: "d".repeat(40) } } };
 const pull = { number: 42, state: "open", draft: false, user: owner,
   head: { sha: pullEvent.pull_request.head.sha, repo: { id: input.repositoryId, full_name: input.repository } },
   base: { repo: { id: input.repositoryId } } };
+
+test("native CLI completes module loading and surfaces initial failures instead of deadlocking", () => {
+  const filename = fileURLToPath(new URL("./sonar.mjs", import.meta.url));
+  const build = { kind: "dotnet", sdk: ["9.0.x", "10.0.x"], globalJson: "global.json",
+    solution: ".", skipFormat: true, tests: true };
+  for (const mode of ["prepare", "authorize", "verify"]) {
+    for (const [selection, producer, message] of [
+      [null, "{}", /Invalid analysis-only build recipe/],
+      [build, "{", /Malformed Sonar analysis JSON/],
+    ]) {
+      const result = spawnSync(process.execPath, [filename], {
+        encoding: "utf8", timeout: 10_000, maxBuffer: 1024 * 1024,
+        env: { ...process.env, SONAR_MODE: mode, SONAR_RECIPE: JSON.stringify(recipe),
+          SONAR_BUILD: JSON.stringify(selection), SONAR_PRODUCER: producer,
+          GH_TOKEN: "", SONAR_TOKEN: "" },
+      });
+      assert.equal(result.error, undefined);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, message);
+      assert.doesNotMatch(result.stderr, /unsettled top-level await/);
+    }
+  }
+});
 
 test("owner-approved trust boundary accepts only exact owner and approved author/actor pairs", () => {
   for (const [author, actor, origin] of [

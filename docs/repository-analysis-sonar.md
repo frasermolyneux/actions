@@ -197,6 +197,10 @@ Fixtures never publish source or claim completed Sonar analysis.
 Direct initial-plan contracts cover push, schedule, manual and PR admission;
 independent checkout/run/caller mutations, foreign/draft PRs, and missing,
 ambiguous or mutable foreign definitions all fail before checkout.
+Fresh-process CLI contracts also exercise prepare/authorize/verify module loading:
+entrypoint execution cannot hold module evaluation open while its build validator
+imports the same module. Invalid inputs surface explicit errors rather than Node's
+unsettled-top-level-await exit.
 
 Release detection and NBGV cover the reusable workflow, all Sonar code, context and
 test/reporting dependencies. Nested reporting resolves from the executing definition
