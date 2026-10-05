@@ -147,6 +147,15 @@ if (tool === "shellcheck") {
 }
 assert.doesNotMatch(JSON.stringify(report), /fixture-credential/);
 assert.doesNotMatch(await readFile(environment.GITHUB_STEP_SUMMARY, "utf8"), /fixture-credential/);
+if (tool === "bandit") {
+  await assert.rejects(scan({
+    ...environment,
+    ANALYSIS_SOURCE_DIR: path.join(path.basename(root), ".github"),
+    ANALYSIS_SCANNER_BIN: installed.bin,
+  }), /Git worktree root/);
+  assert.equal((await readFile(environment.GITHUB_OUTPUT, "utf8")).match(/^report-directory=/gm).length, 1,
+    "A same-commit subtree cannot emit another completed repository result");
+}
 if (tool === "checkov") {
   await writeFile(path.join(root, "json", "terraform.tfvars"), 'fixture_tls = "TLS1_0"\n');
   execFileSync("/usr/bin/git", ["-C", root, "add", "json/terraform.tfvars"]);

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { appendFile, copyFile, lstat, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { appendFile, copyFile, lstat, mkdir, mkdtemp, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateReport } from "./reports.mjs";
@@ -337,6 +337,11 @@ export async function scan(environment = process.env) {
   const head = run("/usr/bin/git", ["rev-parse", "HEAD"], root, safeEnvironment);
   if (head.status || head.stdout.trim() !== environment.ANALYSIS_EXPECTED_SHA) {
     throw new Error("The actual source checkout does not match the frozen expected revision");
+  }
+  const toplevel = run("/usr/bin/git", ["rev-parse", "--show-toplevel"], root, safeEnvironment);
+  if (toplevel.status || !toplevel.stdout.trim() ||
+      await realpath(root) !== await realpath(toplevel.stdout.trim())) {
+    throw new Error("Source directory must be the Git worktree root, not a source subtree");
   }
   const source = path.join(scratch, "source");
   await mkdir(source);

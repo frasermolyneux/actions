@@ -96,6 +96,20 @@ test("valid file-level diagnostics do not fabricate line one", () => {
   report.results[0].Column = 0;
   const physical = convert("psscriptanalyzer", report).runs[0].results[0].locations[0].physicalLocation;
   assert.equal(physical.region, undefined);
+  report.results[0].Column = 1;
+  assert.throws(() => convert("psscriptanalyzer", report), /column without a start line/);
+});
+
+test("position-required formats cannot turn missing native lines into file-level completion", () => {
+  for (const tool of ["semgrep-ce", "bandit", "shellcheck"]) {
+    for (const line of [undefined, null, 0, -1, 0.5]) {
+      const report = structuredClone(fixtures[tool]);
+      if (tool === "semgrep-ce") report.results[0].start.line = line;
+      if (tool === "bandit") report.results[0].line_number = line;
+      if (tool === "shellcheck") report.comments[0].line = line;
+      assert.throws(() => convert(tool, report), /positive native start line/, `${tool}:${line}`);
+    }
+  }
 });
 
 test("actual PowerShell numeric diagnostic severity retains its original enum value", () => {
@@ -132,7 +146,7 @@ test("invalid ranges and missing native identity fail without dropping a finding
   ]) {
     const report = structuredClone(fixtures["semgrep-ce"]);
     Object.assign(report.results[0], patch);
-    assert.throws(() => convert("semgrep-ce", report), /invalid|lacks its actual/);
+    assert.throws(() => convert("semgrep-ce", report), /invalid|lacks its actual|positive native start line/);
   }
 });
 

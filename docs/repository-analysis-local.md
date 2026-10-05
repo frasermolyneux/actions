@@ -33,7 +33,10 @@ These alternatives are not claimed to be CodeQL-equivalent.
 ## Source and result boundaries
 
 The actual Git checkout must match `expected-sha` and the immutable workflow repository
-identity. Tracked changes are rejected. Index modes distinguish owned source from
+identity. Tracked changes are rejected.
+The selected directory must be the actual Git worktree root, not a same-commit
+subtree that would omit other maintained source.
+Index modes distinguish owned source from
 submodule gitlinks; dependencies are not recursed or copied, and selected tracked symlinks
 are rejected even if a checkout materializes the link as a regular file.
 Selected maintained source is copied into an
@@ -67,6 +70,9 @@ Outputs point to `report.json`, the native report in `native.json` and finding-p
 SARIF in `analysis.sarif` (`sarif-file`). Conversion retains actual rule/message/location
 identities, version and counts; incomplete native output or unanalysed finding paths
 cannot become completed SARIF. File-level diagnostics do not invent line numbers.
+Semgrep, Bandit and ShellCheck require actual positive start lines; truncated
+positions cannot be relabeled as file-level diagnostics. Formats supporting genuine
+file-level diagnostics retain that distinction without fabricating line one.
 ShellCheck style diagnostics retain their original severity and publish as notes.
 PowerShell numeric severities follow the pinned module's actual enum
 (`Information=0`, `Warning=1`, `Error=2`); parsing errors fail, rather than being

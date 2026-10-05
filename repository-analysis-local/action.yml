@@ -11,7 +11,7 @@ inputs:
     description: Frozen SHA that must match the actual checkout.
     required: true
   source-directory:
-    description: Target Git checkout, separate from the trusted action/workflow definition.
+    description: Target Git worktree root, separate from the trusted definition; source subtrees are rejected.
     required: false
     default: "."
   github-token:

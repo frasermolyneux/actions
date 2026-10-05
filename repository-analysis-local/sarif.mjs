@@ -28,10 +28,14 @@ function sourcePath(value, files, root, tool) {
   return filename;
 }
 
-function region(start, end, column, endColumn) {
+function region(start, end, column, endColumn, positionRequired = false) {
+  requireValue(!positionRequired || (Number.isSafeInteger(start) && start > 0),
+    "Native finding requires a positive native start line");
   if (start === undefined || start === null || start === 0) {
     requireValue(end === undefined || end === null || end === 0,
       "Native finding has an end line without a start");
+    requireValue([column, endColumn].every((value) => value === undefined || value === null || value === 0),
+      "Native finding has a column without a start line");
     return undefined;
   }
   requireValue(Number.isSafeInteger(start) && start > 0 &&
@@ -166,7 +170,8 @@ export function toSarif(tool, native, version, executions, sourceRoot) {
         typeof value.message === "string" && value.message.trim().length > 0,
       "Native finding lacks its actual rule/message identity");
       const filename = sourcePath(value.file, files, sourceRoot, tool);
-      const span = region(value.start, value.end, value.column, value.endColumn);
+      const span = region(value.start, value.end, value.column, value.endColumn,
+        ["semgrep-ce", "bandit", "shellcheck"].includes(tool));
       rules.set(value.id, { id: value.id });
       return { ruleId: value.id, level: level(value.severity, tool), message: { text: value.message },
         properties: { originalSeverity: value.severity ?? null },
