@@ -49,6 +49,8 @@ Documentation-only Copilot configuration changes do not require action integrati
   selected-tool results, explicit coverage gaps and exact-source weekly freshness.
 - [`docs/repository-analysis-sarif.md`](docs/repository-analysis-sarif.md) - Live-public
   native processing verification and exact source/tool/publication identities.
+- [`docs/repository-analysis-sonar.md`](docs/repository-analysis-sonar.md) - Pinned
+  build-aware public Sonar tasks and explicit collected/imported coverage boundaries.
 - [`docs/repository-publication-origin.md`](docs/repository-publication-origin.md) - Trusted
   metadata-only publication admission and bounded originating-repository lineage proofs.
 - [`docs/dotnet-test-reporting.md`](docs/dotnet-test-reporting.md) - .NET test setup/execution, optional native coverage, bounded TRX reporting and isolated PR summary publishing.
@@ -56,4 +58,6 @@ Documentation-only Copilot configuration changes do not require action integrati
 ## Do not
 
 - Do not modify unrelated action folders while changing a single composite action.
+- The Sonar workflow package, like the local workflow package, intentionally owns a
+  reviewed dependency closure; align its digest, version filters and release detection.
 - Do not add custom Copilot setup unless the repository later requires runtime installation or dependency restore before an agent starts.

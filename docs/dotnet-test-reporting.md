@@ -82,6 +82,11 @@ throw (it reports the already-failed command). Invalid reports from a `success` 
 
 ## `dotnet-test`
 
+The nested reporter resolves from the executing action definition with
+`$/dotnet-test-report`, rather than a separately moving reporting tag. The test
+package's version filters and release detector include that reporting dependency;
+consumer input/output behavior and the default test selection remain unchanged.
+
 Runs the existing `dotnet test` command in a fresh, unique runner-temporary directory, using
 automatically generated TRX filenames rather than overwriting one fixed filename across projects
 or frameworks. It always reports/uploads evidence after the test command and never suppresses

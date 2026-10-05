@@ -20,6 +20,8 @@
   per-tool results, actual coverage provenance and bounded default-branch freshness.
 - [docs/repository-analysis-sarif.md](docs/repository-analysis-sarif.md) - Native SARIF
   processing verification with actual source, selected tool and publication identities.
+- [docs/repository-analysis-sonar.md](docs/repository-analysis-sonar.md) - Pinned,
+  build-aware public Sonar tasks, same-source coverage and explicit partial acceptance.
 - [docs/repository-publication-origin.md](docs/repository-publication-origin.md) - Metadata-only
   publication admission and verified downstream workflow lineage before App merge cutover.
 - [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.

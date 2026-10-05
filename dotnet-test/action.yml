@@ -120,7 +120,7 @@ runs:
     - name: Report ${{ inputs.suite }} tests
       id: report
       if: always() && steps.invocation.outcome == 'success'
-      uses: frasermolyneux/actions/dotnet-test-report@dotnet-test-report/v1.1
+      uses: $/dotnet-test-report
       with:
         suite: ${{ inputs.suite }}
         results-directory: ${{ steps.invocation.outputs.results-directory }}

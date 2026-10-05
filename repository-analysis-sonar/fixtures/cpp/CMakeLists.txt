@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.24)
+project(analysis_fixture LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+add_library(analysis_fixture STATIC library.cpp)
+add_executable(analysis_fixture_tests tests.cpp)
+target_link_libraries(analysis_fixture_tests PRIVATE analysis_fixture)
+enable_testing()
+add_test(NAME analysis_fixture_tests COMMAND analysis_fixture_tests)

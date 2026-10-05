@@ -1,0 +1,163 @@
+name: Repository Sonar evidence
+description: Preflight permitted public Sonar analysis and verify an exact-source, completed compute task.
+inputs:
+  mode:
+    description: plan, prepare, install, begin, build, end or verify; none changes provider settings.
+    required: true
+  profile:
+    description: Catalog repository-analysis-v1 profile.
+    required: true
+  recipe:
+    description: Validated version-1 Sonar driver/source/coverage recipe.
+    required: true
+  producer:
+    description: Exact source, run, attempt and reviewed definition identity.
+    required: false
+  build:
+    description: Analysis-only build recipe, required for plan.
+    required: false
+  expected-sha:
+    description: Exact workflow checkout SHA, required for plan.
+    required: false
+  run:
+    description: Authenticated current run attempt metadata, required for plan.
+    required: false
+  command:
+    description: Exact pinned installed .NET scanner executable.
+    required: false
+  properties:
+    description: Credential-free source-bound properties from prepare.
+    required: false
+  coverage-report:
+    description: Validated same-source native collection JSON, required for Cobertura verification.
+    required: false
+  test-report:
+    description: Actual passing TRX aggregate, required for Cobertura verification.
+    required: false
+  coverage-directory:
+    description: This job's isolated test invocation directory, required for Cobertura verification.
+    required: false
+  source-directory:
+    description: Complete unchanged source Git worktree.
+    required: false
+  evidence-directory:
+    description: Isolated directory returned by prepare, required for verify.
+    required: false
+  github-token:
+    description: Originating-repository metadata read token, not merge credentials.
+    required: true
+  sonar-token:
+    description: Existing Sonar token with Execute Analysis and Browse permission.
+    required: false
+outputs:
+  command:
+    description: Installed exact-version .NET scanner executable.
+    value: ${{ steps.scanner.outputs.command }}
+  sdk:
+    description: Validated newline-separated SDK versions.
+    value: ${{ steps.evidence.outputs.sdk }}
+  recipe:
+    description: Canonical validated scanner recipe.
+    value: ${{ steps.evidence.outputs.recipe }}
+  build:
+    description: Validated analysis-only build recipe.
+    value: ${{ steps.evidence.outputs.build }}
+  runner:
+    description: Only ubuntu-latest or windows-latest.
+    value: ${{ steps.evidence.outputs.runner }}
+  producer:
+    description: Planned exact source, originating attempt and authenticated definition.
+    value: ${{ steps.evidence.outputs.producer }}
+  definition-sha:
+    description: Authenticated called reusable-workflow revision.
+    value: ${{ steps.evidence.outputs.definitionSha }}
+  evidence-directory:
+    description: Isolated receipt and source-bound producer directory.
+    value: ${{ steps.evidence.outputs.evidence-directory }}
+  source-directory:
+    description: Validated physical scanner base directory.
+    value: ${{ steps.evidence.outputs.source-directory }}
+  properties:
+    description: JSON scanner properties; excludes credentials.
+    value: ${{ steps.evidence.outputs.properties }}
+  proof-directory:
+    description: Completed provider evidence, never the raw scanner context.
+    value: ${{ steps.evidence.outputs.proof-directory }}
+  analysis-id:
+    description: Actual completed Sonar analysis identity.
+    value: ${{ steps.evidence.outputs.analysis-id }}
+runs:
+  using: composite
+  steps:
+    - name: Refuse private or ineligible native scanner installation and build
+      if: inputs.mode == 'install' || inputs.mode == 'build'
+      shell: bash
+      env:
+        SONAR_MODE: capability
+        SONAR_PROFILE: ${{ inputs.profile }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        SONAR_SCRIPT: ${{ github.action_path }}/sonar.mjs
+      run: node "$SONAR_SCRIPT"
+    - name: Independently authorize the prepared producer before native analysis
+      if: inputs.mode == 'begin' || inputs.mode == 'end'
+      shell: bash
+      env:
+        SONAR_MODE: authorize
+        SONAR_AUTH_PHASE: ${{ inputs.mode }}
+        SONAR_PROFILE: ${{ inputs.profile }}
+        SONAR_RECIPE: ${{ inputs.recipe }}
+        SONAR_BUILD: ${{ inputs.build }}
+        SONAR_PRODUCER: ${{ inputs.producer }}
+        SONAR_EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        SONAR_PROPERTIES: ${{ inputs.properties }}
+        SONAR_SOURCE_DIRECTORY: ${{ github.workspace }}
+        SONAR_SCANNER_SOURCE: ${{ inputs.source-directory }}
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        SONAR_SCRIPT: ${{ github.action_path }}/sonar.mjs
+      run: node "$SONAR_SCRIPT"
+    - id: evidence
+      if: inputs.mode == 'plan' || inputs.mode == 'prepare' || inputs.mode == 'verify'
+      shell: bash
+      env:
+        SONAR_MODE: ${{ inputs.mode }}
+        SONAR_PROFILE: ${{ inputs.profile }}
+        SONAR_RECIPE: ${{ inputs.recipe }}
+        SONAR_PRODUCER: ${{ inputs.producer }}
+        SONAR_BUILD: ${{ inputs.build }}
+        SONAR_EXPECTED_SHA: ${{ inputs.expected-sha }}
+        SONAR_RUN: ${{ inputs.run }}
+        SONAR_COVERAGE_REPORT: ${{ inputs.coverage-report }}
+        SONAR_TEST_REPORT: ${{ inputs.test-report }}
+        SONAR_COVERAGE_DIRECTORY: ${{ inputs.coverage-directory }}
+        SONAR_SOURCE_DIRECTORY: ${{ inputs.source-directory }}
+        SONAR_EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+        SONAR_SCRIPT: ${{ github.action_path }}/sonar.mjs
+      run: |
+        if [ "$SONAR_MODE" = plan ]; then
+          node "$(dirname "$SONAR_SCRIPT")/build.mjs"
+        else
+          node "$SONAR_SCRIPT"
+        fi
+    - id: scanner
+      if: inputs.mode != 'plan' && inputs.mode != 'prepare' && inputs.mode != 'verify'
+      shell: pwsh
+      env:
+        SONAR_MODE: ${{ inputs.mode }}
+        SONAR_BUILD: ${{ inputs.build }}
+        SONAR_SCANNER_SOURCE: ${{ inputs.source-directory }}
+        SONAR_RECIPE: ${{ inputs.recipe }}
+        SONAR_SCANNER_COMMAND: ${{ inputs.command }}
+        SONAR_PROPERTIES: ${{ inputs.properties }}
+        SONAR_TOKEN: ${{ inputs.sonar-token }}
+        SONAR_HELPER_PATH: ${{ github.action_path }}
+      run: |
+        if ($env:SONAR_MODE -eq 'build') {
+          node (Join-Path $env:SONAR_HELPER_PATH 'validate-build.mjs')
+          if ($LASTEXITCODE -ne 0) { throw 'Analysis-only build recipe validation failed.' }
+          & (Join-Path $env:SONAR_HELPER_PATH 'build.ps1')
+        } else {
+          & (Join-Path $env:SONAR_HELPER_PATH 'scanner.ps1') -Mode $env:SONAR_MODE
+        }

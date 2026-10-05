@@ -1,0 +1,89 @@
+name: Sonar analysis contracts
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  contracts:
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - shell: bash
+        run: node --test repository-analysis-sonar/sonar.test.mjs repository-analysis-sonar/build.test.mjs repository-analysis-sonar/workflow.test.mjs
+      - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+      - name: Exercise actual pinned installation without publishing fixture source
+        uses: $/repository-analysis-sonar
+        with:
+          mode: install
+          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          recipe: '{"version":1,"driver":"dotnet","projectKey":"fixture-not-published","sourceDirectory":"dotnet-test/fixtures","coverage":"cobertura"}'
+          github-token: ${{ github.token }}
+      - name: Preserve actual SDK multi-target builds without credentials or publication
+        uses: $/repository-analysis-sonar
+        with:
+          mode: build
+          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          recipe: '{"version":1,"driver":"dotnet","projectKey":"fixture-not-published","sourceDirectory":"dotnet-test/fixtures","coverage":"cobertura"}'
+          build: '{"kind":"dotnet","sdk":["9.0.x","10.0.x"],"globalJson":null,"solution":".","skipFormat":true,"tests":true}'
+          source-directory: ${{ github.workspace }}/dotnet-test/fixtures
+          github-token: ${{ github.token }}
+
+  framework:
+    permissions:
+      contents: read
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: microsoft/setup-msbuild@30375c66a4eea26614e0d39710365f22f8b0af57
+      - uses: NuGet/setup-nuget@fd55a6f3b34392fa83fde1454582407d8c714123
+      - name: Exercise original Framework restore and Release/Any CPU MSBuild argv
+        uses: $/repository-analysis-sonar
+        with:
+          mode: build
+          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          recipe: '{"version":1,"driver":"dotnet","projectKey":"fixture-not-published","sourceDirectory":"repository-analysis-sonar/fixtures/netfx","coverage":"not-applicable"}'
+          build: '{"kind":"netfx","sdk":["10.0.x"],"globalJson":null,"solution":"Fixture.sln","skipFormat":true,"tests":false}'
+          source-directory: ${{ github.workspace }}/repository-analysis-sonar/fixtures/netfx
+          github-token: ${{ github.token }}
+
+  cpp:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Exercise real C++ configure, compilation, ctest and compile commands
+        uses: $/repository-analysis-sonar
+        with:
+          mode: build
+          profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":true}'
+          recipe: '{"version":1,"driver":"cpp","projectKey":"fixture-not-published","sourceDirectory":"repository-analysis-sonar/fixtures/cpp","coverage":"not-applicable"}'
+          build: '{"kind":"cmake","configureArgs":["-DCMAKE_BUILD_TYPE=Release","-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"],"buildArgs":["--config","Release"],"testArgs":["--output-on-failure","--build-config","Release"]}'
+          source-directory: ${{ github.workspace }}/repository-analysis-sonar/fixtures/cpp
+          github-token: ${{ github.token }}
