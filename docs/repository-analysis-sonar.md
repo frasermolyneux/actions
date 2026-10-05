@@ -76,8 +76,8 @@ Supported drivers are `dotnet`, `cli` and `cpp`. Source directories must be
 repository-relative and physically inside the exact unchanged Git worktree.
 CLI/C++ reauthorize that unchanged tree, producer and live project immediately
 after repository build scripts and before the token-bearing upload.
-Tracked-file changes and untracked analyzable files (including Git-ignored
-source) outside the driver's known excluded/generated output directories fail
+Tracked-file changes and all untracked files (including Git-ignored
+source and unknown scanner-supported extensions) outside the driver's known excluded/generated output directories fail
 before publication. A lifecycle hook cannot silently add scanned source to the
 authenticated commit.
 Supported coverage is C# `cobertura` or explicit `not-applicable`.
@@ -125,7 +125,9 @@ scanner **8.1.0.6389** and signature verification.
 
 ## Completed evidence, not accepted uploads
 
-The verifier reads the fixed-provider receipt, waits up to ten minutes for the
+The verifier reads the fixed-provider receipt, enforces an absolute ten-minute
+deadline (including provider latency, with each request bounded by its remaining
+budget), and waits for the
 actual compute task, and requires `REPORT`/`SUCCESS`, the expected project,
 current invocation timing and source/producer properties.
 

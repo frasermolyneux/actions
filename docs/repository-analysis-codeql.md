@@ -14,6 +14,10 @@ actual checkout revision, unchanged tracked files, observed CLI version, queried
 SARIF invocation and native database archive. Selected archived source bytes must
 match their tracked checkout bytes under a single native archive root. The resolved
 database source location must identify the actual runner checkout.
+The shared source gate also rejects ordinary and Git-ignored untracked files
+outside known dependency/compiler output directories before proof creation and
+native publication. This gate does not infer safe source from a partial extension
+list; generated build outputs remain explicitly distinguished from maintained source.
 Estimated baseline lines are not extraction
 evidence. Archive file counts are not evaluated-line or coverage percentages.
 The raw SARIF `resultCount` can include diagnostic results and is not a native

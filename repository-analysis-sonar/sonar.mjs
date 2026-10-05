@@ -5,6 +5,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
+import { validateUntrackedFiles, validateUntrackedWorktree } from "../repository-analysis-context/source.mjs";
 
 export const HOST = "https://sonarcloud.io";
 export const DOTNET_VERSION = "11.3.0";
@@ -16,7 +17,8 @@ export const DEFINITION_FILES = [
   "repository-analysis-sonar/build.mjs", "repository-analysis-sonar/build.ps1",
   "repository-analysis-sonar/scanner.ps1", "repository-analysis-sonar/validate-build.mjs",
   "repository-analysis-sonar/version.json", "repository-analysis-context/action.yml",
-  "repository-analysis-context/policy.mjs", "dotnet-test/action.yml", "dotnet-test/run-tests.ps1",
+  "repository-analysis-context/policy.mjs", "repository-analysis-context/source.mjs",
+  "dotnet-test/action.yml", "dotnet-test/run-tests.ps1",
   "dotnet-test/report-coverage.ps1", "dotnet-test/coverage-tools.json",
   "dotnet-test-report/action.yml", "dotnet-test-report/report-test-results.ps1",
 ];
@@ -253,19 +255,19 @@ export function validateTask(task, input, taskId) {
   return { id: task.id, analysisId: task.analysisId, executedAt: task.executedAt };
 }
 
-async function getJson(endpoint, token, request) {
+async function getJson(endpoint, token, request, timeout = 30_000) {
   requireValue(endpoint.startsWith("/api/") && typeof token === "string" &&
     /^[\x21-\x7e]+$/.test(token), "A valid Sonar token and fixed provider endpoint are required");
-  return readJson(`${HOST}${endpoint}`, token, request);
+  return readJson(`${HOST}${endpoint}`, token, request, timeout);
 }
 
-async function readJson(url, token, request) {
+async function readJson(url, token, request, timeout = 30_000) {
   let response;
   try {
     response = await request(url, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json",
         ...(url.startsWith("https://api.github.com/") ? { "X-GitHub-Api-Version": "2022-11-28" } : {}) },
-      redirect: "error", signal: AbortSignal.timeout(30_000),
+      redirect: "error", signal: AbortSignal.timeout(timeout),
     });
   } catch {
     throw new Error("Sonar provider request failed (transport)");
@@ -307,10 +309,18 @@ export async function verify(context, input, taskId, token, {
   validateInput(input);
   eligible(context, input);
   requireValue(ID.test(taskId ?? ""), "A valid Sonar compute-task receipt is required");
+  const deadline = now() + 600_000;
+  const remaining = () => {
+    const budget = deadline - now();
+    requireValue(budget > 0, "Sonar compute task did not complete within ten minutes");
+    return Math.min(30_000, Math.ceil(budget));
+  };
   validateProject(await getJson(`/api/navigation/component?component=${encodeURIComponent(input.projectKey)}`,
-    token, request), context, input);
+    token, request, remaining()), context, input);
   const poll = async (attempt) => {
-    const { task } = await getJson(`/api/ce/task?id=${taskId}&additionalFields=scannerContext,warnings`, token, request);
+    const { task } = await getJson(`/api/ce/task?id=${taskId}&additionalFields=scannerContext,warnings`,
+      token, request, remaining());
+    remaining();
     requireValue(task?.id === taskId && task.componentKey === input.projectKey &&
       ["PENDING", "IN_PROGRESS", "SUCCESS"].includes(task.status),
     "Sonar compute task failed, disappeared or changed identity");
@@ -318,7 +328,7 @@ export async function verify(context, input, taskId, token, {
       return validateTask(task, input, taskId);
     }
     requireValue(attempt < 119, "Sonar compute task did not complete within ten minutes");
-    await sleep(5000);
+    await sleep(Math.min(5000, deadline - now()));
     return poll(attempt + 1);
   };
   const result = await poll(0);
@@ -471,14 +481,15 @@ function git(root, args) {
   return result.stdout.trim();
 }
 
-export function validateUntracked(files, driver) {
-  const outputs = new Set(driver === "dotnet"
+function excludedOutputs(driver) {
+  requireValue(["dotnet", "cli", "cpp"].includes(driver), "Unknown source validation driver");
+  return driver === "dotnet"
     ? ["bin", "obj", ".sonarqube"]
-    : ["node_modules", "vendor", "fixtures", "build", ".scannerwork"]);
-  const sourceFile = /\.(?:cs|vb|c|cc|cpp|cxx|h|hh|hpp|hxx|[cm]?js|jsx|[cm]?ts|tsx|py|php|html|css|scss|sass|json|xml|ya?ml|tf|bicep|sh|ps1|props|targets)$/i;
-  requireValue(files.every((filename) => !sourceFile.test(filename) ||
-    filename.split("/").some((part) => outputs.has(part))),
-  "Untracked analyzable files outside known excluded build outputs cannot be published");
+    : ["node_modules", "vendor", "fixtures", "build", ".scannerwork"];
+}
+
+export function validateUntracked(files, driver) {
+  validateUntrackedFiles(files, excludedOutputs(driver));
 }
 
 export async function validateSource(root, recipe, sha) {
@@ -486,10 +497,7 @@ export async function validateSource(root, recipe, sha) {
   requireValue(physical === await realpath(git(root, ["rev-parse", "--show-toplevel"])) &&
     git(root, ["rev-parse", "HEAD"]) === sha, "Sonar requires the exact complete Git worktree");
   git(root, ["diff", "--exit-code", "HEAD", "--"]);
-  const untracked = ["--exclude-standard", "--ignored"].flatMap((selection) =>
-    git(root, ["ls-files", "--others", ...(selection === "--ignored"
-      ? ["--ignored", "--exclude-standard"] : [selection]), "-z"]).split("\0").filter(Boolean));
-  validateUntracked(untracked, recipe.driver);
+  validateUntrackedWorktree((args) => git(root, args), excludedOutputs(recipe.driver));
   const directory = await realpath(path.join(root, recipe.sourceDirectory));
   requireValue(directory === physical || directory.startsWith(physical + path.sep),
     "Sonar base directory escapes the authenticated source");

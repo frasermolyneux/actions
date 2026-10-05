@@ -234,7 +234,8 @@ test("generated analyzable files cannot expand the authenticated commit outside 
   validateUntracked(["src/node_modules/package/index.js", "src/build/compiled.cpp",
     "src/fixtures/sample.py", ".scannerwork/scanner.json"], "cli");
   for (const driver of ["dotnet", "cli", "cpp"]) {
-    for (const filename of ["src/untracked.cs", "src/untracked.js", "src/ignored-by-git/added.py"]) {
+    for (const filename of ["src/untracked.cs", "src/untracked.js", "src/ignored-by-git/added.py",
+      "src/component.vue", "src/component.svelte", "src/header.ipp", "src/header.inl", "src/unknown-extension"]) {
       assert.throws(() => validateUntracked([filename], driver), /Untracked analyzable/);
     }
   }
@@ -258,7 +259,7 @@ test("actual Git source admission rejects ignored untracked files, not only trac
   await writeFile(path.join(root, "src", "node_modules", "dependency.js"), "dependency\n");
   assert.ok(await validateSource(root, selection, sha));
   await mkdir(path.join(root, "src", "ignored"));
-  await writeFile(path.join(root, "src", "ignored", "untracked.js"), "uncommitted source\n");
+  await writeFile(path.join(root, "src", "ignored", "untracked.vue"), "uncommitted source\n");
   await assert.rejects(validateSource(root, selection, sha), /Untracked analyzable/);
 });
 
@@ -402,6 +403,45 @@ test("private or inconsistent live context fails before any Sonar API request", 
     request: async () => { calls++; return response(project); },
   }), /live public/);
   assert.equal(calls, 0);
+});
+
+test("slow successful provider responses cannot extend the ten-minute wall-clock budget", async (t) => {
+  const start = Date.parse("2026-10-05T12:03:00Z");
+  let elapsed = 0;
+  let polls = 0;
+  const timeouts = [];
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  t.mock.method(AbortSignal, "timeout", (milliseconds) => {
+    timeouts.push(milliseconds);
+    return timeout(milliseconds);
+  });
+  await assert.rejects(verify(context, input, task.id, "test-token", {
+    now: () => start + elapsed,
+    request: async (url) => {
+      if (url.includes("navigation")) return response(project);
+      polls++;
+      elapsed += Math.min(29_000, 600_000 - elapsed);
+      return response({ task: { ...task, status: "PENDING" } });
+    },
+    sleep: async (milliseconds) => { elapsed += milliseconds; },
+  }), /within ten minutes/);
+  assert.equal(elapsed, 600_000);
+  assert.equal(polls, 18);
+  assert.equal(timeouts.at(-1), 22_000);
+  assert.ok(timeouts.every((milliseconds) => milliseconds <= 30_000));
+});
+
+test("a success returned after the absolute deadline is not completed evidence", async () => {
+  const start = Date.parse("2026-10-05T12:03:00Z");
+  let elapsed = 0;
+  await assert.rejects(verify(context, input, task.id, "test-token", {
+    now: () => start + elapsed,
+    request: async (url) => {
+      if (url.includes("navigation")) return response(project);
+      elapsed = 600_000;
+      return response({ task });
+    },
+  }), /within ten minutes/);
 });
 
 test("failed, cancelled, malformed, oversized and denied tasks do not become clean", async () => {

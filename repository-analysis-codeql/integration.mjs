@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
+import { validateUntrackedWorktree } from "../repository-analysis-context/source.mjs";
 
 const env = process.env;
 const hash = (content) => createHash("sha256").update(content).digest("hex");
@@ -31,6 +32,8 @@ const run = (command, args, input) => {
 };
 assert.equal(run(git, ["rev-parse", "HEAD"]).trim(), env.GITHUB_SHA);
 run(git, ["diff", "--exit-code", "HEAD", "--"]);
+validateUntrackedWorktree((args) => run(git, args),
+  ["bin", "obj", "node_modules", "vendor", "build", "__pycache__"]);
 const databases = JSON.parse(env.CODEQL_DATABASES);
 assert.equal(Object.keys(databases).length, 1);
 const database = databases[aliases[language]];
