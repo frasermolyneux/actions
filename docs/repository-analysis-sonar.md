@@ -148,6 +148,23 @@ for the selected Cobertura property in the one root section. Server/module
 coverage settings are rejected without retaining their values;
 another configured coverage source cannot supply the selected report's measures.
 
+After task and coverage verification, the proof records bounded provider facts for
+the same current analysis: genuinely analyzed maintained-file counts for every
+selected Sonar language and the raw unresolved issue total. Complete, stable
+500-file paging is required, and selected-language paths must be tracked inside
+the declared source directory; generated/vendor/fixture files cannot supply those
+counts. These are analyzed-file metadata counts, not line coverage or independently
+verified provider file-byte hashes.
+
+Default facts bind the latest exact analysis ID and source revision before and
+after reading. PR facts additionally bind the actual merge checkout reported by
+the PR and the exact latest successful PR compute task; another PR or the default
+branch cannot supply its data. Ambiguity, partial paging, permissions, missing
+languages, changing analysis and a two-minute absolute metadata deadline fail
+explicitly. The raw unresolved count includes the existing backlog and is not a
+new merge gate or a replacement for the improvement controller's advisory policy.
+PR-only facts still cannot supply default freshness or manufacture coverage import.
+
 The output binds the actual task/analysis ID, repository/source/policy/recipe,
 caller/definition and originating run attempt. It explicitly retains
 `scope: sonar-task-and-selected-coverage-only` and `fullProfileEvidence: false`.
