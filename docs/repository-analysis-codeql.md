@@ -24,7 +24,10 @@ identified **archived** files, not tracked candidates, estimates or diagnostic
 SARIF result counts. Archived Vue and HTML/XHTML containers are classified from
 their byte-verified embedded script language/type and actual inline content;
 ordinary data, external-script references, empty or unsupported-language sections
-do not fabricate JS/TS coverage. Each file counts at most once per capability, and
+do not fabricate JS/TS coverage. Conflicting explicit MIME/language declarations
+or competing `lang`/`language` attributes fail instead of overriding one another;
+Vue's intentional TypeScript `type="module"` case remains supported.
+Each file counts at most once per capability, and
 a container with both languages can legitimately count once for each. Native
 archive counts remain source-file evidence, not evaluated-line or AST percentages.
 A missing selected capability cannot complete. Reauthorization

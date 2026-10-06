@@ -4,7 +4,7 @@ import tempfile
 import unittest
 import zipfile
 
-from archive import verify
+from archive import JAVASCRIPT_TYPES, verify
 
 
 class ArchiveTests(unittest.TestCase):
@@ -124,6 +124,24 @@ class ArchiveTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Conflicting embedded"):
             self.container("src/App.vue",
                            b'<script lang="js" type="text/typescript">const source: number = 1;</script>')
+        for mime in JAVASCRIPT_TYPES - {"", "module"}:
+            for language in ("ts", "typescript", "tsx"):
+                with self.subTest(mime=mime, language=language), self.assertRaisesRegex(ValueError, "Conflicting embedded"):
+                    self.container("src/page.html",
+                                   f'<script lang="{language}" type="{mime}">const source = 1;</script>'.encode())
+
+    def test_language_aliases_cannot_override_conflicting_language_metadata(self):
+        for attributes in ('lang="js" language="ts"', 'lang="ts" language="javascript"',
+                           'lang="" language="ts"', 'lang="js" language="coffee"'):
+            with self.subTest(attributes=attributes), self.assertRaisesRegex(ValueError, "Conflicting embedded"):
+                self.container("src/App.vue", f'<script {attributes}>const source = 1;</script>'.encode())
+        for attributes, expected in [
+            ('lang="js" language="ecmascript"', {"javascript": 1, "typescript": 0}),
+            ('lang="ts" language="typescript" type="module"', {"javascript": 0, "typescript": 1}),
+        ]:
+            with self.subTest(attributes=attributes):
+                result = self.container("src/App.vue", f'<script {attributes}>const source = 1;</script>'.encode())
+                self.assertEqual(result["sourceCoverage"], expected)
 
     def test_json_and_yaml_archive_presence_does_not_fabricate_program_language(self):
         for filename, content in [("src/config.json", b'{"source":"metadata"}'),

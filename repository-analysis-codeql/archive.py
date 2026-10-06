@@ -19,6 +19,8 @@ JAVASCRIPT_TYPES = {"", "module", "text/javascript", "application/javascript",
                     "text/ecmascript", "application/ecmascript", "application/x-javascript",
                     "text/jsx", "text/babel"}
 TYPESCRIPT_TYPES = {"text/typescript", "application/typescript", "text/tsx"}
+SCRIPT_LANGUAGES = {"js": "javascript", "jsx": "javascript", "ecmascript": "javascript",
+                    "ts": "typescript", "tsx": "typescript"}
 JAVASCRIPT_EVENTS = set("""
 onabort onafterprint onanimationcancel onanimationend onanimationiteration onanimationstart
 onauxclick onbeforeinput onbeforematch onbeforeprint onbeforetoggle onbeforeunload
@@ -63,12 +65,18 @@ class EmbeddedScripts(HTMLParser):
         if "src" in values:
             return
         kind = values.get("type", "").split(";", 1)[0].strip().lower()
-        language = values.get("lang", values.get("language", "")).strip().lower()
+        declared = {key: SCRIPT_LANGUAGES.get(value.strip().lower(), value.strip().lower())
+                    for key, value in values.items() if key in ("lang", "language")}
+        if len(set(declared.values())) > 1:
+            raise ValueError("Conflicting embedded script language metadata")
+        language = next(iter(declared.values()), "")
         if kind not in JAVASCRIPT_TYPES | TYPESCRIPT_TYPES:
             return
-        if language in ("ts", "typescript", "tsx") or (not language and kind in TYPESCRIPT_TYPES):
+        if language == "typescript" or (not language and kind in TYPESCRIPT_TYPES):
+            if kind in JAVASCRIPT_TYPES - {"", "module"}:
+                raise ValueError("Conflicting embedded script language metadata")
             self.script_language = "typescript"
-        elif language in ("", "js", "javascript", "jsx", "ecmascript"):
+        elif language in ("", "javascript"):
             if kind in TYPESCRIPT_TYPES:
                 raise ValueError("Conflicting embedded script language metadata")
             self.script_language = "javascript"
