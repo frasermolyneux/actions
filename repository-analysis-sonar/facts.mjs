@@ -66,8 +66,12 @@ export function findingTotal(payload, projectKey) {
 
 export function branchSnapshot(payload, input, proof) {
   const analysis = payload?.analyses?.[0];
-  requireValue(analysis?.key === proof.processing.analysisId && analysis.revision === input.sourceSha &&
-    date(analysis.date), "Sonar facts require the latest exact-source completed branch analysis");
+  requireValue(Array.isArray(payload?.analyses) && payload.analyses.length > 0 && payload.analyses.length <= 2 &&
+    analysis?.key === proof.processing.analysisId && analysis.revision === input.sourceSha &&
+    payload.analyses.every((entry) => date(entry?.date) &&
+      Date.parse(entry.date) <= Date.parse(analysis.date)) &&
+    payload.analyses.filter((entry) => Date.parse(entry.date) === Date.parse(analysis.date)).length === 1,
+  "Sonar facts require an unambiguous latest exact-source completed branch analysis");
   return { analysisId: analysis.key, sourceSha: analysis.revision, analysisDate: analysis.date };
 }
 

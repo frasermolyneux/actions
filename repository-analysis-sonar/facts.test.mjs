@@ -133,6 +133,16 @@ test("default snapshot must bind exact provider analysis identity and actual rev
   }
 });
 
+test("default analysis timestamps must identify an unambiguous latest result", () => {
+  const older = { ...analysis, key: "previous", date: "2026-10-06T11:59:00+0000" };
+  assert.equal(branchSnapshot({ analyses: [analysis, older] }, input, proof).analysisId, analysis.key);
+  for (const date of [analysis.date, "2026-10-06T14:01:00+0200",
+    "2026-10-06T12:03:00+0000", "malformed"]) {
+    assert.throws(() => branchSnapshot({ analyses: [analysis, { ...older, date }] }, input, proof),
+      /unambiguous latest exact-source/);
+  }
+});
+
 test("PR snapshot requires actual merge source and the exact latest successful task", () => {
   assert.equal(pullSnapshot(pulls, activity, pullInput, proof).taskId, proof.processing.id);
   const unrelated = { ...activity.tasks[0], pullRequest: "99", id: "different",
