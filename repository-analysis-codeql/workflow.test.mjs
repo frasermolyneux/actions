@@ -41,9 +41,19 @@ test("native execution retains setup-before-init, manual-only compiler and reaut
 
 test("all runtime dependencies are covered by the digest, release filter and dependency ordering", async () => {
   assert.match(await definitionDigest(), /^[a-f0-9]{64}$/);
+  const dependencies = new Set(DEFINITION_FILES.map((filename) =>
+    new URL("../" + filename, import.meta.url).href));
   for (const filename of DEFINITION_FILES) {
     assert.ok(version.pathFilters.some((filter) => filename === filter.slice(2) ||
       filename.startsWith(filter.slice(2) + "/")), `Version misses ${filename}`);
+    if (filename.endsWith(".mjs")) {
+      const location = new URL("../" + filename, import.meta.url);
+      const source = await readFile(location, "utf8");
+      for (const match of source.matchAll(/\b(?:from\s+|import\(\s*)["'](\.[^"']+\.mjs)["']/g)) {
+        assert.ok(dependencies.has(new URL(match[1], location).href),
+          `Digest misses executable import ${match[1]} from ${filename}`);
+      }
+    }
   }
   const packages = /ACTIONS=\(([\s\S]*?)\)/.exec(release)[1].trim().split(/\s+/);
   const index = packages.indexOf("repository-analysis-codeql");

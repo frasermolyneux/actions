@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
 import { validateUntrackedFiles, validateUntrackedWorktree } from "../repository-analysis-context/source.mjs";
+import { verifyFacts } from "./facts.mjs";
 
 export const HOST = "https://sonarcloud.io";
 export const DOTNET_VERSION = "11.3.0";
@@ -16,7 +17,7 @@ export const DEFINITION_FILES = [
   WORKFLOW_PATH, "repository-analysis-sonar/action.yml", "repository-analysis-sonar/sonar.mjs",
   "repository-analysis-sonar/build.mjs", "repository-analysis-sonar/build.ps1",
   "repository-analysis-sonar/scanner.ps1", "repository-analysis-sonar/validate-build.mjs",
-  "repository-analysis-sonar/version.json", "repository-analysis-context/action.yml",
+  "repository-analysis-sonar/version.json", "repository-analysis-sonar/facts.mjs", "repository-analysis-context/action.yml",
   "repository-analysis-context/policy.mjs", "repository-analysis-context/source.mjs",
   "dotnet-test/action.yml", "dotnet-test/run-tests.ps1",
   "dotnet-test/report-coverage.ps1", "dotnet-test/coverage-tools.json",
@@ -591,6 +592,12 @@ export async function main(env = process.env) {
   } else {
     proof.coverage = { status: "not-applicable", reason: "Original build family has no declared supported coverage" };
   }
+  const tracked = new Set(git(directory, ["ls-files", "-z", "--", "."]).split("\0").filter(Boolean));
+  proof.facts = await verifyFacts(context, input, proof, tracked,
+    (endpoint, timeout) => getJson(endpoint, env.SONAR_TOKEN, fetch, timeout));
+  proof.sourceCoverage = proof.facts.sourceCoverage;
+  proof.findingCount = proof.facts.findingCount;
+  proof.completedAt = proof.facts.verifiedAt;
   proof.scope = "sonar-task-and-selected-coverage-only";
   proof.fullProfileEvidence = false;
   await writeFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "proof.json"), JSON.stringify(proof) + "\n");

@@ -27,7 +27,7 @@ jobs:
           node-version: "22"
           package-manager-cache: false
       - shell: bash
-        run: node --test repository-analysis-context/source.test.mjs repository-analysis-sonar/sonar.test.mjs repository-analysis-sonar/build.test.mjs repository-analysis-sonar/workflow.test.mjs
+        run: node --test repository-analysis-context/source.test.mjs repository-analysis-sonar/sonar.test.mjs repository-analysis-sonar/facts.test.mjs repository-analysis-sonar/build.test.mjs repository-analysis-sonar/workflow.test.mjs
       - uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2
         with:
           dotnet-version: |
