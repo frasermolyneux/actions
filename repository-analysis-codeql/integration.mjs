@@ -63,7 +63,7 @@ const candidates = tracked.filter((file) => (expressions[language].test(file) ||
 assert.ok(candidates.length > 0, "Selected source cannot be inferred from successful commands");
 const extracted = JSON.parse(run(env.CODEQL_PYTHON, [
   path.join(path.dirname(fileURLToPath(import.meta.url)), "archive.py"),
-], JSON.stringify({ archive, files: candidates })));
+], JSON.stringify({ archive, files: candidates, language })));
 const output = env.CODEQL_SARIF_DIRECTORY;
 const filename = path.join(output, aliases[language] + ".sarif");
 const bytes = await readFile(filename);

@@ -10,6 +10,39 @@ on:
 permissions: {}
 
 jobs:
+  contracts:
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - run: node --test repository-analysis-codeql/engine.test.mjs repository-analysis-codeql/workflow.test.mjs repository-analysis-codeql/extractor.test.mjs
+      - run: python -m unittest discover -s repository-analysis-codeql -p 'test_*.py'
+
+  production-native:
+    if: github.event.repository.private == false && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false))
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: $/.github/workflows/repository-analysis-codeql.yml
+    with:
+      profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":false}'
+      expected-sha: ${{ github.sha }}
+
   actual-public-source:
     if: github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
@@ -215,5 +248,90 @@ jobs:
         with:
           name: codeql-build-${{ matrix.family }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/codeql-extraction-${{ matrix.language }}/proof.json
+          if-no-files-found: error
+          retention-days: 14
+
+  actual-container-fixtures:
+    if: github.event.repository.private == false && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        capability: [javascript, typescript]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: "22"
+          package-manager-cache: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+      - id: context
+        uses: $/repository-analysis-context
+        with:
+          profile: '{"version":"repository-analysis-v1","languages":["${{ matrix.capability }}"],"sonar":false}'
+          github-token: ${{ github.token }}
+      - name: Refuse private or unselected native initialization
+        shell: bash
+        env:
+          CONTEXT: ${{ steps.context.outputs.context }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          const context = JSON.parse(process.env.CONTEXT);
+          assert.equal(context.visibility, "public");
+          assert(context.codeql.languages.includes("javascript-typescript"));
+          NODE
+      - id: init
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.1/codeql-bundle-linux64.tar.gz
+      - id: analyze
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        with:
+          upload: never
+          upload-database: false
+          category: /fixture:vue-${{ matrix.capability }}
+      - name: Require genuine same-source Vue archive and distinct script-language coverage
+        shell: bash
+        env:
+          CODEQL_LANGUAGE: javascript-typescript
+          CODEQL_COMMAND: ${{ steps.init.outputs.codeql-path }}
+          CODEQL_VERSION: ${{ steps.init.outputs.codeql-version }}
+          CODEQL_DATABASES: ${{ steps.analyze.outputs.db-locations }}
+          CODEQL_SARIF_DIRECTORY: ${{ steps.analyze.outputs.sarif-output }}
+          CODEQL_PYTHON: ${{ env.pythonLocation }}/bin/python
+          CODEQL_FIXTURE: "true"
+          CODEQL_FIXTURE_DIRECTORY: repository-analysis-codeql/fixtures/vue-${{ matrix.capability }}
+          ANALYSIS_PROFILE: '{"version":"repository-analysis-v1","languages":["${{ matrix.capability }}"],"sonar":false}'
+          GH_TOKEN: ${{ github.token }}
+          CAPABILITY: ${{ matrix.capability }}
+        run: |
+          node repository-analysis-codeql/integration.mjs
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFile } from "node:fs/promises";
+          import path from "node:path";
+          const proof = JSON.parse(await readFile(path.join(process.env.RUNNER_TEMP,
+            "codeql-extraction-javascript-typescript", "proof.json"), "utf8"));
+          assert.equal(proof.scope, "actual-build-fixture-only");
+          assert.equal(proof.fullProfileEvidence, false);
+          assert.equal(proof.extraction.files, 1);
+          assert.equal(proof.extraction.sourceCoverage[process.env.CAPABILITY], 1);
+          assert.equal(proof.extraction.sourceCoverage[
+            process.env.CAPABILITY === "javascript" ? "typescript" : "javascript"], 0);
+          NODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: codeql-container-${{ matrix.capability }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/codeql-extraction-javascript-typescript/proof.json
           if-no-files-found: error
           retention-days: 14

@@ -62,6 +62,7 @@ jobs:
             repository-analysis-sarif
             repository-analysis-state
             repository-analysis-sonar
+            repository-analysis-codeql
             repository-analysis
             repository-publication-origin
             stale-branch-sweep
@@ -90,6 +91,8 @@ jobs:
               PATTERN='^(repository-analysis(-context|-local|-sarif)?/|\.github/workflows/repository-analysis-local\.yml$)'
             elif [[ "$ACTION" == "repository-analysis-sonar" ]]; then
               PATTERN='^(repository-analysis-sonar/|repository-analysis-context/|dotnet-test(-report)?/|\.github/workflows/repository-analysis-sonar\.yml$)'
+            elif [[ "$ACTION" == "repository-analysis-codeql" ]]; then
+              PATTERN='^(repository-analysis-codeql/|repository-analysis-(context|state|sarif|sonar)/|dotnet-test/coverage-tools\.json$|\.github/workflows/repository-analysis-codeql\.yml$)'
             elif [[ "$ACTION" == "dotnet-test" ]]; then
               PATTERN='^dotnet-test(-report)?/'
             elif [[ "$ACTION" == "repository-analysis-local" || "$ACTION" == "repository-analysis-sarif" || "$ACTION" == "repository-analysis-state" ]]; then

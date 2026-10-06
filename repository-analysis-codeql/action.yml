@@ -1,0 +1,91 @@
+name: Repository CodeQL evidence
+description: Public-only exact-source CodeQL planning, compilation, extraction and native-processing provenance.
+inputs:
+  mode:
+    description: plan, authorize, build, extract, bind or assemble.
+    required: true
+  profile:
+    description: Catalog repository-analysis-v1 capability profile.
+    required: true
+  expected-sha:
+    description: Exact originating workflow checkout SHA.
+    required: true
+  build:
+    description: Preserved analysis-only compiler selection, or JSON null for uncompiled profiles.
+    default: "null"
+  source-directory:
+    description: Repository-relative original compiler source directory.
+    default: "."
+  plan:
+    description: Frozen plan from the actual originating run.
+  language:
+    description: One actual selected CodeQL language.
+  command:
+    description: Actual native CodeQL executable.
+  version:
+    description: Actual native CodeQL version.
+  databases:
+    description: Actual finalized native database paths.
+  sarif-directory:
+    description: Native query output directory.
+  python:
+    description: Trusted Python executable for byte-bound archive verification.
+  native-directory:
+    description: Isolated independently verified native processing proof.
+  evidence-directory:
+    description: Isolated selected-language artifact set for assembly.
+  github-token:
+    description: Originating-repository metadata read token, never merge or provider credentials.
+    required: true
+outputs:
+  plan:
+    value: ${{ steps.evidence.outputs.plan }}
+    description: Frozen actual-source, selection, immutable definition and preserved build plan.
+  matrix:
+    value: ${{ steps.evidence.outputs.matrix }}
+    description: Exact selected native language and original runner/build matrix.
+  has-languages:
+    value: ${{ steps.evidence.outputs.has-languages }}
+    description: Whether live public policy selects any native language.
+  report-directory:
+    value: ${{ steps.evidence.outputs.report-directory }}
+    description: Same-source extraction and independently completed native publication.
+  result-directory:
+    value: ${{ steps.evidence.outputs.result-directory }}
+    description: Validated selected-CodeQL set, not a full profile.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+      with:
+        node-version: "22"
+        package-manager-cache: false
+    - id: evidence
+      shell: bash
+      env:
+        CODEQL_MODE: ${{ inputs.mode }}
+        CODEQL_PROFILE: ${{ inputs.profile }}
+        CODEQL_EXPECTED_SHA: ${{ inputs.expected-sha }}
+        CODEQL_BUILD: ${{ inputs.build }}
+        CODEQL_SOURCE_DIRECTORY: ${{ inputs.source-directory }}
+        CODEQL_PLAN: ${{ inputs.plan }}
+        CODEQL_LANGUAGE: ${{ inputs.language }}
+        CODEQL_COMMAND: ${{ inputs.command }}
+        CODEQL_VERSION: ${{ inputs.version }}
+        CODEQL_DATABASES: ${{ inputs.databases }}
+        CODEQL_SARIF_DIRECTORY: ${{ inputs.sarif-directory }}
+        CODEQL_PYTHON: ${{ inputs.python }}
+        CODEQL_NATIVE_DIRECTORY: ${{ inputs.native-directory }}
+        CODEQL_EVIDENCE_DIRECTORY: ${{ inputs.evidence-directory }}
+        GH_TOKEN: ${{ inputs.github-token }}
+        CODEQL_ENGINE: ${{ github.action_path }}/engine.mjs
+      run: node "$CODEQL_ENGINE"
+    - name: Execute only the validated original compiler, without Sonar or deployment credentials
+      if: inputs.mode == 'build'
+      shell: pwsh
+      env:
+        SONAR_BUILD: ${{ inputs.build }}
+        SONAR_SCANNER_SOURCE: ${{ steps.evidence.outputs.source-directory }}
+        CODEQL_HELPER_ROOT: ${{ github.action_path }}
+      run: |
+        & (Join-Path $env:CODEQL_HELPER_ROOT '../repository-analysis-sonar/build.ps1')
