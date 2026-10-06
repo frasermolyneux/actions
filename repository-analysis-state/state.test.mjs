@@ -192,6 +192,51 @@ for (const format of ["opencover", "vscoveragexml", "cobertura", "lcov", "gcov"]
   });
 }
 
+test("collected PR coverage retains genuine report and test facts without claiming provider import", () => {
+  const input = bundle();
+  Object.assign(input.source, { logicalHeadSha: C, baseSha: B, pullRequest: 9 });
+  input.run.event = "pull_request";
+  input.finishedHeadSha = C;
+  input.coverage = [{ ...coverage(), status: "collected", analysisId: null,
+    reason: "PR compute-task completion does not independently prove provider coverage import" }];
+  const result = assemble(context(), input);
+  assert.equal(result.completeness.status, "completed");
+  assert.equal(result.coverage[0].status, "collected");
+  assert.equal(result.coverage[0].analysisId, null);
+  assert.deepEqual(result.coverage[0].tests, coverage().tests);
+  assert.deepEqual(validateResult(result), result);
+  assert.equal(assessFreshness(context(), request(input), result, Date.parse(END)).action, "scan");
+});
+
+test("zero covered native lines remain collected, not manufactured missing coverage or import", () => {
+  const input = bundle();
+  input.coverage = [{ ...coverage(), status: "collected", analysisId: null,
+    lines: { total: 20, covered: 0 }, reason: "Zero covered lines cannot prove server import" }];
+  const result = assemble(context(), input);
+  assert.equal(result.coverage[0].lines.covered, 0);
+  assert.equal(result.coverage[0].status, "collected");
+  assert.equal(result.coverage[0].analysisId, null);
+});
+
+for (const [label, mutate] of [
+  ["provider identity", (entry) => { entry.analysisId = "analysis-123"; }],
+  ["no explicit reason", (entry) => { entry.reason = "  "; }],
+  ["missing report", (entry) => { entry.reports = []; }],
+  ["missing hash", (entry) => { entry.reports[0].sha256 = ""; }],
+  ["unexecuted tests", (entry) => { entry.tests.executed = 0; entry.tests.passed = 0; }],
+  ["failed tests", (entry) => { entry.tests.failed = 1; entry.tests.passed = 9; }],
+  ["empty instrumentation", (entry) => { entry.lines.total = 0; }],
+]) {
+  test(`collected coverage rejects ${label}`, () => {
+    const input = bundle();
+    const entry = { ...coverage(), status: "collected", analysisId: null,
+      reason: "Provider import has not been verified" };
+    mutate(entry);
+    input.coverage = [entry];
+    assert.throws(() => assemble(context(), input));
+  });
+}
+
 for (const [label, change] of [
   ["foreign revision", (entry) => { entry.sourceSha = B; }],
   ["foreign provider analysis", (entry) => { entry.analysisId = "foreign"; }],
