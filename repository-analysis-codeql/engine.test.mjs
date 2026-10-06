@@ -139,6 +139,17 @@ test("completion uses actual native finding counts, not diagnostic SARIF counts 
   assert.equal(tool.publication.id, "999");
 });
 
+test("native completion timestamps must be genuine canonical UTC dates before propagation", () => {
+  const { planned, report, native } = evidence();
+  assert.equal(validateArtifact(report, native, planned, "python", digest).completedAt, native.verifiedAt);
+  for (const verifiedAt of [undefined, null, 123, "not-a-date", "2026-10-05",
+    "2026-10-05T20:00:00Z", "2026-10-05T20:00:00.000+00:00",
+    "2026-02-30T20:00:00.000Z", "2026-10-05T25:00:00.000Z"]) {
+    assert.throws(() => validateArtifact(report, { ...native, verifiedAt }, planned, "python", digest),
+      /canonical UTC timestamp/);
+  }
+});
+
 test("every selected JS/TS capability needs genuinely archived source, not tracked estimates", () => {
   const { planned, report, native } = evidence("javascript-typescript");
   assert.deepEqual(sourceCoverage(planned.context, "javascript-typescript", report.extraction),
@@ -230,6 +241,9 @@ test("assembly rejects missing, unexpected, oversized and wrong-attempt artifact
   await writeFile(path.join(location, "report.json"), JSON.stringify(report));
   await writeFile(path.join(location, "native.json"), JSON.stringify(native));
   assert.equal((await assembleTools(directory, planned, digest)).length, 1);
+  await writeFile(path.join(location, "native.json"), JSON.stringify({ ...native, verifiedAt: "altered" }));
+  await assert.rejects(assembleTools(directory, planned, digest), /canonical UTC timestamp/);
+  await writeFile(path.join(location, "native.json"), JSON.stringify(native));
   await assert.rejects(assembleTools(directory, { ...planned, attempt: 3 }, digest), /Missing/);
   await mkdir(path.join(directory, "unexpected"));
   await assert.rejects(assembleTools(directory, planned, digest), /unexpected/);

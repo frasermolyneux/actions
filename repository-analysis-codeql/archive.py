@@ -53,7 +53,7 @@ class EmbeddedScripts(HTMLParser):
                 raise ValueError("Ambiguous embedded script language attributes")
             values[key] = value or ""
             if (key in JAVASCRIPT_EVENTS and value and value.strip()) or (
-                    key in ("href", "src", "action") and value and
+                    key in ("href", "src", "action") and not (tag == "script" and key == "src") and value and
                     value.strip().lower().startswith("javascript:") and
                     value.strip()[len("javascript:"):].strip()):
                 self.languages.add("javascript")

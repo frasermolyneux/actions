@@ -197,6 +197,11 @@ export function validateArtifact(report, native, planned, language, digest) {
     Number.isSafeInteger(native.findingCount) && native.findingCount >= 0 &&
     Number.isSafeInteger(native.ruleCount) && native.ruleCount > 0,
   "CodeQL native processing is not this actual language/source/producer");
+  requireValue(typeof native.verifiedAt === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(native.verifiedAt) &&
+    Number.isFinite(Date.parse(native.verifiedAt)) &&
+    new Date(native.verifiedAt).toISOString() === native.verifiedAt,
+  "CodeQL native completion requires a canonical UTC timestamp");
   return { id: selected.id, status: "completed", sourceSha: report.sourceSha,
     version: VERSION, ruleRevision: VERSION, engineDigest: digest, sourceCoverage: report.sourceCoverage,
     findingCount: native.findingCount, processing: native.processing, publication: native.publication,
