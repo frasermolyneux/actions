@@ -30,7 +30,7 @@ class ArchiveTests(unittest.TestCase):
 
     def test_changed_archived_bytes_rejected(self):
         self.make([("src/main.py", b"other revision\n")])
-        with self.assertRaisesRegex(ValueError, "differs"):
+        with self.assertRaisesRegex(ValueError, r"differs.*src/main\.py"):
             verify(self.archive, self.root, ["src/main.py"])
 
     def test_capability_counts_only_include_genuinely_archived_source(self):
