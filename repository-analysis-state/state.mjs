@@ -192,16 +192,23 @@ function validateCoverage(coverage, source, exempt) {
   for (const entry of coverage) {
     object(entry, ["suite", "status", "format", "sourceSha", "reports", "lines", "tests", "analysisId", "reason"], "coverage evidence");
     requireValue(text(entry.suite) && !suites.has(entry.suite) && entry.sourceSha === source.checkoutSha &&
-      ["imported", "unavailable", "not-applicable", "failed"].includes(entry.status), "Invalid coverage identity/state");
+      ["collected", "imported", "unavailable", "not-applicable", "failed"].includes(entry.status), "Invalid coverage identity/state");
     suites.add(entry.suite);
     requireValue(Array.isArray(entry.reports) && entry.reports.length <= 256, "Invalid coverage reports");
-    if (entry.status !== "imported") {
+    if (!["collected", "imported"].includes(entry.status)) {
       requireValue(text(entry.reason) && entry.reports.length === 0 && entry.lines === null &&
         entry.tests === null && entry.analysisId === null, "Unavailable coverage must not masquerade as an imported zero");
       continue;
     }
-    requireValue(["opencover", "vscoveragexml", "cobertura", "lcov", "gcov"].includes(entry.format) && entry.reports.length > 0 &&
-      text(entry.analysisId) && /^[A-Za-z0-9_.:-]+$/.test(entry.analysisId), "Imported coverage needs a bound provider analysis");
+    requireValue(["opencover", "vscoveragexml", "cobertura", "lcov", "gcov"].includes(entry.format) && entry.reports.length > 0,
+      "Collected/imported coverage needs native hashed reports");
+    if (entry.status === "imported") {
+      requireValue(text(entry.analysisId) && /^[A-Za-z0-9_.:-]+$/.test(entry.analysisId),
+        "Imported coverage needs a bound provider analysis");
+    } else {
+      requireValue(entry.analysisId === null && text(entry.reason),
+        "Collected coverage needs an explicit unverified-import reason and no provider analysis claim");
+    }
     const files = new Set();
     for (const report of entry.reports) {
       object(report, ["path", "sha256"], "coverage report");
@@ -216,7 +223,7 @@ function validateCoverage(coverage, source, exempt) {
     requireValue(positive(entry.lines.total) && count(entry.lines.covered) && entry.lines.covered <= entry.lines.total &&
       positive(entry.tests.executed) && [entry.tests.passed, entry.tests.failed, entry.tests.skipped].every(count) &&
       entry.tests.executed === entry.tests.passed + entry.tests.failed && entry.tests.failed === 0,
-    "Imported coverage needs genuine passing executed tests and nonempty instrumented source");
+    "Collected/imported coverage needs genuine passing executed tests and nonempty instrumented source");
   }
 }
 
