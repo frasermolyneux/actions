@@ -78,6 +78,23 @@ must invalidate old decisions even when source SHA is unchanged.
 
 ## Use and validation
 
+### First-party source authority
+
+`repository-analysis-context/origin.mjs` provides the shared `trustedOrigin`
+metadata predicate. Its producer must supply freshly authenticated repository,
+run and current PR metadata, bind the immutable originating runtime separately,
+and repeat admission before privileged execution. Public and private metadata
+must remain internally consistent; visibility is never rewritten for admission.
+Only default source, explicit owner dispatch, or an exact owner/approved-automation
+PR author and actor pair is admitted. Both PR repositories, the non-draft/open
+state and frozen logical head are required. Unknown or missing metadata fails.
+
+This is source authority, not provider entitlement or completed analysis.
+The existing Sonar/CodeQL wrapper retains its independent live-public gate.
+Private admission therefore cannot enable CodeQL, Sonar or public SARIF, or
+change private artifact/report destinations. Full-profile orchestration and
+genuine private caller acceptance remain separate migration work.
+
 Use a reviewed immutable `repository-analysis-context/v1.X.Y` release (or the exact reviewed
 commit) from a pinned scanner workflow. Pass only the profile and repository metadata-read
 token, never an App private key, merge token, cloud credential or blanket inherited secrets.

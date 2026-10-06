@@ -16,6 +16,7 @@ export const DEFINITION_FILES = [
   "repository-analysis-codeql/version.json", "repository-analysis-codeql/integration.mjs",
   "repository-analysis-codeql/extractor.mjs", "repository-analysis-codeql/archive.py",
   "repository-analysis-context/policy.mjs", "repository-analysis-context/source.mjs",
+  "repository-analysis-context/origin.mjs",
   "repository-analysis-state/state.mjs", "repository-analysis-sonar/sonar.mjs",
   "repository-analysis-sonar/facts.mjs",
   "repository-analysis-sonar/build.mjs", "repository-analysis-sonar/build.ps1",

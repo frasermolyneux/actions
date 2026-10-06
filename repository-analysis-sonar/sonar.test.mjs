@@ -58,7 +58,7 @@ const metrics = { paging: { total: 1 }, measures: [
 ] };
 const owner = { id: 789, login: "owner", type: "User" };
 const publicRepository = { id: input.repositoryId, full_name: input.repository,
-  private: false, visibility: "public", owner, default_branch: "main" };
+  private: false, visibility: "public", fork: false, archived: false, owner, default_branch: "main" };
 const copilot = { id: 198982749, login: "Copilot", type: "Bot" };
 const dependabot = { id: 49699333, login: "dependabot[bot]", type: "Bot" };
 const githubActions = { id: 41898282, login: "github-actions[bot]", type: "Bot" };
@@ -66,7 +66,7 @@ const pullInput = { ...input, pullRequest: 42 };
 const pullEvent = { pull_request: { head: { sha: "d".repeat(40) } } };
 const pull = { number: 42, state: "open", draft: false, user: owner,
   head: { sha: pullEvent.pull_request.head.sha, repo: { id: input.repositoryId, full_name: input.repository } },
-  base: { repo: { id: input.repositoryId } } };
+  base: { repo: { id: input.repositoryId, full_name: input.repository } } };
 
 test("native CLI completes module loading and surfaces initial failures instead of deadlocking", () => {
   const filename = fileURLToPath(new URL("./sonar.mjs", import.meta.url));
@@ -135,6 +135,13 @@ test("trust admission refuses forks, superseded heads, closed/draft PRs and acco
     assert.throws(() => trustedSource({ ...publicRepository, ...patch },
       { actor: owner }, pull, pullInput, pullEvent), /personal-owner/);
   }
+});
+
+test("shared private first-party admission cannot weaken the public Sonar and CodeQL wrapper", () => {
+  assert.throws(() => trustedSource({ ...publicRepository, visibility: "private", private: true },
+    { actor: owner }, pull, pullInput, pullEvent), /live public/);
+  assert.throws(() => trustedSource(publicRepository, { actor: owner },
+    { ...pull, base: { repo: { id: input.repositoryId } } }, pullInput, pullEvent), /foreign/);
 });
 
 test("default sources and explicit owner dispatch are distinct from untrusted manual branches", () => {
