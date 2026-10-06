@@ -38,7 +38,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: ./.github/workflows/repository-analysis-codeql.yml
+    uses: $/.github/workflows/repository-analysis-codeql.yml
     with:
       profile: '{"version":"repository-analysis-v1","languages":["actions","javascript","python"],"sonar":false}'
       expected-sha: ${{ github.sha }}

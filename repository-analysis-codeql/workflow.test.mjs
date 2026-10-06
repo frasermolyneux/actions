@@ -9,6 +9,11 @@ const version = JSON.parse(await readFile(new URL("./version.json", import.meta.
 const release = await readFile(new URL("../.github/workflows/actions-versioning.yml", import.meta.url), "utf8");
 const acceptance = await readFile(new URL("../.github/workflows/repository-analysis-codeql-tests.yml", import.meta.url), "utf8");
 
+test("own production acceptance resolves the reusable at the exact caller commit", () => {
+  assert.match(acceptance, /uses: \$\/\.github\/workflows\/repository-analysis-codeql\.yml/);
+  assert.doesNotMatch(acceptance, /uses: \.\/\.github\/workflows\/repository-analysis-codeql\.yml/);
+});
+
 test("planning has no source checkout, licensed initialization or write permissions", () => {
   const planning = text.slice(text.indexOf("\n  plan:"), text.indexOf("\n  native:"));
   assert.match(planning, /mode: plan/);
