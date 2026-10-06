@@ -155,7 +155,7 @@ def archived_hashes(archive, expected, coverage=None):
             prefix = current_prefix
             value = native.read(item)
             if hashlib.sha256(value).hexdigest() != expected[selected]:
-                raise ValueError("Native extracted source differs from the actual checkout")
+                raise ValueError(f"Native extracted source differs from the actual checkout: {selected}")
             found[selected] = expected[selected]
             if coverage is not None:
                 for capability in source_capabilities(selected, value):
