@@ -17,6 +17,7 @@ export const DEFINITION_FILES = [
   "repository-analysis-codeql/extractor.mjs", "repository-analysis-codeql/archive.py",
   "repository-analysis-context/policy.mjs", "repository-analysis-context/source.mjs",
   "repository-analysis-state/state.mjs", "repository-analysis-sonar/sonar.mjs",
+  "repository-analysis-sonar/facts.mjs",
   "repository-analysis-sonar/build.mjs", "repository-analysis-sonar/build.ps1",
   "dotnet-test/coverage-tools.json", "repository-analysis-sarif/action.yml",
   "repository-analysis-sarif/verify.mjs", "repository-analysis-context/action.yml",

@@ -75,22 +75,25 @@ export function branchSnapshot(payload, input, proof) {
   return { analysisId: analysis.key, sourceSha: analysis.revision, analysisDate: analysis.date };
 }
 
-export function pullSnapshot(payload, activity, input, proof) {
+export function pullSnapshot(payload, receipt, component, input, proof) {
   requireValue(Array.isArray(payload?.pullRequests) && payload.pullRequests.length <= 1000 &&
-    Array.isArray(activity?.tasks) && activity.tasks.length <= 1000,
+    Array.isArray(component?.queue) && component.queue.length === 0,
   "Sonar PR snapshot or completed-task identity is missing");
   const matches = payload.pullRequests.filter((entry) => entry.key === String(input.pullRequest));
-  const tasks = activity.tasks.filter((entry) => entry.componentKey === input.projectKey &&
-    entry.type === "REPORT" && entry.status === "SUCCESS" &&
-    String(entry.pullRequest ?? "") === String(input.pullRequest));
-  requireValue(matches.length === 1 && tasks.length > 0 &&
-    tasks.every((entry) => date(entry.executedAt)), "Sonar PR task selection is absent or ambiguous");
-  tasks.sort((left, right) => Date.parse(right.executedAt) - Date.parse(left.executedAt));
-  const latest = tasks[0];
+  const task = receipt?.task;
+  const latest = component.current;
+  requireValue(matches.length === 1 &&
+    [task, latest].every((entry) => entry?.componentKey === input.projectKey &&
+      entry.type === "REPORT" && entry.status === "SUCCESS" &&
+      entry.id === proof.processing.id && entry.analysisId === proof.processing.analysisId &&
+      (entry.pullRequest === undefined || String(entry.pullRequest) === String(input.pullRequest)) &&
+      date(entry.submittedAt) && date(entry.executedAt) &&
+      Date.parse(entry.submittedAt) >= Date.parse(input.startedAt) &&
+      Date.parse(entry.executedAt) >= Date.parse(entry.submittedAt) &&
+      Date.parse(entry.executedAt) === Date.parse(proof.processing.executedAt)),
+  "Sonar PR receipt must still be the unambiguous latest successful project task");
   const pull = matches[0];
-  requireValue(latest.id === proof.processing.id && latest.analysisId === proof.processing.analysisId &&
-    tasks.filter((entry) => Date.parse(entry.executedAt) === Date.parse(latest.executedAt)).length === 1 &&
-    pull.commit?.sha === input.sourceSha && date(pull.analysisDate) &&
+  requireValue(pull.commit?.sha === input.sourceSha && date(pull.analysisDate) &&
     Date.parse(pull.analysisDate) >= Date.parse(input.startedAt) &&
     Date.parse(pull.analysisDate) <= Date.parse(proof.processing.executedAt) &&
     pull.url === `https://github.com/${input.repository}/pull/${input.pullRequest}`,
@@ -124,9 +127,11 @@ export async function verifyFacts(context, input, proof, tracked, read, now = Da
       return branchSnapshot(await request(`/api/project_analyses/search?${parameters}`), input, proof);
     }
     const pulls = new URLSearchParams({ project: input.projectKey });
-    const activity = new URLSearchParams({ component: input.projectKey, status: "SUCCESS", type: "REPORT", ps: "1000" });
+    const receipt = new URLSearchParams({ id: proof.processing.id });
+    const component = new URLSearchParams({ component: input.projectKey });
     return pullSnapshot(await request(`/api/project_pull_requests/list?${pulls}`),
-      await request(`/api/ce/activity?${activity}`), input, proof);
+      await request(`/api/ce/task?${receipt}`),
+      await request(`/api/ce/component?${component}`), input, proof);
   };
   const before = await snapshot();
   const files = [];

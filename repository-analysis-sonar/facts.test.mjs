@@ -31,9 +31,11 @@ const issues = (total) => ({ paging: { pageIndex: 1, pageSize: 1, total }, total
 const pullInput = { ...input, pullRequest: 42 };
 const pulls = { pullRequests: [{ key: "42", commit: { sha: sourceSha },
   analysisDate: analysis.date, url: `https://github.com/${input.repository}/pull/42` }] };
-const activity = { tasks: [{ type: "REPORT", status: "SUCCESS", componentKey: input.projectKey,
+const receipt = { task: { type: "REPORT", status: "SUCCESS", componentKey: input.projectKey,
   id: proof.processing.id, analysisId: proof.processing.analysisId,
-  executedAt: proof.processing.executedAt, pullRequest: "42" }] };
+  submittedAt: "2026-10-06T12:01:30.000Z",
+  executedAt: proof.processing.executedAt, pullRequest: "42" } };
+const component = { queue: [], current: structuredClone(receipt.task) };
 
 function reader(calls, mutate = (route, result) => result) {
   return async (route, timeout) => {
@@ -43,7 +45,14 @@ function reader(calls, mutate = (route, result) => result) {
     let result;
     if (url.pathname === "/api/project_analyses/search") result = { analyses: [analysis] };
     else if (url.pathname === "/api/project_pull_requests/list") result = pulls;
-    else if (url.pathname === "/api/ce/activity") result = activity;
+    else if (url.pathname === "/api/ce/task") {
+      assert.equal(url.searchParams.get("id"), proof.processing.id);
+      assert.equal(url.searchParams.has("additionalFields"), false);
+      result = receipt;
+    } else if (url.pathname === "/api/ce/component") {
+      assert.equal(url.searchParams.get("component"), input.projectKey);
+      result = component;
+    }
     else if (url.pathname === "/api/components/tree") result = page();
     else if (url.pathname === "/api/issues/search") result = issues(13);
     else assert.fail(`Unexpected provider route: ${route}`);
@@ -143,23 +152,26 @@ test("default analysis timestamps must identify an unambiguous latest result", (
   }
 });
 
-test("PR snapshot requires actual merge source and the exact latest successful task", () => {
-  assert.equal(pullSnapshot(pulls, activity, pullInput, proof).taskId, proof.processing.id);
-  const unrelated = { ...activity.tasks[0], pullRequest: "99", id: "different",
-    executedAt: "2026-10-06T12:03:00.000Z" };
-  assert.equal(pullSnapshot(pulls, { tasks: [unrelated, ...activity.tasks] }, pullInput, proof).taskId,
-    proof.processing.id);
+test("PR snapshot correlates its actual merge source with its current verified receipt", () => {
+  assert.equal(pullSnapshot(pulls, receipt, component, pullInput, proof).taskId, proof.processing.id);
   for (const patch of [{ pullRequest: "43" }, { id: "another" }, { analysisId: "another" },
-    { status: "FAILED" }, { componentKey: "other" }, { executedAt: "malformed" }]) {
-    assert.throws(() => pullSnapshot(pulls, { tasks: [{ ...activity.tasks[0], ...patch }] },
-      pullInput, proof), /PR task|latest successful/);
+    { status: "FAILED" }, { componentKey: "other" }, { executedAt: "malformed" },
+    { submittedAt: "2026-10-06T11:59:00.000Z" },
+    { executedAt: "2026-10-06T12:03:00.000Z" }]) {
+    assert.throws(() => pullSnapshot(pulls, { task: { ...receipt.task, ...patch } },
+      component, pullInput, proof), /latest successful/);
+    assert.throws(() => pullSnapshot(pulls, receipt,
+      { ...component, current: { ...component.current, ...patch } }, pullInput, proof),
+    /latest successful/);
   }
-  assert.throws(() => pullSnapshot(pulls, { tasks: [...activity.tasks, { ...activity.tasks[0], id: "ambiguous" }] },
-    pullInput, proof), /latest successful/);
+  assert.throws(() => pullSnapshot(pulls, receipt, { ...component, queue: [{ id: "pending" }] },
+    pullInput, proof), /completed-task/);
+  assert.throws(() => pullSnapshot(pulls, {}, component, pullInput, proof), /latest successful/);
+  assert.throws(() => pullSnapshot(pulls, receipt, { queue: [] }, pullInput, proof), /latest successful/);
   assert.throws(() => pullSnapshot({ pullRequests: [...pulls.pullRequests, ...pulls.pullRequests] },
-    activity, pullInput, proof), /ambiguous/);
+    receipt, component, pullInput, proof), /ambiguous/);
   assert.throws(() => pullSnapshot({ pullRequests: [{ ...pulls.pullRequests[0], commit: { sha: "b".repeat(40) } }] },
-    activity, pullInput, proof), /actual source/);
+    receipt, component, pullInput, proof), /actual source/);
 });
 
 test("bounded default verification binds counts between identical provider snapshots", async () => {
@@ -179,7 +191,9 @@ test("PR verification never reads default-branch findings or treats PR collectio
   const facts = await verifyFacts(context, pullInput, proof, tracked, reader(calls));
   assert.equal(facts.snapshot.sourceSha, sourceSha);
   assert.equal(facts.findingCount, 13);
-  assert.equal(calls.filter((route) => route.startsWith("/api/ce/activity")).length, 2);
+  assert.equal(calls.filter((route) => route.startsWith("/api/ce/task")).length, 2);
+  assert.equal(calls.filter((route) => route.startsWith("/api/ce/component")).length, 2);
+  assert.equal(calls.some((route) => route.startsWith("/api/ce/activity")), false);
   assert.equal(calls.some((route) => route.startsWith("/api/project_analyses/")), false);
   for (const route of calls.filter((entry) => /\/(?:components|issues)\//.test(entry))) {
     const query = new URL(route, "https://sonarcloud.io").searchParams;
@@ -216,6 +230,18 @@ test("superseding analysis and API errors are explicit failures, not clean data"
     })), /latest exact-source/);
   await assert.rejects(verifyFacts(context, input, proof, tracked,
     async () => { throw new Error("Provider request failed (HTTP 403)"); }), /HTTP 403/);
+});
+
+test("superseding or queued project tasks cannot relabel PR facts as the receipt's analysis", async () => {
+  for (const patch of [
+    { ...component, current: { ...component.current, id: "superseding" } },
+    { ...component, queue: [{ id: "queued" }] },
+  ]) {
+    let snapshots = 0;
+    await assert.rejects(verifyFacts(context, pullInput, proof, tracked,
+      reader([], (route, value) => route.startsWith("/api/ce/component") && ++snapshots === 2
+        ? patch : value)), /latest successful|completed-task/);
+  }
 });
 
 test("absolute source/finding deadline includes time spent in provider calls", async () => {

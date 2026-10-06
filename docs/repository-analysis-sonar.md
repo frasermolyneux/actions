@@ -158,8 +158,13 @@ verified provider file-byte hashes.
 
 Default facts bind the latest exact analysis ID and source revision before and
 after reading. PR facts additionally bind the actual merge checkout reported by
-the PR and the exact latest successful PR compute task; another PR or the default
-branch cannot supply its data. Ambiguity, partial paging, permissions, missing
+the PR and the exact verified receipt task through `api/ce/task` (Execute Analysis)
+and `api/ce/component` (Browse), not the administrative `api/ce/activity` endpoint.
+That receipt must remain the project's latest completed task with no queued task
+before and after reading. Overlapping project analyses therefore fail closed rather
+than ambiguously attributing another task's metadata; no credential widening is
+needed. Another PR or the default branch cannot supply its data.
+Ambiguity, partial paging, permissions, missing
 languages, changing analysis and a two-minute absolute metadata deadline fail
 explicitly. The raw unresolved count includes the existing backlog and is not a
 new merge gate or a replacement for the improvement controller's advisory policy.
