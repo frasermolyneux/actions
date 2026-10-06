@@ -52,3 +52,10 @@ prepared public/project/source/producer admission. Collected PR coverage is not
 server import, and this partial Sonar package is not estate rollout acceptance.
 
 See [`docs/action-versioning.md`](../docs/action-versioning.md) for tag behavior and [`docs/nerdbank-gitversioning.md`](../docs/nerdbank-gitversioning.md) for .NET checkout requirements.
+
+`repository-analysis-codeql` owns the selected-native reusable and its context,
+state, source, compiler and processing-verifier closure. Its version filters,
+release detector and digest must remain aligned. Public CodeQL selection is
+independent of Sonar; private repositories must not initialize it. Each selected
+capability needs genuinely archived source and independently completed native
+processing. The resulting component set is never full-profile freshness evidence.
