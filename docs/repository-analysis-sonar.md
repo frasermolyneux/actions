@@ -149,8 +149,8 @@ coverage settings are rejected without retaining their values;
 another configured coverage source cannot supply the selected report's measures.
 
 After task and coverage verification, the proof records bounded provider facts for
-the same current analysis: genuinely analyzed maintained-file counts for every
-selected Sonar language and the raw unresolved issue total. Complete, stable
+the same current analysis. Branch analyses require genuinely analyzed maintained-file
+counts for every selected Sonar language and the raw unresolved issue total. Complete, stable
 500-file paging is required, and selected-language paths must be tracked inside
 the declared source directory; generated/vendor/fixture files cannot supply those
 counts. These are analyzed-file metadata counts, not line coverage or independently
@@ -164,15 +164,35 @@ That receipt must remain the project's latest completed task with no queued task
 before and after reading. Overlapping project analyses therefore fail closed rather
 than ambiguously attributing another task's metadata; no credential widening is
 needed. Another PR or the default branch cannot supply its data.
-Ambiguity, partial paging, permissions, missing
-languages, changing analysis and a two-minute absolute metadata deadline fail
-explicitly. The raw unresolved count includes the existing backlog and is not a
+
+PR file populations are incremental and can legitimately be empty when no
+analyzed source changed, even with a successfully completed task and real passing
+tests. Their provider facts have `proof.facts.scope: pull-request-incremental`,
+`proof.facts.sourceCoverageStatus: incremental-pr-only` and
+`proof.facts.sourceCoverage: null`, plus an explicit whole-branch coverage
+limitation in `proof.facts.sourceCoverageReason`. The null source coverage is
+also mirrored at `proof.sourceCoverage`; it does not change the top-level scope.
+Only actually returned maintained-file metadata contributes to
+`proof.facts.reportedFiles`/`proof.facts.reportedSourceCoverage`; an empty metadata
+response is not labeled zero analyzed files or zero missing scanner findings.
+The scope, limitation and actual provider count are visible in the producing job's summary.
+The same empty/incomplete population still fails a branch capability proof.
+Task/source identity, before/after snapshots, paging, file ownership and provider
+errors remain mandatory in both scopes. PR source metadata cannot be promoted to
+whole-branch completeness or default freshness; its raw issue total still describes
+the current PR's actual provider response, not the default backlog.
+
+Ambiguity, partial paging, permissions, missing branch capabilities,
+changing analysis and a two-minute absolute metadata deadline fail explicitly.
+`proof.facts.findingCount`, mirrored at `proof.findingCount`, records the actual
+raw unresolved count for the selected scope: the existing backlog for branch
+facts, or the current PR's provider response for incremental PR facts. Neither is a
 new merge gate or a replacement for the improvement controller's advisory policy.
 PR-only facts still cannot supply default freshness or manufacture coverage import.
 
 The output binds the actual task/analysis ID, repository/source/policy/recipe,
 caller/definition and originating run attempt. It explicitly retains
-`scope: sonar-task-and-selected-coverage-only` and `fullProfileEvidence: false`.
+`proof.scope: sonar-task-and-selected-coverage-only` and `proof.fullProfileEvidence: false`.
 Successful task completion is distinct from quality-gate status and finding counts.
 The existing Sonar check and DevEx advisory classifier still own their respective gates.
 

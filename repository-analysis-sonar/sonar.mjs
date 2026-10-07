@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
 import { validateUntrackedFiles, validateUntrackedWorktree } from "../repository-analysis-context/source.mjs";
-import { verifyFacts } from "./facts.mjs";
+import { factsSummary, verifyFacts } from "./facts.mjs";
 
 export const HOST = "https://sonarcloud.io";
 export const DOTNET_VERSION = "11.3.0";
@@ -566,6 +566,7 @@ export async function main(env = process.env) {
   proof.completedAt = proof.facts.verifiedAt;
   proof.scope = "sonar-task-and-selected-coverage-only";
   proof.fullProfileEvidence = false;
+  await appendFile(env.GITHUB_STEP_SUMMARY, factsSummary(proof.facts));
   await writeFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "proof.json"), JSON.stringify(proof) + "\n");
   await appendFile(env.GITHUB_OUTPUT, `proof-directory=${env.SONAR_EVIDENCE_DIRECTORY}\nanalysis-id=${proof.publication.id}\n`);
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { selectAnalysis } from "../repository-analysis-context/policy.mjs";
-import { branchSnapshot, countedFiles, filePage, findingTotal, pullSnapshot, verifyFacts } from "./facts.mjs";
+import { branchSnapshot, countedFiles, factsSummary, filePage, findingTotal, pullSnapshot, verifyFacts } from "./facts.mjs";
 
 const sourceSha = "a".repeat(40);
 const input = { repository: "owner/example", repositoryId: 123, projectKey: "owner_example",
@@ -191,6 +191,10 @@ test("PR verification never reads default-branch findings or treats PR collectio
   const facts = await verifyFacts(context, pullInput, proof, tracked, reader(calls));
   assert.equal(facts.snapshot.sourceSha, sourceSha);
   assert.equal(facts.findingCount, 13);
+  assert.equal(facts.scope, "pull-request-incremental");
+  assert.equal(facts.sourceCoverage, null);
+  assert.equal(facts.sourceCoverageStatus, "incremental-pr-only");
+  assert.equal(facts.reportedSourceCoverage.cpp, 2);
   assert.equal(calls.filter((route) => route.startsWith("/api/ce/task")).length, 2);
   assert.equal(calls.filter((route) => route.startsWith("/api/ce/component")).length, 2);
   assert.equal(calls.some((route) => route.startsWith("/api/ce/activity")), false);
@@ -200,6 +204,47 @@ test("PR verification never reads default-branch findings or treats PR collectio
     assert.equal(query.get("pullRequest"), "42");
     assert.equal(query.has("branch"), false);
   }
+});
+
+test("producing-job summaries expose only the actual scope's limitations and raw count", async () => {
+  const branch = factsSummary(await verifyFacts(context, input, proof, tracked, reader([])));
+  assert.match(branch, /branch-source-and-findings/);
+  assert.match(branch, /verified-branch-capabilities/);
+  assert.match(branch, /findings in this scope: \*\*13\*\*/);
+  assert.doesNotMatch(branch, /PR evidence|whole-branch|incremental-pr-only/);
+  const pull = factsSummary(await verifyFacts(context, pullInput, proof, tracked, reader([])));
+  assert.match(pull, /pull-request-incremental/);
+  assert.match(pull, /incremental-pr-only/);
+  assert.match(pull, /PR file metadata does not establish whole-branch capability coverage/);
+  assert.match(pull, /PR evidence cannot establish whole-branch source completeness or default freshness/);
+  assert.match(pull, /findings in this scope: \*\*13\*\*/);
+});
+
+test("genuine empty PR metadata records its limitation instead of failing task validation or inventing full coverage", async () => {
+  const facts = await verifyFacts(context, pullInput, proof, tracked,
+    reader([], (route, value) => route.startsWith("/api/components/tree") ? page([]) : value));
+  assert.equal(facts.reportedFiles, 0);
+  assert.equal(facts.sourceCoverage, null);
+  assert.equal(facts.sourceCoverageStatus, "incremental-pr-only");
+  assert.match(facts.sourceCoverageReason, /does not establish whole-branch/);
+  assert.equal(facts.findingCount, 13);
+  assert.equal(facts.snapshot.taskId, proof.processing.id);
+  assert.equal(facts.analyzedFiles, undefined);
+  await assert.rejects(verifyFacts(context, input, proof, tracked,
+    reader([], (route, value) => route.startsWith("/api/components/tree") ? page([]) : value)),
+  /every selected capability/);
+});
+
+test("partial PR file populations cannot claim complete multi-language coverage", () => {
+  const value = countedFiles([files[0]], tracked, context.profile.languages, input.projectKey, false);
+  assert.equal(value.sourceCoverage, null);
+  assert.equal(value.reportedFiles, 1);
+  assert.equal(value.reportedSourceCoverage.csharp, 1);
+  assert.equal(value.reportedSourceCoverage.javascript, 0);
+  assert.throws(() => countedFiles([files[0]], tracked, context.profile.languages, input.projectKey),
+    /every selected capability/);
+  assert.throws(() => countedFiles([{ ...files[0], path: "absent.cs" }], tracked,
+    context.profile.languages, input.projectKey, false), /maintained tracked source/);
 });
 
 test("complete paging actually consumes a second page before emitting source facts", async () => {
