@@ -149,8 +149,8 @@ coverage settings are rejected without retaining their values;
 another configured coverage source cannot supply the selected report's measures.
 
 After task and coverage verification, the proof records bounded provider facts for
-the same current analysis: genuinely analyzed maintained-file counts for every
-selected Sonar language and the raw unresolved issue total. Complete, stable
+the same current analysis. Branch analyses require genuinely analyzed maintained-file
+counts for every selected Sonar language and the raw unresolved issue total. Complete, stable
 500-file paging is required, and selected-language paths must be tracked inside
 the declared source directory; generated/vendor/fixture files cannot supply those
 counts. These are analyzed-file metadata counts, not line coverage or independently
@@ -164,6 +164,21 @@ That receipt must remain the project's latest completed task with no queued task
 before and after reading. Overlapping project analyses therefore fail closed rather
 than ambiguously attributing another task's metadata; no credential widening is
 needed. Another PR or the default branch cannot supply its data.
+
+PR file populations are incremental and can legitimately be empty when no
+analyzed source changed, even with a successfully completed task and real passing
+tests. Their proof has `scope: pull-request-incremental`,
+`sourceCoverageStatus: incremental-pr-only` and `sourceCoverage: null`, plus an
+explicit whole-branch coverage limitation. Only actually returned maintained-file
+metadata contributes to `reportedFiles`/`reportedSourceCoverage`; an empty metadata
+response is not labeled zero analyzed files or zero missing scanner findings.
+The scope, limitation and actual provider count are visible in the producing job's summary.
+The same empty/incomplete population still fails a branch capability proof.
+Task/source identity, before/after snapshots, paging, file ownership and provider
+errors remain mandatory in both scopes. PR source metadata cannot be promoted to
+whole-branch completeness or default freshness; its raw issue total still describes
+the current PR's actual provider response, not the default backlog.
+
 Ambiguity, partial paging, permissions, missing
 languages, changing analysis and a two-minute absolute metadata deadline fail
 explicitly. The raw unresolved count includes the existing backlog and is not a

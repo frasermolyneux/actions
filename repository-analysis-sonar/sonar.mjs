@@ -566,6 +566,14 @@ export async function main(env = process.env) {
   proof.completedAt = proof.facts.verifiedAt;
   proof.scope = "sonar-task-and-selected-coverage-only";
   proof.fullProfileEvidence = false;
+  await appendFile(env.GITHUB_STEP_SUMMARY, [
+    "### Sonar source/finding verification", "",
+    `Provider scope: **${proof.facts.scope}**.`,
+    `Source capability metadata: **${proof.facts.sourceCoverageStatus}**.`,
+    ...(proof.facts.sourceCoverage === null ? [proof.facts.sourceCoverageReason] : []),
+    `Raw unresolved provider findings in this scope: **${proof.findingCount}**.`,
+    "PR evidence cannot establish whole-branch source completeness or default freshness.", "",
+  ].join("\n"));
   await writeFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "proof.json"), JSON.stringify(proof) + "\n");
   await appendFile(env.GITHUB_OUTPUT, `proof-directory=${env.SONAR_EVIDENCE_DIRECTORY}\nanalysis-id=${proof.publication.id}\n`);
 }

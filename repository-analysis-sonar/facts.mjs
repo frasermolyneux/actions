@@ -19,10 +19,11 @@ export function filePage(payload, projectKey, page, total) {
   return payload.paging.total;
 }
 
-export function countedFiles(files, tracked, capabilities, projectKey) {
+export function countedFiles(files, tracked, capabilities, projectKey, wholeBranch = true) {
   requireValue(Array.isArray(files) && files.length <= FILE_LIMIT && tracked instanceof Set &&
     Array.isArray(capabilities) && capabilities.length > 0 &&
-    capabilities.every((value) => Object.values(LANGUAGES).includes(value)),
+    capabilities.every((value) => Object.values(LANGUAGES).includes(value)) &&
+    typeof wholeBranch === "boolean",
   "A selected Sonar capability set and actual tracked source are required");
   const seen = new Set();
   const keys = new Set();
@@ -46,11 +47,16 @@ export function countedFiles(files, tracked, capabilities, projectKey) {
     counts[capability]++;
     identities.push({ key: file.key, path: file.path, language: file.language });
   }
-  requireValue(Object.values(counts).every((value) => value > 0),
+  requireValue(!wholeBranch || Object.values(counts).every((value) => value > 0),
     "Sonar did not analyze maintained source for every selected capability");
   identities.sort((left, right) => left.path.localeCompare(right.path, "en"));
-  return { sourceCoverage: counts, analyzedFiles: identities.length,
-    sourceMetadataDigest: createHash("sha256").update(JSON.stringify(identities)).digest("hex") };
+  const sourceMetadataDigest = createHash("sha256").update(JSON.stringify(identities)).digest("hex");
+  return wholeBranch
+    ? { sourceCoverage: counts, sourceCoverageStatus: "verified-branch-capabilities",
+      analyzedFiles: identities.length, sourceMetadataDigest }
+    : { sourceCoverage: null, sourceCoverageStatus: "incremental-pr-only",
+      sourceCoverageReason: "PR file metadata does not establish whole-branch capability coverage",
+      reportedFiles: identities.length, reportedSourceCoverage: counts, sourceMetadataDigest };
 }
 
 export function findingTotal(payload, projectKey) {
@@ -110,7 +116,8 @@ export async function verifyFacts(context, input, proof, tracked, read, now = Da
     proof?.sourceSha === input.sourceSha && proof.projectKey === input.projectKey &&
     proof.policyDigest === context.policyDigest && proof.run?.id === input.runId &&
     proof.run.attempt === input.attempt && proof.processing?.status === "completed" &&
-    proof.publication?.id === proof.processing.analysisId && date(proof.processing.executedAt),
+    proof.publication?.id === proof.processing.analysisId && date(proof.processing.executedAt) &&
+    (input.pullRequest === null || (Number.isSafeInteger(input.pullRequest) && input.pullRequest > 0)),
   "Sonar source/finding facts require this live public, current-source completed producer");
   const deadline = now() + 120000;
   const request = async (route) => {
@@ -144,13 +151,15 @@ export async function verifyFacts(context, input, proof, tracked, read, now = Da
     files.push(...payload.components);
   }
   const capabilities = context.profile.languages.filter((value) => Object.values(LANGUAGES).includes(value));
-  const coverage = countedFiles(files, tracked, capabilities, input.projectKey);
+  const coverage = countedFiles(files, tracked, capabilities, input.projectKey, input.pullRequest === null);
   const parameters = new URLSearchParams({ componentKeys: input.projectKey, ...scope,
     resolved: "false", p: "1", ps: "1" });
   const findingCount = findingTotal(await request(`/api/issues/search?${parameters}`), input.projectKey);
   const after = await snapshot();
   requireValue(JSON.stringify(before) === JSON.stringify(after),
     "Sonar analysis changed while verifying source/finding facts");
-  return { schema: "repository-analysis-sonar-facts-v1", ...coverage, findingCount,
+  return { schema: "repository-analysis-sonar-facts-v1",
+    scope: input.pullRequest === null ? "branch-source-and-findings" : "pull-request-incremental",
+    ...coverage, findingCount,
     snapshot: before, verifiedAt: new Date(now()).toISOString() };
 }
