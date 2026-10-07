@@ -309,6 +309,61 @@ test("PR merge-ref provenance remains separate and never supplies main freshness
   assert.equal(assessFreshness(context(), request(input), result, Date.parse(END)).action, "scan");
 });
 
+function incrementalPull() {
+  const input = bundle();
+  input.source = { checkoutSha: A, logicalHeadSha: B, baseSha: C, headRepositoryId: 123, pullRequest: 12 };
+  input.run.event = "pull_request";
+  input.finishedHeadSha = B;
+  Object.assign(input.results.find(({ id }) => id === "sonar"), {
+    sourceCoverage: null, sourceCoverageScope: "pull-request-incremental",
+    sourceCoverageReason: "Provider PR metadata is incremental and cannot prove full-source capability coverage",
+  });
+  return input;
+}
+
+test("completed incremental PR Sonar retains null source coverage, findings and explicit scope", () => {
+  const input = incrementalPull();
+  input.results.find(({ id }) => id === "sonar").findingCount = 3;
+  const result = assemble(context(), input);
+  const sonar = result.results.find(({ id }) => id === "sonar");
+  assert.equal(result.completeness.status, "completed");
+  assert.equal(sonar.sourceCoverage, null);
+  assert.equal(sonar.findingCount, 3);
+  assert.equal(sonar.sourceCoverageScope, "pull-request-incremental");
+  assert.deepEqual(validateResult(result), result);
+  assert.deepEqual(aggregateStatus(result).incrementalTools, ["sonar"]);
+  assert.equal(assessFreshness(context(), request(input), result, Date.parse(END)).action, "scan");
+});
+
+for (const [label, mutate, message] of [
+  ["default branch", (input, sonar) => {
+    input.source = { checkoutSha: A, logicalHeadSha: A, baseSha: null, headRepositoryId: 123, pullRequest: null };
+    input.run.event = "push"; input.finishedHeadSha = A;
+  }, /only permitted/],
+  ["invented source counts", (input, sonar) => { sonar.sourceCoverage = { javascript: 1 }; }, /only permitted/],
+  ["missing limitation", (input, sonar) => { delete sonar.sourceCoverageReason; }, /only permitted/],
+  ["whitespace limitation", (input, sonar) => { sonar.sourceCoverageReason = " \n "; }, /only permitted/],
+  ["unverified scope", (input, sonar) => { sonar.sourceCoverageScope = "branch-source-and-findings"; }, /Unsupported tool source scope/],
+  ["missing scope", (input, sonar) => { delete sonar.sourceCoverageScope; }, /Unsupported tool source scope/],
+  ["failed tool", (input, sonar) => { sonar.status = "failed"; }, /only permitted/],
+  ["local tool", (input, sonar) => {
+    Object.assign(input.results.find(({ id }) => id.startsWith("local/")), {
+      sourceCoverage: null, sourceCoverageScope: sonar.sourceCoverageScope, sourceCoverageReason: sonar.sourceCoverageReason,
+    });
+  }, /only permitted/],
+  ["CodeQL tool", (input, sonar) => {
+    Object.assign(input.results.find(({ id }) => id.startsWith("codeql/")), {
+      sourceCoverage: null, sourceCoverageScope: sonar.sourceCoverageScope, sourceCoverageReason: sonar.sourceCoverageReason,
+    });
+  }, /only permitted/],
+]) {
+  test(`incremental Sonar exception rejects ${label}`, () => {
+    const input = incrementalPull();
+    mutate(input, input.results.find(({ id }) => id === "sonar"));
+    assert.throws(() => assemble(context(), input), message);
+  });
+}
+
 test("weekly rescan fires at the exact seven-day threshold, not only after it", () => {
   const input = bundle();
   const result = assemble(context(), input);
@@ -388,7 +443,8 @@ test("estate aggregates do not carry source excerpts, private findings or report
   const policy = context("private", ["actions", "csharp"], false);
   const status = aggregateStatus(assemble(policy, bundle(policy)));
   assert.deepEqual(Object.keys(status), ["repository", "visibility", "status", "selectedTools",
-    "missingTools", "unavailableCapabilities", "completedAt"]);
+    "missingTools", "unavailableCapabilities", "incrementalTools", "completedAt"]);
+  assert.deepEqual(status.incrementalTools, []);
   assert.equal(JSON.stringify(status).includes("findingCount"), false);
 });
 

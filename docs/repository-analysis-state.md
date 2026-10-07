@@ -38,9 +38,17 @@ property ordering do not affect freshness.
 
 Tool `status` is `completed`, `failed`, `pending` or `unavailable`. Incomplete tools need
 an explicit non-whitespace `reason`, null `findingCount` and null `completedAt`; they cannot use a
-zero-finding fallback. Completed tools need positive actual source coverage for every
-selected capability and a nonnegative raw finding count. Findings themselves do not
+zero-finding fallback. Completed default-branch tools need positive actual source coverage
+for every selected capability and a nonnegative raw finding count. Findings themselves do not
 make execution incomplete or introduce a gate on the historical backlog.
+
+Sonar PR results may instead retain the verified provider's incremental limitation:
+`sourceCoverage: null`, `sourceCoverageScope: "pull-request-incremental"` and a nonempty
+`sourceCoverageReason`. This exception requires a completed Sonar task/analysis for the
+actual PR source; it does not permit fabricated counts, incomplete tasks, default-branch
+results or reduced coverage claims for CodeQL/local tools. `aggregateStatus` identifies
+these tools in `incrementalTools`. Completed PR execution is not full-branch source
+coverage, and no PR result can satisfy default-branch freshness.
 
 `processing` has `status` and `id`; `publication` has `destination`, `status` and `id`.
 Native SARIF needs completed server processing and its actual upload identity. Sonar needs
