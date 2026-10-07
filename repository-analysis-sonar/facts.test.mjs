@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { selectAnalysis } from "../repository-analysis-context/policy.mjs";
-import { branchSnapshot, countedFiles, filePage, findingTotal, pullSnapshot, verifyFacts } from "./facts.mjs";
+import { branchSnapshot, countedFiles, factsSummary, filePage, findingTotal, pullSnapshot, verifyFacts } from "./facts.mjs";
 
 const sourceSha = "a".repeat(40);
 const input = { repository: "owner/example", repositoryId: 123, projectKey: "owner_example",
@@ -204,6 +204,20 @@ test("PR verification never reads default-branch findings or treats PR collectio
     assert.equal(query.get("pullRequest"), "42");
     assert.equal(query.has("branch"), false);
   }
+});
+
+test("producing-job summaries expose only the actual scope's limitations and raw count", async () => {
+  const branch = factsSummary(await verifyFacts(context, input, proof, tracked, reader([])));
+  assert.match(branch, /branch-source-and-findings/);
+  assert.match(branch, /verified-branch-capabilities/);
+  assert.match(branch, /findings in this scope: \*\*13\*\*/);
+  assert.doesNotMatch(branch, /PR evidence|whole-branch|incremental-pr-only/);
+  const pull = factsSummary(await verifyFacts(context, pullInput, proof, tracked, reader([])));
+  assert.match(pull, /pull-request-incremental/);
+  assert.match(pull, /incremental-pr-only/);
+  assert.match(pull, /PR file metadata does not establish whole-branch capability coverage/);
+  assert.match(pull, /PR evidence cannot establish whole-branch source completeness or default freshness/);
+  assert.match(pull, /findings in this scope: \*\*13\*\*/);
 });
 
 test("genuine empty PR metadata records its limitation instead of failing task validation or inventing full coverage", async () => {

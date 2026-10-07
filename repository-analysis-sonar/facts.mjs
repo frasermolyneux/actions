@@ -70,6 +70,19 @@ export function findingTotal(payload, projectKey) {
   return payload.paging.total;
 }
 
+export function factsSummary(facts) {
+  return [
+    "### Sonar source/finding verification", "",
+    `Provider scope: **${facts.scope}**.`,
+    `Source capability metadata: **${facts.sourceCoverageStatus}**.`,
+    ...(facts.scope === "pull-request-incremental" ? [
+      facts.sourceCoverageReason,
+      "PR evidence cannot establish whole-branch source completeness or default freshness.",
+    ] : []),
+    `Raw unresolved provider findings in this scope: **${facts.findingCount}**.`, "",
+  ].join("\n");
+}
+
 export function branchSnapshot(payload, input, proof) {
   const analysis = payload?.analyses?.[0];
   requireValue(Array.isArray(payload?.analyses) && payload.analyses.length > 0 && payload.analyses.length <= 2 &&
