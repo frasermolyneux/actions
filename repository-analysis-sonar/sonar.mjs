@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
 import { validateUntrackedFiles, validateUntrackedWorktree } from "../repository-analysis-context/source.mjs";
 import { factsSummary, verifyFacts } from "./facts.mjs";
+import { captureCurrency, sameCurrency } from "./currency.mjs";
 
 export const HOST = "https://sonarcloud.io";
 export const DOTNET_VERSION = "11.3.0";
@@ -18,7 +19,9 @@ export const DEFINITION_FILES = [
   WORKFLOW_PATH, "repository-analysis-sonar/action.yml", "repository-analysis-sonar/sonar.mjs",
   "repository-analysis-sonar/build.mjs", "repository-analysis-sonar/build.ps1",
   "repository-analysis-sonar/scanner.ps1", "repository-analysis-sonar/validate-build.mjs",
-  "repository-analysis-sonar/version.json", "repository-analysis-sonar/facts.mjs", "repository-analysis-context/action.yml",
+  "repository-analysis-sonar/version.json", "repository-analysis-sonar/facts.mjs",
+  "repository-analysis-sonar/currency.mjs", "repository-analysis-state/state.mjs",
+  "repository-analysis-context/action.yml",
   "repository-analysis-context/policy.mjs", "repository-analysis-context/source.mjs",
   "repository-analysis-context/origin.mjs",
   "dotnet-test/action.yml", "dotnet-test/run-tests.ps1",
@@ -232,7 +235,7 @@ async function getJson(endpoint, token, request, timeout = 30_000) {
   return readJson(`${HOST}${endpoint}`, token, request, timeout);
 }
 
-async function readJson(url, token, request, timeout = 30_000) {
+async function readJson(url, token, request, timeout = 30_000, format = "json") {
   let response;
   try {
     response = await request(url, {
@@ -252,11 +255,22 @@ async function readJson(url, token, request, timeout = 30_000) {
     requireValue(bytes <= 3 * 1024 * 1024, "Sonar provider response exceeds the bounded limit");
     chunks.push(Buffer.from(chunk));
   }
+  if (format === "text") return Buffer.concat(chunks).toString("utf8");
   try {
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   } catch {
     throw new Error("Malformed Sonar provider JSON");
   }
+}
+
+function currencyReader(token) {
+  requireValue(typeof token === "string" && /^[\x21-\x7e]+$/.test(token),
+    "Sonar currency needs the existing valid public-project token");
+  return (endpoint, format, timeout) => {
+    requireValue((format === "json" && endpoint.startsWith("/api/")) ||
+      (format === "text" && endpoint === "/batch/index"), "Unsupported Sonar currency endpoint");
+    return readJson(`${HOST}${endpoint}`, token, fetch, timeout, format);
+  };
 }
 
 export function receipt(content, projectKey) {
@@ -537,6 +551,8 @@ export async function main(env = process.env) {
     const output = await mkdtemp(path.join(env.RUNNER_TEMP, "sonar-evidence-"));
     const metadataPath = path.join(output, "report-task.txt");
     const args = properties(input, metadataPath);
+    await writeFile(path.join(output, "currency.json"),
+      JSON.stringify(await captureCurrency(context, currencyReader(env.SONAR_TOKEN))) + "\n");
     await writeFile(path.join(output, "producer.json"), JSON.stringify(input) + "\n");
     await appendFile(env.GITHUB_OUTPUT, `evidence-directory=${output}\nsource-directory=${directory}\nproperties=${JSON.stringify(args)}\n`);
     return;
@@ -548,13 +564,24 @@ export async function main(env = process.env) {
     input.projectKey);
   const proof = await verify(context, input, taskId, env.SONAR_TOKEN);
   proof.trust = trust;
+  const beforeCurrency = JSON.parse(await boundedFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "currency.json"), 128 * 1024));
+  const afterCurrency = await captureCurrency(context, currencyReader(env.SONAR_TOKEN));
+  proof.currency = {
+    before: beforeCurrency, after: afterCurrency,
+    status: sameCurrency(beforeCurrency, afterCurrency) ? "verified-unchanged" : "unverified-or-changed",
+  };
+  await appendFile(env.GITHUB_STEP_SUMMARY, `Sonar analyzer/rule reuse currency: **${proof.currency.status}**.\n`);
   if (recipe.coverage === "cobertura") {
     const { filename: coveragePath, collection } = await selectedCollection(input, env);
     proof.coverage = input.pullRequest === null
       ? await verifyBranchImport(input, proof, collection, env.SONAR_TOKEN)
       : { ...collection, status: "collected", reason: "PR task completed; default-branch history is not PR import proof" };
-    requireValue(hash(await boundedFile(coveragePath, 32 * 1024 * 1024)) === collection.sha256,
+    const coverageBytes = await boundedFile(coveragePath, 32 * 1024 * 1024);
+    requireValue(hash(coverageBytes) === collection.sha256,
       "Coverage report changed during provider verification");
+    await writeFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "coverage.cobertura.xml"), coverageBytes);
+    proof.coverage.reportRoot = "originating-artifact";
+    proof.coverage.reports = [{ path: "coverage.cobertura.xml", sha256: collection.sha256 }];
   } else {
     proof.coverage = { status: "not-applicable", reason: "Original build family has no declared supported coverage" };
   }
