@@ -82,6 +82,12 @@ report contents, passing test invocation and actual provider import.
 Report paths must be repository-relative, use forward slashes, and exclude traversal,
 drive-qualified paths, backslashes and alternate data streams.
 
+When genuine native reports are retained in the originating component artifact, set
+`reportRoot: "originating-artifact"` and use their actual artifact-relative paths and
+byte hashes instead of inventing repository paths for runner-temporary reports.
+This explicit root is valid only for collected/imported coverage; the authenticated
+component artifact must contain those bytes. The default remains repository-relative.
+
 `collected` preserves the same genuine hashed native reports, instrumented-line
 counts and passing executed tests, but requires a null `analysisId` and an explicit
 reason why provider import is unverified. A successful PR compute task does not
