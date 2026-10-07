@@ -165,6 +165,15 @@ before and after reading. Overlapping project analyses therefore fail closed rat
 than ambiguously attributing another task's metadata; no credential widening is
 needed. Another PR or the default branch cannot supply its data.
 
+Sonar's PR-list metadata can briefly lag a successfully completed own task. Only
+otherwise well-formed metadata for that exact PR may wait for its expected source
+and analysis time to settle, within the same absolute two-minute facts deadline.
+Every wait rechecks the own receipt and latest project task with no queued work;
+superseding/failed tasks, foreign or malformed metadata and provider errors fail
+immediately. Both settled snapshots must still be identical. A notice reports the
+bounded wait without logging provider payloads or credentials; no stale snapshot
+is accepted and no deadline or task budget is reset.
+
 PR file populations are incremental and can legitimately be empty when no
 analyzed source changed, even with a successfully completed task and real passing
 tests. Their provider facts have `proof.facts.scope: pull-request-incremental`,

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 
 const LANGUAGES = { cs: "csharp", c: "cpp", cpp: "cpp", js: "javascript",
   ts: "typescript", py: "python", php: "php" };
@@ -6,6 +7,8 @@ const PAGE_SIZE = 500;
 const FILE_LIMIT = 20000;
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
 const date = (value) => typeof value === "string" && Number.isFinite(Date.parse(value));
+
+export class PendingPullSnapshotError extends Error {}
 
 export function filePage(payload, projectKey, page, total) {
   requireValue(payload?.baseComponent?.key === projectKey &&
@@ -112,16 +115,20 @@ export function pullSnapshot(payload, receipt, component, input, proof) {
       Date.parse(entry.executedAt) === Date.parse(proof.processing.executedAt)),
   "Sonar PR receipt must still be the unambiguous latest successful project task");
   const pull = matches[0];
-  requireValue(pull.commit?.sha === input.sourceSha && date(pull.analysisDate) &&
-    Date.parse(pull.analysisDate) >= Date.parse(input.startedAt) &&
-    Date.parse(pull.analysisDate) <= Date.parse(proof.processing.executedAt) &&
+  requireValue(/^[a-f0-9]{40}$/.test(pull.commit?.sha ?? "") && date(pull.analysisDate) &&
     pull.url === `https://github.com/${input.repository}/pull/${input.pullRequest}`,
-  "Sonar facts are not the latest successful task and exact actual source of this PR");
+  "Sonar facts have malformed metadata or do not identify the exact actual source PR");
+  if (pull.commit.sha !== input.sourceSha ||
+    Date.parse(pull.analysisDate) < Date.parse(input.startedAt) ||
+    Date.parse(pull.analysisDate) > Date.parse(proof.processing.executedAt)) {
+    throw new PendingPullSnapshotError(
+      "Sonar PR metadata has not settled to the latest successful task and exact actual source");
+  }
   return { analysisId: latest.analysisId, taskId: latest.id,
     sourceSha: pull.commit.sha, analysisDate: pull.analysisDate };
 }
 
-export async function verifyFacts(context, input, proof, tracked, read, now = Date.now) {
+export async function verifyFacts(context, input, proof, tracked, read, now = Date.now, sleep = delay) {
   const { policyDigest, ...material } = context ?? {};
   requireValue(context?.visibility === "public" && context.sonar?.status === "eligible" &&
     createHash("sha256").update(JSON.stringify(material)).digest("hex") === policyDigest &&
@@ -149,9 +156,20 @@ export async function verifyFacts(context, input, proof, tracked, read, now = Da
     const pulls = new URLSearchParams({ project: input.projectKey });
     const receipt = new URLSearchParams({ id: proof.processing.id });
     const component = new URLSearchParams({ component: input.projectKey });
-    return pullSnapshot(await request(`/api/project_pull_requests/list?${pulls}`),
-      await request(`/api/ce/task?${receipt}`),
-      await request(`/api/ce/component?${component}`), input, proof);
+    while (true) {
+      const metadata = await request(`/api/project_pull_requests/list?${pulls}`);
+      const task = await request(`/api/ce/task?${receipt}`);
+      const current = await request(`/api/ce/component?${component}`);
+      try {
+        return pullSnapshot(metadata, task, current, input, proof);
+      } catch (error) {
+        if (!(error instanceof PendingPullSnapshotError)) throw error;
+        const remaining = deadline - now();
+        requireValue(remaining > 0, "Sonar PR metadata did not settle within the two-minute deadline");
+        console.warn("::notice::Waiting for Sonar PR metadata to match its verified current task/source");
+        await sleep(Math.min(5000, remaining));
+      }
+    }
   };
   const before = await snapshot();
   const files = [];
