@@ -146,13 +146,23 @@ function validatePublication(publication, selected, completed) {
 
 function validateTool(result, selected, pin, source, run) {
   object(result, ["id", "status", "sourceSha", "version", "ruleRevision", "engineDigest", "sourceCoverage",
+    "sourceCoverageScope", "sourceCoverageReason",
     "findingCount", "processing", "publication", "completedAt", "reason"], "tool result");
   requireValue(["completed", "failed", "pending", "unavailable"].includes(result.status) &&
     result.sourceSha === source.checkoutSha &&
     ["version", "ruleRevision", "engineDigest"].every((key) => result[key] === pin[key]),
   "Tool result revision or scanner/rule identity mismatch");
-  object(result.sourceCoverage, selected.capabilities, "tool source coverage");
-  requireValue(Object.values(result.sourceCoverage).every(count), "Invalid source coverage count");
+  const incremental = result.sourceCoverageScope === "pull-request-incremental";
+  if (incremental) {
+    requireValue(selected.id === "sonar" && source.pullRequest !== null && result.status === "completed" &&
+      result.sourceCoverage === null && text(result.sourceCoverageReason),
+    "Incremental source scope is only permitted for completed PR Sonar facts with explicit limitations");
+  } else {
+    requireValue(result.sourceCoverageScope === undefined && result.sourceCoverageReason === undefined,
+      "Unsupported tool source scope");
+    object(result.sourceCoverage, selected.capabilities, "tool source coverage");
+    requireValue(Object.values(result.sourceCoverage).every(count), "Invalid source coverage count");
+  }
   object(result.processing, ["status", "id"], "provider processing");
   requireValue(["completed", "pending", "failed", "not-applicable"].includes(result.processing.status) &&
     (result.processing.id === null || (text(result.processing.id) && /^[A-Za-z0-9_.:-]+$/.test(result.processing.id))),
@@ -167,7 +177,8 @@ function validateTool(result, selected, pin, source, run) {
       "Incomplete analysis needs an explicit reason, never a zero-finding fallback");
     return;
   }
-  requireValue(count(result.findingCount) && selected.capabilities.every((language) => positive(result.sourceCoverage[language])),
+  requireValue(count(result.findingCount) &&
+    (incremental || selected.capabilities.every((language) => positive(result.sourceCoverage[language]))),
     "Completed tools require actual nonempty coverage of every selected capability");
   const end = timestamp(result.completedAt, "tool completion");
   requireValue(end >= timestamp(run.startedAt, "run start") && end <= timestamp(run.completedAt, "run completion"),
@@ -333,6 +344,8 @@ export function aggregateStatus(result) {
     repository: validated.context.repository, visibility: validated.context.visibility,
     status: validated.completeness.status, selectedTools: validated.completeness.selectedTools,
     missingTools: validated.completeness.missing, unavailableCapabilities: validated.completeness.unavailable,
+    incrementalTools: validated.results.filter(({ sourceCoverageScope }) =>
+      sourceCoverageScope === "pull-request-incremental").map(({ id }) => id),
     completedAt: validated.run.completedAt,
   };
 }
