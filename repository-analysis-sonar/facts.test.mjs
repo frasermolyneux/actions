@@ -289,6 +289,72 @@ test("superseding or queued project tasks cannot relabel PR facts as the receipt
   }
 });
 
+test("completed own-task PR metadata can settle within the shared deadline before source reads", async () => {
+  const calls = [];
+  let pullsRead = 0;
+  let sleeps = 0;
+  let clock = 0;
+  const facts = await verifyFacts(context, pullInput, proof, tracked,
+    reader(calls, (route, value) => {
+      if (route.startsWith("/api/project_pull_requests/list") && ++pullsRead <= 2) {
+        value.pullRequests[0].commit.sha = "b".repeat(40);
+      }
+      return value;
+    }), () => clock, async (milliseconds) => { sleeps++; clock += milliseconds; });
+  assert.equal(sleeps, 2);
+  assert.equal(facts.snapshot.sourceSha, sourceSha);
+  assert.equal(calls.filter((route) => route.startsWith("/api/ce/component")).length, 4);
+  const firstFiles = calls.findIndex((route) => route.startsWith("/api/components/tree"));
+  assert.equal(calls.slice(0, firstFiles).filter((route) =>
+    route.startsWith("/api/project_pull_requests/list")).length, 3);
+});
+
+test("after-read PR settlement still requires identical current-source snapshots", async () => {
+  let pullsRead = 0;
+  let clock = 0;
+  const facts = await verifyFacts(context, pullInput, proof, tracked,
+    reader([], (route, value) => {
+      if (route.startsWith("/api/project_pull_requests/list") && ++pullsRead === 2) {
+        value.pullRequests[0].analysisDate = "2026-10-06T11:59:00.000Z";
+      }
+      return value;
+    }), () => clock, async (milliseconds) => { clock += milliseconds; });
+  assert.equal(pullsRead, 3);
+  assert.equal(facts.snapshot.analysisId, proof.processing.analysisId);
+  assert.equal(clock, 5000);
+});
+
+test("unsettled PR metadata never becomes accepted or resets the shared two-minute deadline", async () => {
+  let clock = 0;
+  let sleeps = 0;
+  await assert.rejects(verifyFacts(context, pullInput, proof, tracked,
+    reader([], (route, value) => {
+      if (route.startsWith("/api/project_pull_requests/list")) value.pullRequests[0].commit.sha = "b".repeat(40);
+      return value;
+    }), () => clock, async (milliseconds) => { sleeps++; clock += milliseconds; }),
+  /two-minute deadline/);
+  assert.equal(clock, 120000);
+  assert.equal(sleeps, 24);
+});
+
+test("settlement never retries malformed, foreign, queued or superseding task/source authority", async () => {
+  for (const change of [
+    (route, value) => { if (route.startsWith("/api/ce/component")) value.queue = [{ id: "queued" }]; },
+    (route, value) => { if (route.startsWith("/api/ce/component")) value.current.id = "superseding"; },
+    (route, value) => { if (route.startsWith("/api/ce/task")) value.task.status = "FAILED"; },
+    (route, value) => { if (route.startsWith("/api/project_pull_requests/list")) value.pullRequests[0].url = "https://github.com/other/repo/pull/42"; },
+    (route, value) => { if (route.startsWith("/api/project_pull_requests/list")) value.pullRequests[0].commit.sha = "malformed"; },
+  ]) {
+    await assert.rejects(verifyFacts(context, pullInput, proof, tracked,
+      reader([], (route, value) => {
+        if (route.startsWith("/api/project_pull_requests/list")) value.pullRequests[0].commit.sha = "b".repeat(40);
+        change(route, value);
+        return value;
+      }), Date.now, async () => assert.fail("Invalid authority must fail before any settlement wait")),
+    /completed-task|latest successful|actual source PR/);
+  }
+});
+
 test("absolute source/finding deadline includes time spent in provider calls", async () => {
   let clock = 0;
   await assert.rejects(verifyFacts(context, input, proof, tracked,
