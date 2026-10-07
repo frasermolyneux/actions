@@ -127,6 +127,36 @@ export function sameCurrency(before, after) {
       ["completed", "incomplete"].includes(snapshot.status) &&
       (snapshot.status === "completed" ? /^[a-f0-9]{64}$/.test(snapshot.digest ?? "") : snapshot.digest === null),
     "Sonar reuse requires actual typed currency evidence");
+    requireValue(/^[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/.test(snapshot.repository ?? "") &&
+      Number.isSafeInteger(snapshot.repositoryId) && snapshot.repositoryId > 0 &&
+      /^[a-f0-9]{64}$/.test(snapshot.policyDigest ?? "") &&
+      snapshot.projectKey === snapshot.repository.replace("/", "_") &&
+      /^[a-f0-9]{64}$/.test(snapshot.analyzers?.digest ?? "") &&
+      Number.isSafeInteger(snapshot.analyzers.pluginCount) &&
+      snapshot.analyzers.pluginCount > 0 && snapshot.analyzers.pluginCount <= 256 &&
+      Array.isArray(snapshot.profiles) && snapshot.profiles.length > 0 && snapshot.profiles.length <= 6,
+    "Sonar currency snapshot identity or analyzer material is malformed");
+    const capabilities = new Set();
+    for (const profile of snapshot.profiles) {
+      requireValue(profile && LANGUAGES[profile.capability] === profile.language &&
+        !capabilities.has(profile.capability) && text(profile.key) &&
+        text(profile.rulesUpdatedAt) && Number.isFinite(Date.parse(profile.rulesUpdatedAt)) &&
+        [profile.advertisedRuleCount, profile.reportedRuleCount].every((value) =>
+          Number.isSafeInteger(value) && value > 0 && value <= MAX_RULES) &&
+        /^[a-f0-9]{64}$/.test(profile.digest ?? ""),
+      "Sonar currency snapshot profile material is malformed");
+      capabilities.add(profile.capability);
+    }
+    const complete = snapshot.profiles.every(({ advertisedRuleCount, reportedRuleCount }) =>
+      advertisedRuleCount === reportedRuleCount);
+    requireValue(complete === (snapshot.status === "completed") &&
+      (complete ? snapshot.reason === undefined : snapshot.reason === "advertised-and-returned-active-rule-counts-disagree"),
+    "Sonar currency completeness disagrees with retained profile counts");
+    if (complete) {
+      requireValue(snapshot.digest === digest({ projectKey: snapshot.projectKey,
+        analyzers: snapshot.analyzers, profiles: snapshot.profiles }),
+      "Sonar currency snapshot digest disagrees with its retained material");
+    }
   }
   return before.status === "completed" && after.status === "completed" &&
     ["repository", "repositoryId", "policyDigest", "projectKey", "digest"].every((key) => before[key] === after[key]);

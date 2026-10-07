@@ -55,7 +55,7 @@ test("currency binds the actual complete active rules, parameters, analyzer hash
     assert.equal(sameCurrency(result, await captureCurrency(context, provider(mutate))), false);
   }
   assert.notEqual(analyzerRegistry(registry, engine).digest,
-    analyzerRegistry(registry, engine.replace("engine-1.2", "engine-1.3")).digest);
+    analyzerRegistry(registry, engine.replaceAll("engine-1.2", "engine-1.3")).digest);
 });
 
 test("advertised rules absent from the provider response explicitly forbid reuse without fabricating a hash", async () => {
@@ -66,6 +66,24 @@ test("advertised rules absent from the provider response explicitly forbid reuse
   assert.equal(result.digest, null);
   assert.equal(result.reason, "advertised-and-returned-active-rule-counts-disagree");
   assert.equal(sameCurrency(result, result), false);
+});
+
+test("retained snapshot tampering cannot reuse a copied later digest", async () => {
+  const actual = await captureCurrency(context, provider());
+  for (const mutate of [
+    (value) => { value.analyzers.digest = "c".repeat(64); },
+    (value) => { value.analyzers.pluginCount++; },
+    (value) => { value.profiles[0].digest = "d".repeat(64); },
+    (value) => { value.profiles[0].rulesUpdatedAt = "2026-10-06T00:00:00Z"; },
+  ]) {
+    const tampered = clone(actual);
+    mutate(tampered);
+    assert.throws(() => sameCurrency(tampered, actual), /digest disagrees/);
+    assert.throws(() => sameCurrency(actual, tampered), /digest disagrees/);
+  }
+  const tampered = clone(actual);
+  tampered.profiles[0].advertisedRuleCount++;
+  assert.throws(() => sameCurrency(tampered, actual), /completeness/);
 });
 
 for (const [label, mutation, message] of [
@@ -107,7 +125,7 @@ test("provider failures are not converted into currency or quiet success", async
 });
 
 test("bootstrap index cannot substitute the server version or ambiguous engine metadata", () => {
-  for (const value of ["10.8", "", `${engine}${engine}`, engine.replace("|", ":")]) {
+  for (const value of ["10.8", "", `${engine}${engine}`, engine.replaceAll("|", ":")]) {
     assert.throws(() => analyzerRegistry(registry, value), /bootstrap/);
   }
   assert.throws(() => sameCurrency({ status: "completed" }, {}), /typed currency/);
