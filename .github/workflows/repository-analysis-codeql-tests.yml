@@ -88,13 +88,13 @@ jobs:
       - name: Verify pinned extractor source-format contracts
         run: node --test repository-analysis-codeql/extractor.test.mjs
       - id: init
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           languages: ${{ matrix.language }}
           build-mode: none
           tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.1/codeql-bundle-linux64.tar.gz
       - id: analyze
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           category: /language:${{ matrix.language }}
           upload: never
@@ -113,7 +113,7 @@ jobs:
         run: node repository-analysis-codeql/integration.mjs
       - name: Publish only validated same-source output after live-public reauthorization
         id: publish
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           sarif_file: ${{ steps.analyze.outputs.sarif-output }}
           category: /language:${{ matrix.language }}
@@ -208,7 +208,7 @@ jobs:
           assert(context.codeql.languages.includes(process.env.LANGUAGE));
           NODE
       - id: init
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           languages: ${{ matrix.language }}
           build-mode: manual
@@ -223,7 +223,7 @@ jobs:
           source-directory: ${{ github.workspace }}/${{ matrix.directory }}
           github-token: ${{ github.token }}
       - id: analyze
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           upload: never
           upload-database: false
@@ -289,13 +289,13 @@ jobs:
           assert(context.codeql.languages.includes("javascript-typescript"));
           NODE
       - id: init
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           languages: javascript-typescript
           build-mode: none
           tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.1/codeql-bundle-linux64.tar.gz
       - id: analyze
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           upload: never
           upload-database: false

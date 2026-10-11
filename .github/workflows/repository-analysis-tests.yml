@@ -37,7 +37,7 @@ jobs:
           assert not Path("package-lock.json").exists()
           assert not Path("npm-shrinkwrap.json").exists()
           assert not Path("node_modules").exists()
-      - name: Confirm released preflight exposes the lockfile regression
+      - name: Confirm released preflight no longer introduces package state
         id: previous
         continue-on-error: true
         uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.1.0
@@ -61,7 +61,7 @@ jobs:
           from pathlib import Path
 
           context = json.loads(os.environ["ANALYSIS_CONTEXT"])
-          assert os.environ["PREVIOUS_OUTCOME"] == "failure"
+          assert os.environ["PREVIOUS_OUTCOME"] == "success"
           assert context["repository"] == os.environ["GITHUB_REPOSITORY"]
           assert context["repositoryId"] == int(os.environ["GITHUB_REPOSITORY_ID"])
           assert context["contract"] == "repository-analysis-v1"
