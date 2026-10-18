@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
       - name: Verify live public execution eligibility before licensed tooling
         id: context
-        uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.1.0
+        uses: frasermolyneux/actions/repository-analysis-context@3490bc4b344e919932bf9d673e2012bf354f67a1
         with:
           profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
           github-token: ${{ github.token }}

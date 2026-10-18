@@ -95,7 +95,7 @@ jobs:
           language: ${{ matrix.language }}
           github-token: ${{ github.token }}
       - id: init
-        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.buildMode }}
@@ -113,7 +113,7 @@ jobs:
           language: ${{ matrix.language }}
           github-token: ${{ github.token }}
       - id: analyze
-        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           category: /language:${{ matrix.language }}
           upload: never
@@ -135,7 +135,7 @@ jobs:
           python: ${{ steps.python.outputs.executable }}
           github-token: ${{ github.token }}
       - id: upload
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
         with:
           sarif_file: ${{ steps.analyze.outputs.sarif-output }}
           category: /language:${{ matrix.language }}

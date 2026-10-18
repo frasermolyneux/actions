@@ -40,7 +40,7 @@ jobs:
       - name: Confirm released preflight exposes the lockfile regression
         id: previous
         continue-on-error: true
-        uses: frasermolyneux/actions/repository-analysis-context@repository-analysis-context/v1.1.0
+        uses: frasermolyneux/actions/repository-analysis-context@f73512cd7a30e8ac07685445423226d8bb44437b
         with:
           profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
           github-token: ${{ github.token }}
