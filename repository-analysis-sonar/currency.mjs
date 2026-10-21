@@ -25,7 +25,7 @@ function digest(value) {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-export function analyzerRegistry(payload, engineIndex) {
+export function analyzerRegistry(payload, engineMetadata) {
   requireValue(Array.isArray(payload?.plugins) && payload.plugins.length > 0 && payload.plugins.length <= 256,
     "Sonar analyzer registry is missing or exceeds its bound");
   const keys = new Set();
@@ -37,14 +37,11 @@ export function analyzerRegistry(payload, engineIndex) {
     keys.add(plugin.key);
     return { key: plugin.key, version: plugin.version, filename: plugin.filename, hash: plugin.hash };
   }).sort((left, right) => order(left.key, right.key));
-  requireValue(typeof engineIndex === "string" && engineIndex.length <= 16 * 1024,
-    "Sonar scanner engine bootstrap index exceeds its bound");
-  const rows = engineIndex.trim().split(/\r?\n/);
-  requireValue(rows.length === 1 &&
-    /^[A-Za-z0-9_.-]+\.jar\|(?:[a-f0-9]{32}|[a-f0-9]{64})$/.test(rows[0]),
-  "Sonar scanner engine bootstrap is missing, malformed or ambiguous");
-  const [filename, hash] = rows[0].split("|");
-  return { digest: digest({ plugins, engine: { filename, hash } }), pluginCount: plugins.length };
+  requireValue(text(engineMetadata?.filename) && /^[A-Za-z0-9_.-]+\.jar$/.test(engineMetadata.filename) &&
+    /^[a-f0-9]{64}$/.test(engineMetadata.sha256 ?? ""),
+  "Sonar scanner engine identity requires actual filename and SHA-256 metadata");
+  const engine = { filename: engineMetadata.filename, sha256: engineMetadata.sha256 };
+  return { digest: digest({ plugins, engine }), pluginCount: plugins.length };
 }
 
 export async function captureCurrency(context, read, { projectKey, organization, now = Date.now } = {}) {
@@ -64,7 +61,7 @@ export async function captureCurrency(context, read, { projectKey, organization,
     requireValue(now() <= deadline, "Sonar currency deadline exceeded");
     return result;
   };
-  const analyzers = analyzerRegistry(await request("/api/plugins/installed"), await request("/batch/index", "text"));
+  const analyzers = analyzerRegistry(await request("/api/plugins/installed"), await request("/analysis/engine"));
   const profiles = [];
   for (const capability of tool.capabilities) {
     const language = LANGUAGES[capability];

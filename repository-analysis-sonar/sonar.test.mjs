@@ -10,7 +10,8 @@ import { authorizeSource, trustedSource } from "./sonar.mjs";
 import { validateUntracked } from "./sonar.mjs";
 import { validateSource } from "./sonar.mjs";
 import { validateCoverageSelection } from "./sonar.mjs";
-import { mkdtemp, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { currencyReader, retainCoverage } from "./sonar.mjs";
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
@@ -175,6 +176,47 @@ test("native report bytes and genuine passing TRX execution bind coverage collec
     assert.throws(() => validateCollection(collection, { ...tests, ...patch }, input, bytes));
   }
   assert.throws(() => validateCollection(collection, tests, input, Buffer.from("changed")));
+});
+
+test("currency reads the actual engine from its fixed provider host without following returned URLs", async () => {
+  const requests = [];
+  const engine = { filename: "engine.jar", sha256: "b".repeat(64),
+    downloadUrl: "https://untrusted.invalid/not-requested" };
+  const read = currencyReader("token", async (url) => {
+    requests.push(url);
+    return response(engine);
+  });
+  assert.deepEqual(await read("/analysis/engine", "json", 1000), engine);
+  assert.deepEqual(requests, ["https://api.sonarcloud.io/analysis/engine"]);
+  for (const endpoint of ["/batch/index", "/analysis/engine/other", "https://untrusted.invalid/analysis/engine"]) {
+    assert.throws(() => read(endpoint, "json", 1000), /Unsupported Sonar currency endpoint/);
+  }
+});
+
+test("retained coverage contains exact hashed bytes, preserves evidence status and rejects changed source", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sonar-retained-coverage-"));
+  try {
+    const source = path.join(root, "collected.xml");
+    const output = path.join(root, "artifact");
+    await mkdir(output);
+    await writeFile(source, bytes);
+    const validated = validateCollection(collection, tests, input, bytes);
+    for (const evidence of [validated, { ...validated, status: "imported", analysisId: task.analysisId }]) {
+      const retained = await retainCoverage(output, source, evidence);
+      const actual = await readFile(path.join(output, "coverage.cobertura.xml"));
+      assert.deepEqual(actual, bytes);
+      assert.equal(retained.reportRoot, "originating-artifact");
+      assert.deepEqual(retained.reports, [{ path: "coverage.cobertura.xml",
+        sha256: createHash("sha256").update(actual).digest("hex") }]);
+      assert.equal(retained.status, evidence.status);
+      assert.equal(retained.analysisId, evidence.analysisId);
+    }
+    await writeFile(source, "changed after collection");
+    await assert.rejects(retainCoverage(output, source, validated), /Coverage report changed/);
+    assert.deepEqual(await readFile(path.join(output, "coverage.cobertura.xml")), bytes);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("collector version matches the producer pin including supported build metadata", () => {

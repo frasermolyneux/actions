@@ -10,7 +10,7 @@ const context = selectAnalysis({
 const clone = (value) => structuredClone(value);
 const binding = { projectKey: "custom:reviewed-project", organization: "frasermolyneux" };
 const registry = { plugins: [{ key: "csharp", version: "1.2", filename: "cs-1.2.jar", hash: "a".repeat(32) }] };
-const engine = `engine-1.2.jar|${"b".repeat(32)}\n`;
+const engine = { filename: "engine-1.2.jar", sha256: "b".repeat(64) };
 const profile = { key: "profile-123", language: "cs", organization: binding.organization,
   activeRuleCount: 1, rulesUpdatedAt: "2026-10-07T00:00:00Z" };
 const rule = { key: "cs:Rule1", lang: "cs", repo: "cs", status: "READY", severity: "INFO", params: [] };
@@ -21,7 +21,7 @@ function provider(mutate = () => {}, calls = []) {
     calls.push({ endpoint, type, remaining });
     let value;
     if (endpoint === "/api/plugins/installed") value = clone(registry);
-    else if (endpoint === "/batch/index") value = engine;
+    else if (endpoint === "/analysis/engine") value = clone(engine);
     else if (endpoint.startsWith("/api/qualityprofiles/search?")) {
       const query = new URL(`https://fixture.invalid${endpoint}`).searchParams;
       assert.equal(query.get("project"), binding.projectKey);
@@ -52,13 +52,14 @@ test("currency binds the actual complete active rules, parameters, analyzer hash
   for (const mutate of [
     (value, endpoint) => { if (endpoint.includes("plugins")) value.plugins[0].hash = "c".repeat(32); },
     (value, endpoint) => { if (endpoint.includes("plugins")) value.plugins[0].version = "1.3"; },
+    (value, endpoint) => { if (endpoint === "/analysis/engine") value.sha256 = "d".repeat(64); },
     (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives[rule.key][0].params[0].value = "4"; },
     (value, endpoint) => { if (endpoint.includes("rules/search")) value.rules[0].status = "DEPRECATED"; },
   ]) {
     assert.equal(sameCurrency(result, await captureCurrency(context, provider(mutate), binding)), false);
   }
   assert.notEqual(analyzerRegistry(registry, engine).digest,
-    analyzerRegistry(registry, engine.replaceAll("engine-1.2", "engine-1.3")).digest);
+    analyzerRegistry(registry, { ...engine, filename: "engine-1.3.jar" }).digest);
 });
 
 test("advertised rules absent from the provider response explicitly forbid reuse without fabricating a hash", async () => {
@@ -182,9 +183,10 @@ test("currency refuses missing or malformed provider bindings before reading", a
   }
 });
 
-test("bootstrap index cannot substitute the server version or ambiguous engine metadata", () => {
-  for (const value of ["10.8", "", `${engine}${engine}`, engine.replaceAll("|", ":")]) {
-    assert.throws(() => analyzerRegistry(registry, value), /bootstrap/);
+test("engine identity cannot substitute the server version, legacy index or malformed metadata", () => {
+  for (const value of ["10.8", "", `engine.jar|${"b".repeat(32)}`, null,
+    { ...engine, filename: "../engine.jar" }, { ...engine, sha256: "b".repeat(32) }]) {
+    assert.throws(() => analyzerRegistry(registry, value), /engine identity/);
   }
   assert.throws(() => sameCurrency({ status: "completed" }, {}), /typed currency/);
 });

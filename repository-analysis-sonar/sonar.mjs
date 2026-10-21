@@ -263,13 +263,14 @@ async function readJson(url, token, request, timeout = 30_000, format = "json") 
   }
 }
 
-function currencyReader(token) {
+export function currencyReader(token, request = fetch) {
   requireValue(typeof token === "string" && /^[\x21-\x7e]+$/.test(token),
     "Sonar currency needs the existing valid public-project token");
   return (endpoint, format, timeout) => {
-    requireValue((format === "json" && endpoint.startsWith("/api/")) ||
-      (format === "text" && endpoint === "/batch/index"), "Unsupported Sonar currency endpoint");
-    return readJson(`${HOST}${endpoint}`, token, fetch, timeout, format);
+    requireValue(format === "json" && (endpoint.startsWith("/api/") || endpoint === "/analysis/engine"),
+      "Unsupported Sonar currency endpoint");
+    const host = endpoint === "/analysis/engine" ? "https://api.sonarcloud.io" : HOST;
+    return readJson(`${host}${endpoint}`, token, request, timeout, format);
   };
 }
 
@@ -467,6 +468,14 @@ async function selectedCollection(input, env) {
     JSON.parse(env.SONAR_TEST_REPORT), input, bytes) };
 }
 
+export async function retainCoverage(directory, filename, coverage) {
+  const bytes = await boundedFile(filename, 32 * 1024 * 1024);
+  requireValue(hash(bytes) === coverage.sha256, "Coverage report changed during provider verification");
+  await writeFile(path.join(directory, "coverage.cobertura.xml"), bytes);
+  return { ...coverage, reportRoot: "originating-artifact",
+    reports: [{ path: "coverage.cobertura.xml", sha256: coverage.sha256 }] };
+}
+
 function git(root, args) {
   const command = process.platform === "win32" ? String.raw`C:\Program Files\Git\cmd\git.exe` : "/usr/bin/git";
   const result = spawnSync(command, ["-C", root, ...args], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
@@ -578,12 +587,7 @@ export async function main(env = process.env) {
     proof.coverage = input.pullRequest === null
       ? await verifyBranchImport(input, proof, collection, env.SONAR_TOKEN)
       : { ...collection, status: "collected", reason: "PR task completed; default-branch history is not PR import proof" };
-    const coverageBytes = await boundedFile(coveragePath, 32 * 1024 * 1024);
-    requireValue(hash(coverageBytes) === collection.sha256,
-      "Coverage report changed during provider verification");
-    await writeFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "coverage.cobertura.xml"), coverageBytes);
-    proof.coverage.reportRoot = "originating-artifact";
-    proof.coverage.reports = [{ path: "coverage.cobertura.xml", sha256: collection.sha256 }];
+    proof.coverage = await retainCoverage(env.SONAR_EVIDENCE_DIRECTORY, coveragePath, proof.coverage);
   } else {
     proof.coverage = { status: "not-applicable", reason: "Original build family has no declared supported coverage" };
   }
