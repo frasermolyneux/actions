@@ -19,7 +19,11 @@ origin. SDK setup precedes manual CodeQL initialization. The analysis-only build
 preserves original compilation commands and receives no Sonar or deployment token.
 
 Each selected language must genuinely archive unchanged maintained source before
-publication. JavaScript and TypeScript capability counts come from separately
+publication. Initialization explicitly disables overlay database reuse: cached overlay
+archives can retain base-revision workflow bytes instead of the actual checkout.
+Production and fixture acceptance require fresh full-source extraction, never an
+exception to byte equality for cached files.
+JavaScript and TypeScript capability counts come from separately
 identified **archived** files, not tracked candidates, estimates or diagnostic
 SARIF result counts. Archived Vue and HTML/XHTML containers are classified from
 their byte-verified embedded script language/type and actual inline content;
