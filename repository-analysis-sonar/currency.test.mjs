@@ -101,6 +101,9 @@ for (const [label, mutation, message] of [
   ["missing activation", (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives = {}; }, /configured parameters/],
   ["foreign activation", (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives[rule.key][0].qProfile = "foreign"; }, /foreign/],
   ["additional activation", (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives.extra = [clone(active)]; }, /unexpected rules/],
+  ["missing parameter value", (value, endpoint) => { if (endpoint.includes("rules/search")) delete value.actives[rule.key][0].params[0].value; }, /actual string values/],
+  ["non-string parameter value", (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives[rule.key][0].params[0].value = 3; }, /actual string values/],
+  ["duplicate parameter key", (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives[rule.key][0].params.push(clone(active.params[0])); }, /unique keys/],
 ]) {
   test(`currency rejects ${label}`, async () => {
     await assert.rejects(captureCurrency(context, provider(mutation), binding), message);

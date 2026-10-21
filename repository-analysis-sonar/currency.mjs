@@ -100,6 +100,13 @@ export async function captureCurrency(context, read, { projectKey, organization,
           Array.isArray(active) && active.length === 1 && active[0]?.qProfile === profile.key &&
           text(active[0].severity) && Array.isArray(active[0].params),
         "Sonar active rules are missing, duplicated, foreign or lack actual configured parameters");
+        const parameterKeys = new Set();
+        for (const parameter of active[0].params) {
+          requireValue(text(parameter?.key) && !parameterKeys.has(parameter.key) &&
+            typeof parameter.value === "string" && parameter.value.length <= 16 * 1024,
+          "Sonar configured parameters need unique keys and actual string values");
+          parameterKeys.add(parameter.key);
+        }
         keys.add(rule.key);
         rules.push({ rule, active: active[0] });
       }
