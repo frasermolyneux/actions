@@ -208,6 +208,25 @@ test("collected PR coverage retains genuine report and test facts without claimi
   assert.equal(assessFreshness(context(), request(input), result, Date.parse(END)).action, "scan");
 });
 
+test("collected/imported coverage may name actual retained originating-artifact bytes without inventing a repository path", () => {
+  for (const status of ["imported", "collected"]) {
+    const input = bundle();
+    const entry = { ...coverage(), reportRoot: "originating-artifact", status,
+      reports: [{ path: "coverage.cobertura.xml", sha256: D }], format: "cobertura" };
+    if (status === "collected") {
+      entry.analysisId = null;
+      entry.reason = "Actual native coverage retained; provider import is unverified";
+    }
+    input.coverage = [entry];
+    assert.deepEqual(assemble(context(), input).coverage[0], entry);
+    entry.reportRoot = "arbitrary-runner-files";
+    assert.throws(() => assemble(context(), input), /Unsupported coverage report root/);
+  }
+  const input = bundle();
+  input.coverage[0].reportRoot = "originating-artifact";
+  assert.throws(() => assemble(context(), input), /Unsupported coverage report root/);
+});
+
 test("zero covered native lines remain collected, not manufactured missing coverage or import", () => {
   const input = bundle();
   input.coverage = [{ ...coverage(), status: "collected", analysisId: null,
