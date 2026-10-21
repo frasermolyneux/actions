@@ -552,7 +552,8 @@ export async function main(env = process.env) {
     const metadataPath = path.join(output, "report-task.txt");
     const args = properties(input, metadataPath);
     await writeFile(path.join(output, "currency.json"),
-      JSON.stringify(await captureCurrency(context, currencyReader(env.SONAR_TOKEN))) + "\n");
+      JSON.stringify(await captureCurrency(context, currencyReader(env.SONAR_TOKEN),
+        { projectKey: input.projectKey, organization: "frasermolyneux" })) + "\n");
     await writeFile(path.join(output, "producer.json"), JSON.stringify(input) + "\n");
     await appendFile(env.GITHUB_OUTPUT, `evidence-directory=${output}\nsource-directory=${directory}\nproperties=${JSON.stringify(args)}\n`);
     return;
@@ -565,7 +566,8 @@ export async function main(env = process.env) {
   const proof = await verify(context, input, taskId, env.SONAR_TOKEN);
   proof.trust = trust;
   const beforeCurrency = JSON.parse(await boundedFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "currency.json"), 128 * 1024));
-  const afterCurrency = await captureCurrency(context, currencyReader(env.SONAR_TOKEN));
+  const afterCurrency = await captureCurrency(context, currencyReader(env.SONAR_TOKEN),
+    { projectKey: input.projectKey, organization: "frasermolyneux" });
   proof.currency = {
     before: beforeCurrency, after: afterCurrency,
     status: sameCurrency(beforeCurrency, afterCurrency) ? "verified-unchanged" : "unverified-or-changed",

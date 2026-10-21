@@ -47,12 +47,15 @@ export function analyzerRegistry(payload, engineIndex) {
   return { digest: digest({ plugins, engine: { filename, hash } }), pluginCount: plugins.length };
 }
 
-export async function captureCurrency(context, read, { now = Date.now } = {}) {
+export async function captureCurrency(context, read, { projectKey, organization, now = Date.now } = {}) {
   const tool = selectedTools(context).find(({ id }) => id === "sonar");
   requireValue(tool && context.visibility === "public" && context.sonar.status === "eligible",
     "Sonar currency may only read an eligible live public project");
   requireValue(typeof read === "function" && typeof now === "function",
     "Sonar currency needs bounded provider readers");
+  requireValue(/^[A-Za-z0-9_.:-]{1,200}$/.test(projectKey ?? "") &&
+    /^[A-Za-z0-9_-]{1,200}$/.test(organization ?? ""),
+  "Sonar currency needs the validated provider project key and organization");
   const deadline = now() + CURRENCY_DEADLINE_MS;
   const request = async (endpoint, type = "json") => {
     const remaining = deadline - now();
@@ -62,8 +65,6 @@ export async function captureCurrency(context, read, { now = Date.now } = {}) {
     return result;
   };
   const analyzers = analyzerRegistry(await request("/api/plugins/installed"), await request("/batch/index", "text"));
-  const organization = context.repository.split("/")[0];
-  const projectKey = context.repository.replace("/", "_");
   const profiles = [];
   for (const capability of tool.capabilities) {
     const language = LANGUAGES[capability];
@@ -112,10 +113,10 @@ export async function captureCurrency(context, read, { now = Date.now } = {}) {
   }
   const complete = profiles.every(({ advertisedRuleCount, reportedRuleCount }) =>
     advertisedRuleCount === reportedRuleCount);
-  const material = { projectKey, analyzers, profiles };
+  const material = { organization, projectKey, analyzers, profiles };
   return {
     schema: CURRENCY_SCHEMA, repository: context.repository, repositoryId: context.repositoryId,
-    policyDigest: context.policyDigest, projectKey, status: complete ? "completed" : "incomplete",
+    policyDigest: context.policyDigest, organization, projectKey, status: complete ? "completed" : "incomplete",
     digest: complete ? digest(material) : null, analyzers, profiles,
     ...(complete ? {} : { reason: "advertised-and-returned-active-rule-counts-disagree" }),
   };
@@ -130,7 +131,8 @@ export function sameCurrency(before, after) {
     requireValue(/^[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/.test(snapshot.repository ?? "") &&
       Number.isSafeInteger(snapshot.repositoryId) && snapshot.repositoryId > 0 &&
       /^[a-f0-9]{64}$/.test(snapshot.policyDigest ?? "") &&
-      snapshot.projectKey === snapshot.repository.replace("/", "_") &&
+      /^[A-Za-z0-9_.:-]{1,200}$/.test(snapshot.projectKey ?? "") &&
+      /^[A-Za-z0-9_-]{1,200}$/.test(snapshot.organization ?? "") &&
       /^[a-f0-9]{64}$/.test(snapshot.analyzers?.digest ?? "") &&
       Number.isSafeInteger(snapshot.analyzers.pluginCount) &&
       snapshot.analyzers.pluginCount > 0 && snapshot.analyzers.pluginCount <= 256 &&
@@ -153,11 +155,11 @@ export function sameCurrency(before, after) {
       (complete ? snapshot.reason === undefined : snapshot.reason === "advertised-and-returned-active-rule-counts-disagree"),
     "Sonar currency completeness disagrees with retained profile counts");
     if (complete) {
-      requireValue(snapshot.digest === digest({ projectKey: snapshot.projectKey,
+      requireValue(snapshot.digest === digest({ organization: snapshot.organization, projectKey: snapshot.projectKey,
         analyzers: snapshot.analyzers, profiles: snapshot.profiles }),
       "Sonar currency snapshot digest disagrees with its retained material");
     }
   }
   return before.status === "completed" && after.status === "completed" &&
-    ["repository", "repositoryId", "policyDigest", "projectKey", "digest"].every((key) => before[key] === after[key]);
+    ["repository", "repositoryId", "policyDigest", "organization", "projectKey", "digest"].every((key) => before[key] === after[key]);
 }

@@ -8,9 +8,10 @@ const context = selectAnalysis({
 }, { id: 123, full_name: "fixture/source", visibility: "public", private: false,
   owner: { type: "User" }, archived: false, fork: false }, "fixture/source");
 const clone = (value) => structuredClone(value);
+const binding = { projectKey: "custom:reviewed-project", organization: "frasermolyneux" };
 const registry = { plugins: [{ key: "csharp", version: "1.2", filename: "cs-1.2.jar", hash: "a".repeat(32) }] };
 const engine = `engine-1.2.jar|${"b".repeat(32)}\n`;
-const profile = { key: "profile-123", language: "cs", organization: "fixture",
+const profile = { key: "profile-123", language: "cs", organization: binding.organization,
   activeRuleCount: 1, rulesUpdatedAt: "2026-10-07T00:00:00Z" };
 const rule = { key: "cs:Rule1", lang: "cs", repo: "cs", status: "READY", severity: "INFO", params: [] };
 const active = { qProfile: profile.key, severity: "INFO", params: [{ key: "threshold", value: "3" }] };
@@ -23,8 +24,8 @@ function provider(mutate = () => {}, calls = []) {
     else if (endpoint === "/batch/index") value = engine;
     else if (endpoint.startsWith("/api/qualityprofiles/search?")) {
       const query = new URL(`https://fixture.invalid${endpoint}`).searchParams;
-      assert.equal(query.get("project"), "fixture_source");
-      assert.equal(query.get("organization"), "fixture");
+      assert.equal(query.get("project"), binding.projectKey);
+      assert.equal(query.get("organization"), binding.organization);
       value = { profiles: [clone(profile)] };
     } else {
       assert.ok(endpoint.startsWith("/api/rules/search?"));
@@ -41,18 +42,20 @@ function provider(mutate = () => {}, calls = []) {
 }
 
 test("currency binds the actual complete active rules, parameters, analyzer hashes and bootstrap engine", async () => {
-  const result = await captureCurrency(context, provider());
+  const result = await captureCurrency(context, provider(), binding);
   assert.equal(result.status, "completed");
   assert.match(result.digest, /^[a-f0-9]{64}$/);
   assert.equal(result.profiles[0].reportedRuleCount, 1);
-  assert.equal(sameCurrency(result, await captureCurrency(context, provider())), true);
+  assert.equal(result.projectKey, binding.projectKey);
+  assert.equal(result.organization, binding.organization);
+  assert.equal(sameCurrency(result, await captureCurrency(context, provider(), binding)), true);
   for (const mutate of [
     (value, endpoint) => { if (endpoint.includes("plugins")) value.plugins[0].hash = "c".repeat(32); },
     (value, endpoint) => { if (endpoint.includes("plugins")) value.plugins[0].version = "1.3"; },
     (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives[rule.key][0].params[0].value = "4"; },
     (value, endpoint) => { if (endpoint.includes("rules/search")) value.rules[0].status = "DEPRECATED"; },
   ]) {
-    assert.equal(sameCurrency(result, await captureCurrency(context, provider(mutate))), false);
+    assert.equal(sameCurrency(result, await captureCurrency(context, provider(mutate), binding)), false);
   }
   assert.notEqual(analyzerRegistry(registry, engine).digest,
     analyzerRegistry(registry, engine.replaceAll("engine-1.2", "engine-1.3")).digest);
@@ -61,7 +64,7 @@ test("currency binds the actual complete active rules, parameters, analyzer hash
 test("advertised rules absent from the provider response explicitly forbid reuse without fabricating a hash", async () => {
   const result = await captureCurrency(context, provider((value, endpoint) => {
     if (endpoint.includes("qualityprofiles")) value.profiles[0].activeRuleCount = 2;
-  }));
+  }), binding);
   assert.equal(result.status, "incomplete");
   assert.equal(result.digest, null);
   assert.equal(result.reason, "advertised-and-returned-active-rule-counts-disagree");
@@ -69,12 +72,14 @@ test("advertised rules absent from the provider response explicitly forbid reuse
 });
 
 test("retained snapshot tampering cannot reuse a copied later digest", async () => {
-  const actual = await captureCurrency(context, provider());
+  const actual = await captureCurrency(context, provider(), binding);
   for (const mutate of [
     (value) => { value.analyzers.digest = "c".repeat(64); },
     (value) => { value.analyzers.pluginCount++; },
     (value) => { value.profiles[0].digest = "d".repeat(64); },
     (value) => { value.profiles[0].rulesUpdatedAt = "2026-10-06T00:00:00Z"; },
+    (value) => { value.projectKey = "other-project"; },
+    (value) => { value.organization = "other-organization"; },
   ]) {
     const tampered = clone(actual);
     mutate(tampered);
@@ -98,7 +103,7 @@ for (const [label, mutation, message] of [
   ["additional activation", (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives.extra = [clone(active)]; }, /unexpected rules/],
 ]) {
   test(`currency rejects ${label}`, async () => {
-    await assert.rejects(captureCurrency(context, provider(mutation)), message);
+    await assert.rejects(captureCurrency(context, provider(mutation), binding), message);
   });
 }
 
@@ -106,7 +111,7 @@ test("public currency refuses a private context before any provider call", async
   const privateContext = selectAnalysis(context.profile, { id: 123, full_name: "fixture/source",
     visibility: "private", private: true, owner: { type: "User" }, archived: false, fork: false }, "fixture/source");
   let called = false;
-  await assert.rejects(captureCurrency(privateContext, async () => { called = true; }), /eligible live public/);
+  await assert.rejects(captureCurrency(privateContext, async () => { called = true; }, binding), /eligible live public/);
   assert.equal(called, false);
 });
 
@@ -114,14 +119,22 @@ test("the absolute deadline covers all metadata requests without a reset", async
   let clock = 0;
   const calls = [];
   const read = provider(() => { clock += 30_001; }, calls);
-  await assert.rejects(captureCurrency(context, read, { now: () => clock }), /deadline/);
+  await assert.rejects(captureCurrency(context, read, { ...binding, now: () => clock }), /deadline/);
   assert.equal(calls.length, 4);
   assert.equal(calls[0].remaining, CURRENCY_DEADLINE_MS);
   assert.ok(calls.every((call, index) => index === 0 || call.remaining < calls[index - 1].remaining));
 });
 
 test("provider failures are not converted into currency or quiet success", async () => {
-  await assert.rejects(captureCurrency(context, async () => { throw new Error("HTTP 403"); }), /HTTP 403/);
+  await assert.rejects(captureCurrency(context, async () => { throw new Error("HTTP 403"); }, binding), /HTTP 403/);
+});
+
+test("currency refuses missing or malformed provider bindings before reading", async () => {
+  for (const options of [undefined, {}, { ...binding, projectKey: "bad/key" }, { ...binding, organization: "" }]) {
+    let called = false;
+    await assert.rejects(captureCurrency(context, async () => { called = true; }, options), /validated provider/);
+    assert.equal(called, false);
+  }
 });
 
 test("bootstrap index cannot substitute the server version or ambiguous engine metadata", () => {
