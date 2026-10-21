@@ -86,7 +86,7 @@ export async function captureCurrency(context, read, { projectKey, organization,
         include_external: "true", p: String(page), ps: String(PAGE_SIZE),
         f: "actives,params,repo,severity,lang,status" });
       const payload = await request(`/api/rules/search?${parameters}`);
-      requireValue(count(payload?.total) && payload.total > 0 && payload.total <= MAX_RULES &&
+      requireValue(count(payload?.total) && payload.total <= MAX_RULES &&
         payload.p === page && payload.ps === PAGE_SIZE &&
         (total === null || payload.total === total) && Array.isArray(payload.rules) &&
         payload.rules.length === Math.min(PAGE_SIZE, payload.total - (page - 1) * PAGE_SIZE) &&
@@ -150,8 +150,9 @@ export function sameCurrency(before, after) {
       requireValue(profile && LANGUAGES[profile.capability] === profile.language &&
         !capabilities.has(profile.capability) && text(profile.key) &&
         text(profile.rulesUpdatedAt) && Number.isFinite(Date.parse(profile.rulesUpdatedAt)) &&
-        [profile.advertisedRuleCount, profile.reportedRuleCount].every((value) =>
-          Number.isSafeInteger(value) && value > 0 && value <= MAX_RULES) &&
+        count(profile.advertisedRuleCount) && profile.advertisedRuleCount > 0 &&
+        profile.advertisedRuleCount <= MAX_RULES &&
+        count(profile.reportedRuleCount) && profile.reportedRuleCount <= MAX_RULES &&
         /^[a-f0-9]{64}$/.test(profile.digest ?? ""),
       "Sonar currency snapshot profile material is malformed");
       capabilities.add(profile.capability);

@@ -62,13 +62,23 @@ test("currency binds the actual complete active rules, parameters, analyzer hash
 });
 
 test("advertised rules absent from the provider response explicitly forbid reuse without fabricating a hash", async () => {
-  const result = await captureCurrency(context, provider((value, endpoint) => {
-    if (endpoint.includes("qualityprofiles")) value.profiles[0].activeRuleCount = 2;
-  }), binding);
-  assert.equal(result.status, "incomplete");
-  assert.equal(result.digest, null);
-  assert.equal(result.reason, "advertised-and-returned-active-rule-counts-disagree");
-  assert.equal(sameCurrency(result, result), false);
+  const completed = await captureCurrency(context, provider(), binding);
+  for (const reportedRuleCount of [0, 1]) {
+    const result = await captureCurrency(context, provider((value, endpoint) => {
+      if (endpoint.includes("qualityprofiles")) value.profiles[0].activeRuleCount = 2;
+      if (endpoint.includes("rules/search") && reportedRuleCount === 0) {
+        Object.assign(value, { total: 0, rules: [], actives: {} });
+      }
+    }), binding);
+    assert.equal(result.status, "incomplete");
+    assert.equal(result.digest, null);
+    assert.equal(result.profiles[0].advertisedRuleCount, 2);
+    assert.equal(result.profiles[0].reportedRuleCount, reportedRuleCount);
+    assert.equal(result.reason, "advertised-and-returned-active-rule-counts-disagree");
+    assert.equal(sameCurrency(result, result), false);
+    assert.equal(sameCurrency(completed, result), false);
+    assert.equal(sameCurrency(result, completed), false);
+  }
 });
 
 test("retained snapshot tampering cannot reuse a copied later digest", async () => {
@@ -96,6 +106,7 @@ for (const [label, mutation, message] of [
   ["missing analyzer hash", (value, endpoint) => { if (endpoint.includes("plugins")) delete value.plugins[0].hash; }, /byte-identified/],
   ["no project profile", (value, endpoint) => { if (endpoint.includes("qualityprofiles")) value.profiles = []; }, /exactly one/],
   ["foreign profile", (value, endpoint) => { if (endpoint.includes("qualityprofiles")) value.profiles[0].organization = "foreign"; }, /identity/],
+  ["empty advertised profile", (value, endpoint) => { if (endpoint.includes("qualityprofiles")) value.profiles[0].activeRuleCount = 0; }, /identity/],
   ["short page", (value, endpoint) => { if (endpoint.includes("rules/search")) value.total = 2; }, /paging/],
   ["wrong page", (value, endpoint) => { if (endpoint.includes("rules/search")) value.p = 2; }, /paging/],
   ["missing activation", (value, endpoint) => { if (endpoint.includes("rules/search")) value.actives = {}; }, /configured parameters/],
