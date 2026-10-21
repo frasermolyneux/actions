@@ -69,14 +69,18 @@ export async function captureCurrency(context, read, { projectKey, organization,
   for (const capability of tool.capabilities) {
     const language = LANGUAGES[capability];
     const query = new URLSearchParams({ organization, project: projectKey, language });
-    const response = await request(`/api/qualityprofiles/search?${query}`);
-    requireValue(Array.isArray(response?.profiles) && response.profiles.length === 1,
-      "Sonar currency requires exactly one selected project profile per capability");
-    const profile = response.profiles[0];
-    requireValue(text(profile?.key) && profile.language === language && profile.organization === organization &&
-      count(profile.activeRuleCount) && profile.activeRuleCount > 0 && profile.activeRuleCount <= MAX_RULES &&
-      text(profile.rulesUpdatedAt) && Number.isFinite(Date.parse(profile.rulesUpdatedAt)),
-    "Sonar currency profile identity or rule metadata is malformed");
+    const readProfile = async () => {
+      const response = await request(`/api/qualityprofiles/search?${query}`);
+      requireValue(Array.isArray(response?.profiles) && response.profiles.length === 1,
+        "Sonar currency requires exactly one selected project profile per capability");
+      const profile = response.profiles[0];
+      requireValue(text(profile?.key) && profile.language === language && profile.organization === organization &&
+        count(profile.activeRuleCount) && profile.activeRuleCount > 0 && profile.activeRuleCount <= MAX_RULES &&
+        text(profile.rulesUpdatedAt) && Number.isFinite(Date.parse(profile.rulesUpdatedAt)),
+      "Sonar currency profile identity or rule metadata is malformed");
+      return profile;
+    };
+    const profile = await readProfile();
     const rules = [];
     const keys = new Set();
     let total = null;
@@ -114,6 +118,9 @@ export async function captureCurrency(context, read, { projectKey, organization,
         Object.keys(payload.actives).every((key) => payload.rules.some((rule) => rule.key === key)),
       "Sonar active-rule configuration contains unexpected rules");
     }
+    const currentProfile = await readProfile();
+    requireValue(["key", "language", "organization", "activeRuleCount", "rulesUpdatedAt"].every(
+      (key) => profile[key] === currentProfile[key]), "Sonar active profile changed during capture");
     rules.sort((left, right) => order(left.rule.key, right.rule.key));
     profiles.push({ capability, key: profile.key, language, rulesUpdatedAt: profile.rulesUpdatedAt,
       advertisedRuleCount: profile.activeRuleCount, reportedRuleCount: total, digest: digest(rules) });

@@ -101,6 +101,37 @@ test("retained snapshot tampering cannot reuse a copied later digest", async () 
   assert.throws(() => sameCurrency(tampered, actual), /completeness/);
 });
 
+test("multi-page capture rejects profile edits even when the active rule count is unchanged", async () => {
+  for (const change of [null, { key: "replacement-profile" },
+    { rulesUpdatedAt: "2026-10-07T00:00:01Z" }, { activeRuleCount: 502 }]) {
+    let profileReads = 0;
+    const pages = [];
+    const read = provider((value, endpoint) => {
+      if (endpoint.includes("qualityprofiles")) {
+        value.profiles[0].activeRuleCount = 501;
+        if (++profileReads === 2 && change) Object.assign(value.profiles[0], change);
+      }
+      if (endpoint.includes("rules/search")) {
+        pages.push(value.p);
+        value.total = 501;
+        const start = (value.p - 1) * 500;
+        value.rules = Array.from({ length: value.p === 1 ? 500 : 1 },
+          (_, index) => ({ ...clone(rule), key: `cs:Rule${start + index + 1}` }));
+        value.actives = Object.fromEntries(value.rules.map(({ key }) => [key, [clone(active)]]));
+      }
+    });
+    if (change) {
+      await assert.rejects(captureCurrency(context, read, binding), /profile changed during capture/);
+    } else {
+      const snapshot = await captureCurrency(context, read, binding);
+      assert.equal(snapshot.status, "completed");
+      assert.equal(sameCurrency(snapshot, snapshot), true);
+    }
+    assert.deepEqual(pages, [1, 2]);
+    assert.equal(profileReads, 2);
+  }
+});
+
 for (const [label, mutation, message] of [
   ["duplicate analyzer", (value, endpoint) => { if (endpoint.includes("plugins")) value.plugins.push(clone(value.plugins[0])); }, /unique/],
   ["missing analyzer hash", (value, endpoint) => { if (endpoint.includes("plugins")) delete value.plugins[0].hash; }, /byte-identified/],
