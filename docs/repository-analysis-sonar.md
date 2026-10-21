@@ -133,6 +133,27 @@ scanner **8.1.0.6389** and signature verification.
 
 ## Completed evidence, not accepted uploads
 
+Before starting the scanner, the originating job captures the provider's actual
+plugin versions/JAR hashes, scanner-engine bootstrap identity, and completely paged
+active rules with their configured parameters for every selected project profile.
+It rechecks that material after successful task verification. A server version or
+quality-profile timestamp alone is not analyzer/rule currency. The bounded
+`repository-analysis-sonar-currency-v1` snapshots are retained in `currency.json`
+and `proof.currency`; no token, raw scanner context or source is included.
+
+Only complete, unchanged snapshots have `verified-unchanged` reuse currency.
+Advertised/returned active-rule count disagreement is explicitly incomplete, with
+no fabricated digest. It does not relabel a genuinely completed analysis as clean
+or prevent retaining its findings; it prevents reuse. Changed/incomplete currency
+requires real reanalysis rather than a cache hit. Provider/transport failures
+remain explicit failures, never empty snapshots.
+
+For declared Cobertura collection, the verifier retains the actual already
+validated `coverage.cobertura.xml` bytes in the originating component artifact.
+`proof.coverage.reports` names that file and its actual byte hash with
+`reportRoot: "originating-artifact"`. Native collected counts and provider-import
+counts remain distinct; retention does not upgrade PR collection to import.
+
 The verifier reads the fixed-provider receipt, enforces an absolute ten-minute
 deadline (including provider latency, with each request bounded by its remaining
 budget), and waits for the

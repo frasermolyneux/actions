@@ -201,11 +201,15 @@ function validateCoverage(coverage, source, exempt) {
     "Explicit bounded coverage suite evidence is required");
   const suites = new Set();
   for (const entry of coverage) {
-    object(entry, ["suite", "status", "format", "sourceSha", "reports", "lines", "tests", "analysisId", "reason"], "coverage evidence");
+    object(entry, ["suite", "status", "format", "sourceSha", "reports", "reportRoot",
+      "lines", "tests", "analysisId", "reason"], "coverage evidence");
     requireValue(text(entry.suite) && !suites.has(entry.suite) && entry.sourceSha === source.checkoutSha &&
       ["collected", "imported", "unavailable", "not-applicable", "failed"].includes(entry.status), "Invalid coverage identity/state");
     suites.add(entry.suite);
     requireValue(Array.isArray(entry.reports) && entry.reports.length <= 256, "Invalid coverage reports");
+    requireValue(entry.reportRoot === undefined ||
+      (entry.reportRoot === "originating-artifact" && ["collected", "imported"].includes(entry.status)),
+    "Unsupported coverage report root");
     if (!["collected", "imported"].includes(entry.status)) {
       requireValue(text(entry.reason) && entry.reports.length === 0 && entry.lines === null &&
         entry.tests === null && entry.analysisId === null, "Unavailable coverage must not masquerade as an imported zero");

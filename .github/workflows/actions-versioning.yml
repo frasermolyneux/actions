@@ -90,7 +90,7 @@ jobs:
             if [[ "$ACTION" == "repository-analysis" ]]; then
               PATTERN='^(repository-analysis(-context|-local|-sarif)?/|\.github/workflows/repository-analysis-local\.yml$)'
             elif [[ "$ACTION" == "repository-analysis-sonar" ]]; then
-              PATTERN='^(repository-analysis-sonar/|repository-analysis-context/|dotnet-test(-report)?/|\.github/workflows/repository-analysis-sonar\.yml$)'
+              PATTERN='^(repository-analysis-sonar/|repository-analysis-(context|state)/|dotnet-test(-report)?/|\.github/workflows/repository-analysis-sonar\.yml$)'
             elif [[ "$ACTION" == "repository-analysis-codeql" ]]; then
               PATTERN='^(repository-analysis-codeql/|repository-analysis-(context|state|sarif|sonar)/|dotnet-test/coverage-tools\.json$|\.github/workflows/repository-analysis-codeql\.yml$)'
             elif [[ "$ACTION" == "dotnet-test" ]]; then
