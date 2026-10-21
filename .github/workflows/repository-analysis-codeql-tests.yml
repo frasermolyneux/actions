@@ -89,6 +89,8 @@ jobs:
         run: node --test repository-analysis-codeql/extractor.test.mjs
       - id: init
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        env:
+          CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
         with:
           languages: ${{ matrix.language }}
           build-mode: none
@@ -209,6 +211,8 @@ jobs:
           NODE
       - id: init
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        env:
+          CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
         with:
           languages: ${{ matrix.language }}
           build-mode: manual
@@ -290,6 +294,8 @@ jobs:
           NODE
       - id: init
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        env:
+          CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
         with:
           languages: javascript-typescript
           build-mode: none

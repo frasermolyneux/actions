@@ -34,6 +34,12 @@ test("native execution retains setup-before-init, manual-only compiler and reaut
   assert.match(text, /wait-for-processing: true/);
   assert.match(text, /persist-credentials: false/);
   assert.match(text, /if: matrix\.buildMode == 'manual'/);
+  const initializations = [...(text + "\n" + acceptance).matchAll(
+    /uses: github\/codeql-action\/init@[\s\S]*?(?=\n      -|\n  [a-z]|$)/g)];
+  assert.equal(initializations.length, 4);
+  for (const [initialization] of initializations) {
+    assert.match(initialization, /env:\r?\n(?:[ \t]+#[^\r\n]*\r?\n)*[ \t]+CODEQL_ACTION_OVERLAY_ANALYSIS: "false"/);
+  }
   assert.match(composite, /repository-analysis-sonar\/build\.ps1/);
   assert.doesNotMatch(composite, /uses: \$\/repository-analysis-sonar/);
   assert.doesNotMatch(text + composite, /secrets\.|id-token:|contents: write|@main|@v\d/);

@@ -96,6 +96,9 @@ jobs:
           github-token: ${{ github.token }}
       - id: init
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        env:
+          # Overlay archives can retain base-revision bytes; this boundary requires full extraction.
+          CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.buildMode }}
