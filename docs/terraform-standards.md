@@ -12,7 +12,9 @@ tags exist after the reviewed change is merged and `actions-versioning` succeeds
 Each execution root must commit `.terraform-version` containing exactly one stable
 `major.minor.patch` CLI version and a genuine Terraform-generated
 `.terraform.lock.hcl` containing provider selections and checksums. Both files must
-match checkout HEAD. Missing files, version ranges, dirty locks, missing providers,
+exist in checkout HEAD and match both its working tree and index. Receipt-time
+verification repeats this admission and rejects a checkout change after setup.
+Missing files, version ranges, dirty locks, missing providers,
 selection disagreement and checksum failures fail closed. Bootstrap/update locks
 deliberately with Terraform; ordinary jobs must not use `init -upgrade`.
 

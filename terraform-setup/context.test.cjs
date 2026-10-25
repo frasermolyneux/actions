@@ -55,6 +55,30 @@ test('checkout-local Git executables cannot override trusted source identity com
   process.env.PATH = `${root}${path.delimiter}${original}`;
   assert.equal(prepare(workspace, 'root with spaces').sourceCommit, context.sourceCommit);
 });
+test('pin and lock must exist in HEAD with clean index and worktree throughout execution', t => {
+  const { workspace, root, context, git } = fixture(t);
+  for (const name of ['.terraform-version', '.terraform.lock.hcl']) {
+    const file = path.join(root, name);
+    const original = fs.readFileSync(file);
+    fs.writeFileSync(file, name === '.terraform-version' ? '1.17.0' : `${lock}\n`);
+    git(['add', `root with spaces/${name}`]);
+    fs.writeFileSync(file, original);
+    assert.throws(() => prepare(workspace, 'root with spaces'), /Command failed/);
+    assert.throws(() => observe(context), /Command failed/);
+    git(['reset', '-q', 'HEAD', '--', `root with spaces/${name}`]);
+  }
+  fs.writeFileSync(path.join(root, '.terraform-version'), '1.17.0');
+  assert.throws(() => observe(context), /exact stable version|Command failed/);
+  fs.writeFileSync(path.join(root, '.terraform-version'), '1.16.7\n');
+  fs.writeFileSync(path.join(root, 'source.txt'), 'new checkout source');
+  git(['add', '.']);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Source changed']);
+  assert.throws(() => observe(context), /source identity changed/);
+  git(['rm', '--cached', 'root with spaces/.terraform-version', 'root with spaces/.terraform.lock.hcl']);
+  git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Remove inputs from HEAD']);
+  git(['add', 'root with spaces/.terraform-version', 'root with spaces/.terraform.lock.hcl']);
+  assert.throws(() => prepare(workspace, 'root with spaces'), /cat-file/);
+});
 test('path escape and untracked/missing locks are rejected', t => {
   const { workspace, root, git } = fixture(t);
   assert.throws(() => prepare(workspace, '..'), /Path escapes/);
@@ -71,8 +95,9 @@ test('clean native version JSON verifies pin, lock and initialized selections', 
   let version = { terraform_version: '1.16.7', platform: 'linux_amd64', provider_selections: context.providerSelections };
   const binary = path.join(root, process.platform === 'win32' ? 'terraform-bin.exe' : 'terraform-bin');
   fs.writeFileSync(binary, '');
-  cp.execFileSync = (command, args) => {
+  cp.execFileSync = (command, args, options) => {
     if (command === 'which' || command === 'where.exe') return path.join(root, 'terraform');
+    if (args[0] !== 'version') return original(command, args, options);
     observedExecutable = command;
     assert.deepEqual(args, ['version', '-json']);
     return JSON.stringify(version);

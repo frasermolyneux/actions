@@ -46,13 +46,18 @@ function prepare(workspace, folder, requested = '') {
   }
   const lock = regular(path.join(root, '.terraform.lock.hcl'));
   const relative = path.relative(workspace, root).split(path.sep).join('/') || '.';
+  const inputPaths = [path.posix.join(relative, '.terraform-version'), path.posix.join(relative, '.terraform.lock.hcl')];
+  for (const inputPath of inputPaths) {
+    cp.execFileSync(gitExecutable(), ['cat-file', '-e', `HEAD:${inputPath}`], { cwd: workspace, stdio: 'pipe' });
+  }
   const tracked = cp.execFileSync(gitExecutable(), ['ls-files', '--error-unmatch',
-    path.posix.join(relative, '.terraform-version'), path.posix.join(relative, '.terraform.lock.hcl')], { cwd: workspace });
+    ...inputPaths], { cwd: workspace });
   if (!tracked.length) throw new Error('Pin and lock must be committed');
   cp.execFileSync(gitExecutable(), ['diff', '--exit-code', 'HEAD', '--',
-    path.posix.join(relative, '.terraform-version'), path.posix.join(relative, '.terraform.lock.hcl')], { cwd: workspace });
+    ...inputPaths], { cwd: workspace });
+  cp.execFileSync(gitExecutable(), ['diff', '--cached', '--exit-code', 'HEAD', '--', ...inputPaths], { cwd: workspace });
   return {
-    root, rootDirectory: relative, terraformVersion: pin, lockSha256: sha256(lock),
+    workspace, root, rootDirectory: relative, terraformVersion: pin, lockSha256: sha256(lock),
     providerSelections: selections(lock.toString()),
     sourceCommit: cp.execFileSync(gitExecutable(), ['rev-parse', 'HEAD'], { cwd: workspace, encoding: 'utf8' }).trim()
   };
@@ -64,6 +69,13 @@ function executable() {
   return fs.existsSync(binary) ? binary : installed;
 }
 function observe(context, requireProviders = false) {
+  if (sha256(regular(path.join(context.root, '.terraform.lock.hcl'))) !== context.lockSha256) {
+    throw new Error('Provider lock changed during execution');
+  }
+  const current = prepare(context.workspace, context.rootDirectory, context.terraformVersion);
+  if (['root', 'rootDirectory', 'sourceCommit', 'terraformVersion', 'lockSha256'].some(key => current[key] !== context[key])) {
+    throw new Error('Terraform source identity changed after setup');
+  }
   const data = JSON.parse(cp.execFileSync(executable(), ['version', '-json'], {
     cwd: context.root, encoding: 'utf8', maxBuffer: 1024 * 1024
   }));
