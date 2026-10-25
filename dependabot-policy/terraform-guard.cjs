@@ -1,5 +1,5 @@
 const sensitivePath = name => /(?:^|\/)(?:\.terraform-version|\.terraform\.lock\.hcl|\.tool-versions|\.?mise\.toml|\.terraformrc|terraform\.rc)$/.test(name) ||
-  /\.(?:tf|tf\.json|hcl)$/.test(name);
+  /\.(?:tf|tf\.json|tfvars|tfvars\.json|hcl)$/.test(name);
 const workflowPath = name => /^\.github\/workflows\/.*\.ya?ml$/.test(name) || /(?:^|\/)action\.ya?ml$/.test(name);
 function requiresReview(file) {
   const names = [file.filename, file.previous_filename].filter(Boolean);
@@ -13,7 +13,7 @@ function requiresReview(file) {
       throw new Error('Workflow diff incomplete');
     }
     return file.patch.split('\n').some(line => /^[+-](?![+-])/.test(line) &&
-      (/\buses:\s*['"]?(?:[^@\s'"]*\/terraform-[^@\s'"]*|hashicorp\/setup-terraform)@/i.test(line) ||
+      (/(?:[^@\s'"]*\/terraform-[^@\s'"]*|hashicorp\/setup-terraform)@/i.test(line) ||
        /\bterraform[_-]version\b/i.test(line)));
   }
   return false;
@@ -51,4 +51,21 @@ async function terraformGuard(github, context) {
     return { blocked: true, code: 'changed_files_unavailable', reason: 'Complete immutable changed-file evidence is unavailable; auto-merge is blocked for manual review.' };
   }
 }
-module.exports = { terraformGuard, requiresReview };
+async function enforceTerraformGuard(github, context) {
+  const guard = await terraformGuard(github, context);
+  if (!guard.blocked) return guard;
+  const params = { owner: context.repo.owner, repo: context.repo.repo, pull_number: context.issue.number };
+  const pr = (await github.rest.pulls.get(params)).data;
+  if (!Object.hasOwn(pr, 'auto_merge')) throw new Error('Unable to verify existing auto-merge state');
+  if (pr.auto_merge !== null) {
+    if (!pr.node_id) throw new Error('Missing pull request identity for auto-merge revocation');
+    await github.graphql(`mutation($id: ID!) {
+      disablePullRequestAutoMerge(input: {pullRequestId: $id}) { pullRequest { id } }
+    }`, { id: pr.node_id });
+    const verified = (await github.rest.pulls.get(params)).data;
+    if (verified.auto_merge !== null) throw new Error('Unable to verify auto-merge revocation');
+    guard.reason += ' Existing auto-merge was revoked.';
+  }
+  return guard;
+}
+module.exports = { terraformGuard, enforceTerraformGuard, requiresReview };

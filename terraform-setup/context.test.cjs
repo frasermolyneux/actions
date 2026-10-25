@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const cp = require('node:child_process');
-const { prepare, selections, observe, planIdentity, verifyPlan, sha256 } = require('./context.cjs');
+const { prepare, selections, observe, planIdentity, verifyPlan, sha256, environmentName } = require('./context.cjs');
 const { receipt } = require('../terraform-receipt/receipt.cjs');
 const lock = `provider "registry.terraform.io/hashicorp/random" {
   version = "3.7.2"
@@ -47,6 +47,14 @@ test('provider locks require canonical selected providers and real checksum synt
     assert.throws(() => selections(invalid));
   }
 });
+test('checkout-local Git executables cannot override trusted source identity commands', t => {
+  const { workspace, root, context } = fixture(t);
+  fs.writeFileSync(path.join(root, process.platform === 'win32' ? 'git.exe' : 'git'), 'not a trusted executable');
+  const original = process.env.PATH;
+  t.after(() => { process.env.PATH = original; });
+  process.env.PATH = `${root}${path.delimiter}${original}`;
+  assert.equal(prepare(workspace, 'root with spaces').sourceCommit, context.sourceCommit);
+});
 test('path escape and untracked/missing locks are rejected', t => {
   const { workspace, root, git } = fixture(t);
   assert.throws(() => prepare(workspace, '..'), /Path escapes/);
@@ -87,6 +95,12 @@ test('saved plans bind checkout, root, pin, lock, environment and binary hash be
   const name = 'plan.tfplan';
   fs.writeFileSync(path.join(root, name), 'binary plan fixture');
   const identity = planIdentity(context, name, 'prd');
+  assert.equal(environmentName('', 'tfvars/prd.tfvars'), 'prd');
+  assert.equal(environmentName('', 'tfvars\\dev.tfvars'), 'dev');
+  assert.equal(environmentName('Production', 'tfvars/dev.tfvars'), 'Production');
+  for (const empty of ['', ' ', undefined]) {
+    assert.throws(() => planIdentity(context, name, empty), /nonempty environment/);
+  }
   const directory = path.join(root, 'saved');
   fs.mkdirSync(directory);
   fs.copyFileSync(path.join(root, name), path.join(directory, name));
@@ -94,6 +108,8 @@ test('saved plans bind checkout, root, pin, lock, environment and binary hash be
   const metadata = path.join(directory, `${name}.metadata.json`);
   fs.writeFileSync(metadata, JSON.stringify(identity));
   verifyPlan(context, name, directory, 'prd');
+  assert.throws(() => verifyPlan(context, name, directory, ''), /nonempty environment/);
+  assert.throws(() => verifyPlan(context, name, directory, 'dev'), /environment/);
   for (const key of ['sourceCommit', 'rootDirectory', 'terraformVersion', 'lockSha256', 'environment', 'planSha256']) {
     fs.writeFileSync(metadata, JSON.stringify({ ...identity, [key]: 'mismatch' }));
     assert.throws(() => verifyPlan(context, name, directory, 'prd'), /identity mismatch/);

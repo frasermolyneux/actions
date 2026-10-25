@@ -3,7 +3,7 @@ description: "Evaluates Dependabot PR auto-merge policy and optionally labels ma
 
 inputs:
   github-token:
-    description: "GitHub token used for metadata lookup and labeling"
+    description: "GitHub token used for metadata lookup, labeling and blocked auto-merge revocation (pull-requests: write)"
     required: true
   major-update-label:
     description: "Label to apply when Dependabot update type is major"
@@ -45,6 +45,7 @@ runs:
 
     - name: Evaluate Dependabot policy
       id: evaluate
+      if: always()
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
       env:
         DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
@@ -76,7 +77,7 @@ runs:
           let reason = 'Dependabot policy is not applicable for non-Dependabot pull requests.';
 
           if (isDependabot) {
-            const { terraformGuard } = require('${{ github.action_path }}/terraform-guard.cjs');
+            const { enforceTerraformGuard: terraformGuard } = require('${{ github.action_path }}/terraform-guard.cjs');
             const guard = await terraformGuard(github, context);
             const hasUpdateType = Boolean(updateType);
             autoMergeAllowed = !guard.blocked && hasUpdateType && allowedUpdateTypes.has(updateType);

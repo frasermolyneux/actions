@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { observe, contextFile, output, sha256 } = require('../terraform-setup/context.cjs');
+const { observe, contextFile, output, sha256, environmentName } = require('../terraform-setup/context.cjs');
 const operations = new Set(['validate', 'plan', 'apply', 'output', 'state-check', 'state-rm', 'import', 'destroy', 'destroy-resources']);
 function receipt(context, env) {
   if (!operations.has(env.TF_OPERATION) || !['success', 'failure'].includes(env.TF_OUTCOME)) {
@@ -16,7 +16,7 @@ function receipt(context, env) {
     runId: env.GITHUB_RUN_ID, runAttempt: Number(env.GITHUB_RUN_ATTEMPT),
     workflowRef: env.GITHUB_WORKFLOW_REF, workflowSha: env.GITHUB_WORKFLOW_SHA,
     job: env.GITHUB_JOB, eventName: env.GITHUB_EVENT_NAME, ref: env.GITHUB_REF,
-    environment: env.TF_ENVIRONMENT || path.posix.basename((env.TF_VAR_FILE || '').replaceAll('\\', '/'), '.tfvars'),
+    environment: environmentName(env.TF_ENVIRONMENT, env.TF_VAR_FILE),
     operation: env.TF_OPERATION, outcome: env.TF_OUTCOME,
     observedAt: new Date().toISOString(), terraformVersion: context.terraformVersion,
     platform: context.platform, providerSelections: context.observedProviderSelections || context.providerSelections,

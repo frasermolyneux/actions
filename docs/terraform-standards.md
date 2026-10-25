@@ -26,7 +26,9 @@ Every action accepts optional `terraform-version` as an exact assertion, **not a
 override** of the root pin, plus optional `terraform-environment` for evidence.
 Otherwise the environment is derived from the var-file basename (`prd.tfvars`
 becomes `prd`). Split apply has no var-file input: supply `terraform-environment`
-to record its environment, and use the same value on its producer when supplied.
+as a **required nonempty saved-plan identity**, matching either the producer's
+explicit value or its var-file-derived environment. Empty identities are rejected
+before applying a saved plan.
 
 Direct CLI workflows can use `terraform-setup@terraform-setup/v1.0.0`:
 
@@ -44,7 +46,9 @@ Setup outputs `terraform-version` (also `version`) and a unique private `directo
 context for the receipt helper. It does not initialize a backend or emit execution
 evidence itself. Underlying `terraform-bin` is used for clean version JSON even
 when HashiCorp's wrapper is enabled. The root CLI pin remains the compatibility
-selection; HCL constraints must also accept it.
+selection; HCL constraints must also accept it. Source-identity Git commands use a
+trusted system installation (`/usr/bin/git`, `/usr/local/bin/git`, or Program Files
+Git on Windows), never a checkout/PATH-selected Git executable.
 
 ## Saved plan boundary
 
@@ -104,7 +108,29 @@ root locks/pins, Terraform toolchain version files and Terraform action-referenc
 changes. Labels and minor/patch metadata cannot override this guard. Changed files
 are paged completely (100/page, maximum 30 pages/3,000 files), with count,
 duplicate and head/base stability checks. Missing/truncated diffs or API failures
-block auto-merge. Unrelated dependency metadata and major-label behavior remain.
+block auto-merge. Terraform variable files (including auto-loaded JSON variants)
+and folded/multiline action references are included. A blocked Terraform decision
+revokes any existing auto-merge request; missing permission or unverifiable
+revocation fails the action instead of silently leaving auto-merge enabled.
+Unrelated dependency metadata and major-label behavior remain.
+
+## Release operation
+
+There is no publication dispatch or dispatch input. A reviewed push/merge to
+`main` triggers `actions-versioning`; it computes the changed-action dependency
+closure and publishes policy, setup, receipt, then the ten operations. Setup and
+receipt sibling references use `$/`, binding the executable closure to the same
+actions commit. Exact patch tags point to that main commit; the workflow then
+updates rolling minor/major tags. Consumers requiring historical producer trust
+must use the exact patch tag or reviewed actions commit SHA, not a rolling tag.
+
+`producerRevision` is optional and is emitted only when the runtime action ref
+itself is an exact 40-character SHA. Semantic patch refs do not invent a producer
+SHA; admission must independently resolve and verify the exact caller action ref.
+`sourceCommit` is always the actual consumer checkout SHA, not the producer SHA.
+Lock hashes cover exact checkout bytes; Windows CRLF checkout differences require
+an LF checkout policy or explicit unavailable coverage when compared with LF Git
+blobs.
 
 ## Validation
 

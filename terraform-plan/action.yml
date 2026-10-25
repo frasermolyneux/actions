@@ -226,6 +226,7 @@ runs:
         TF_CONTEXT: ${{ steps.toolchain.outputs.directory }}
         TF_PLAN: ${{ inputs.plan-file-name }}
         TF_ENVIRONMENT: ${{ inputs.terraform-environment }}
+        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
       run: node "${{ github.action_path }}/../terraform-setup/context.cjs" save-plan
 
     - name: Upload Terraform Plan Artifact

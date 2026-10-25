@@ -4,6 +4,17 @@ const crypto = require('node:crypto');
 const cp = require('node:child_process');
 
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+function gitExecutable() {
+  const candidates = process.platform === 'win32'
+    ? [path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'cmd', 'git.exe'),
+      path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'git.exe')]
+    : ['/usr/bin/git', '/usr/local/bin/git'];
+  const executable = candidates.find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+  if (!executable) throw new Error('Git must be installed in a trusted system installation directory');
+  return fs.realpathSync(executable);
+}
+const environmentName = (explicit = '', varFile = '') =>
+  explicit || path.posix.basename(varFile.replaceAll('\\', '/'), '.tfvars');
 function inside(base, candidate) {
   const relative = path.relative(base, candidate);
   if (relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('Path escapes repository');
@@ -35,15 +46,15 @@ function prepare(workspace, folder, requested = '') {
   }
   const lock = regular(path.join(root, '.terraform.lock.hcl'));
   const relative = path.relative(workspace, root).split(path.sep).join('/') || '.';
-  const tracked = cp.execFileSync('git', ['ls-files', '--error-unmatch',
+  const tracked = cp.execFileSync(gitExecutable(), ['ls-files', '--error-unmatch',
     path.posix.join(relative, '.terraform-version'), path.posix.join(relative, '.terraform.lock.hcl')], { cwd: workspace });
   if (!tracked.length) throw new Error('Pin and lock must be committed');
-  cp.execFileSync('git', ['diff', '--exit-code', 'HEAD', '--',
+  cp.execFileSync(gitExecutable(), ['diff', '--exit-code', 'HEAD', '--',
     path.posix.join(relative, '.terraform-version'), path.posix.join(relative, '.terraform.lock.hcl')], { cwd: workspace });
   return {
     root, rootDirectory: relative, terraformVersion: pin, lockSha256: sha256(lock),
     providerSelections: selections(lock.toString()),
-    sourceCommit: cp.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: workspace, encoding: 'utf8' }).trim()
+    sourceCommit: cp.execFileSync(gitExecutable(), ['rev-parse', 'HEAD'], { cwd: workspace, encoding: 'utf8' }).trim()
   };
 }
 function executable() {
@@ -73,6 +84,7 @@ function planFile(context, name) {
   return path.join(context.root, name);
 }
 function planIdentity(context, name, environment) {
+  if (typeof environment !== 'string' || !environment.trim()) throw new Error('Saved plans require a nonempty environment identity');
   return {
     schemaVersion: 'terraform-saved-plan-v1', sourceCommit: context.sourceCommit,
     rootDirectory: context.rootDirectory, terraformVersion: context.terraformVersion,
@@ -121,14 +133,15 @@ function main() {
   } else if (mode === 'save-plan') {
     const name = process.env.TF_PLAN;
     fs.writeFileSync(`${planFile(context, name)}.metadata.json`,
-      JSON.stringify(planIdentity(observe(context, true), name, process.env.TF_ENVIRONMENT || '')));
+      JSON.stringify(planIdentity(observe(context, true), name,
+        environmentName(process.env.TF_ENVIRONMENT, process.env.TF_VAR_FILE))));
   } else if (mode === 'verify-plan') {
     verifyPlan(observe(context, true), process.env.TF_PLAN, path.join(directory, 'saved-plan'), process.env.TF_ENVIRONMENT || '');
   } else {
     throw new Error('Unknown toolchain operation');
   }
 }
-module.exports = { prepare, selections, observe, planIdentity, verifyPlan, sha256, inside, contextFile, output };
+module.exports = { prepare, selections, observe, planIdentity, verifyPlan, sha256, inside, contextFile, output, environmentName, gitExecutable };
 if (require.main === module) {
   try { main(); } catch (error) { console.error(`Terraform toolchain rejected: ${error.message}`); process.exitCode = 1; }
 }

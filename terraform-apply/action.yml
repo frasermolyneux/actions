@@ -6,8 +6,8 @@ inputs:
     description: "Optional exact assertion matching the committed root .terraform-version"
     default: ""
   terraform-environment:
-    description: "Environment name for saved-plan identity and execution evidence"
-    default: ""
+    description: "Required nonempty environment identity matching the saved-plan producer"
+    required: true
   terraform-folder:
     description: "The folder containing the Terraform projects"
     required: true
