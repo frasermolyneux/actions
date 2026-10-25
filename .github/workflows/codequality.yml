@@ -2,6 +2,10 @@ name: reusable-code-quality
 
 on:
   workflow_call:
+    outputs:
+      quality-evidence-artifact-id:
+        description: Structured test artifact ID when .NET test-reporting is enabled.
+        value: ${{ jobs.test-results.outputs.evidence-artifact-id }}
     inputs:
       sonar-project-key:
         description: SonarCloud project key (e.g., frasermolyneux_portal-server-events).
@@ -121,6 +125,8 @@ jobs:
       security-events: write
     name: Code Quality
     runs-on: ubuntu-latest
+    outputs:
+      test_report: ${{ steps.build-dotnet.outputs.test-report || steps.build-web.outputs.test-report || steps.build-function.outputs.test-report }}
     env:
       SONAR_CACHE_DIR: ~/.sonar/cache
       SONAR_SCANNER_DIR: $RUNNER_TEMP/sonar-scanner
@@ -200,6 +206,7 @@ jobs:
             /d:sonar.host.url="${{ inputs.sonar-host-url }}"
 
       - name: Build and test (.NET)
+        id: build-dotnet
         if: inputs.build-target == 'dotnet-ci'
         uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v2
         with:
@@ -210,6 +217,7 @@ jobs:
           perform-checkout: 'false'
 
       - name: Build and publish (Web)
+        id: build-web
         if: inputs.build-target == 'dotnet-web-ci'
         uses: frasermolyneux/actions/dotnet-web-ci@dotnet-web-ci/v2
         with:
@@ -223,6 +231,7 @@ jobs:
           perform-checkout: 'false'
 
       - name: Build and test (Function)
+        id: build-function
         if: inputs.build-target == 'dotnet-func-ci'
         uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v2
         with:
@@ -277,3 +286,20 @@ jobs:
         uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee
         with:
           category: ${{ inputs.codeql-category }}
+
+  test-results:
+    name: Retain structured test evidence
+    if: always() && inputs.test-reporting && inputs.build-target != 'cmake-ci'
+    needs: [code-quality]
+    permissions: {}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      evidence-artifact-id: ${{ steps.summary.outputs.evidence-artifact-id }}
+    steps:
+      - name: Publish bounded test evidence without PR write permissions
+        id: summary
+        uses: frasermolyneux/actions/test-results-summary@28f6613d746ec836d245f10259ea124897d8254a # test-results-summary/v1.1.0
+        with:
+          jobs: ${{ toJSON(needs) }}
+          publish-comment: "false"

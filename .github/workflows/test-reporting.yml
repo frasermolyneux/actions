@@ -10,6 +10,64 @@ permissions:
   contents: read
 
 jobs:
+  shared-quality-producer:
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    uses: $/.github/workflows/codequality.yml
+    with:
+      sonar-project-key: fixture-unused-no-analysis
+      build-target: dotnet-ci
+      dotnet-version: |
+        9.0.x
+        10.0.x
+      src-folder: .github
+      test-reporting: true
+      skip-format-check: true
+      skip-sonar: true
+      skip-codeql: true
+
+  verify-shared-quality-evidence:
+    needs: [shared-quality-producer]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the actual shared-workflow artifact identity
+        shell: pwsh
+        env:
+          ARTIFACT_ID: ${{ needs.shared-quality-producer.outputs.quality-evidence-artifact-id }}
+        run: |
+          if ($env:ARTIFACT_ID -notmatch '^[1-9][0-9]+$') {
+            throw 'The reusable workflow must return its exact uploaded evidence artifact ID.'
+          }
+      - name: Download the exact shared-workflow artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.shared-quality-producer.outputs.quality-evidence-artifact-id }}
+          path: ${{ runner.temp }}/shared-quality
+          merge-multiple: true
+      - name: Verify caller identity and all real fixture executions
+        shell: pwsh
+        env:
+          EVIDENCE_FILE: ${{ runner.temp }}/shared-quality/estate-quality.json
+        run: |
+          $evidence = Get-Content -LiteralPath $env:EVIDENCE_FILE -Raw | ConvertFrom-Json
+          if ($evidence.repository -ne $env:GITHUB_REPOSITORY -or
+              $evidence.originSha -ne $env:GITHUB_SHA -or
+              $evidence.workflowRef -ne $env:GITHUB_WORKFLOW_REF -or
+              $evidence.workflowSha -ne $env:GITHUB_WORKFLOW_SHA -or
+              $evidence.runId -ne $env:GITHUB_RUN_ID -or
+              $evidence.attempt -ne [int]$env:GITHUB_RUN_ATTEMPT -or
+              $evidence.job -ne 'test-results' -or
+              $evidence.reports.Count -ne 1 -or
+              $evidence.reports[0].job -ne 'code-quality' -or
+              $evidence.reports[0].suite -ne 'Unit' -or
+              $evidence.reports[0].status -ne 'passed' -or
+              $evidence.reports[0].total -ne 4 -or $evidence.reports[0].passed -ne 4 -or
+              -not $evidence.reports[0].artifactId) {
+            throw 'Shared analysis must preserve caller workflow identity and all four measured fixture executions.'
+          }
+
   contracts:
     strategy:
       fail-fast: false
