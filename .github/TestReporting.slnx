@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="../dotnet-test/fixtures/First/First.csproj" />
+  <Project Path="../dotnet-test/fixtures/Second/Second.csproj" />
+</Solution>

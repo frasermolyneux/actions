@@ -22,7 +22,7 @@ jobs:
       dotnet-version: |
         9.0.x
         10.0.x
-      src-folder: dotnet-test/fixtures
+      src-folder: .github
       test-reporting: true
       skip-format-check: true
       skip-sonar: true
