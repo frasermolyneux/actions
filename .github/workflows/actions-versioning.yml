@@ -66,6 +66,8 @@ jobs:
             repository-analysis
             repository-publication-origin
             stale-branch-sweep
+            terraform-setup
+            terraform-receipt
             terraform-apply
             terraform-destroy
             terraform-destroy-resources
@@ -97,6 +99,13 @@ jobs:
               PATTERN='^dotnet-test(-report)?/'
             elif [[ "$ACTION" == "repository-analysis-local" || "$ACTION" == "repository-analysis-sarif" || "$ACTION" == "repository-analysis-state" ]]; then
               PATTERN="^(${ACTION}|repository-analysis-context)/"
+            elif [[ "$ACTION" == "terraform-receipt" ]]; then
+              PATTERN='^terraform-(receipt|setup)/'
+            elif [[ "$ACTION" == terraform-* && "$ACTION" != "terraform-setup" ]]; then
+              PATTERN="^(${ACTION}|terraform-setup|terraform-receipt)/"
+              if [[ "$ACTION" == "terraform-plan" || "$ACTION" == "terraform-plan-readonly" || "$ACTION" == "terraform-plan-and-apply" || "$ACTION" == "terraform-import" ]]; then
+                PATTERN="^(${ACTION}|terraform-setup|terraform-receipt|terraform-pr-comment)/"
+              fi
             else
               PATTERN="^${ACTION}/"
             fi

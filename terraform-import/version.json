@@ -1,10 +1,12 @@
 {
     "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/master/src/NerdBank.GitVersioning/version.schema.json",
-    "version": "1.4",
+    "version": "2.0",
     "inherit": false,
     "pathFilters": [
-        "terraform-import/**",
-        "terraform-pr-comment/**"
+        "../terraform-import/**",
+        "../terraform-setup/**",
+        "../terraform-receipt/**",
+        "../terraform-pr-comment/**"
     ],
     "publicReleaseRefSpec": [
         "^refs/heads/main$"

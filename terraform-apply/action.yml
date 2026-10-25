@@ -2,70 +2,62 @@ name: "terraform-apply"
 description: "Downloads a Terraform plan artifact and applies it with Azure OIDC authentication"
 
 inputs:
+  terraform-version:
+    description: "Optional exact assertion matching the committed root .terraform-version"
+    default: ""
+  terraform-environment:
+    description: "Required nonempty environment identity matching the saved-plan producer"
+    required: true
   terraform-folder:
     description: "The folder containing the Terraform projects"
     required: true
     default: "terraform"
-    type: string
   terraform-backend-file:
     description: "The backend-file to to be used for the Terraform init (backends/dev.backend.hcl, etc.)"
     required: false
     default: ""
-    type: string
   backend-subscription-id:
     description: "The backend subscription_id if the terraform-backend-file is not being used"
     required: false
-    type: string
   backend-resource-group-name:
     description: "The backend resource_group_name if the terraform-backend-file is not being used"
     required: false
-    type: string
   backend-storage-account-name:
     description: "The backend storage_account_name if the terraform-backend-file is not being used"
     required: false
-    type: string
   backend-container-name:
     description: "The backend container_name if the terraform-backend-file is not being used"
     required: false
     default: "tfstate"
-    type: string
   backend-key:
     description: "The backend key if the terraform-backend-file is not being used"
     required: false
     default: "terraform.tfstate"
-    type: string
   backend-tags:
     description: "The backend tags to be applied to the storage account"
     required: false
-    type: string
     default: ""
   plan-file-name:
     description: "The filename of the previously generated plan artifact (binary .tfplan)."
     required: false
     default: "plan.tfplan"
-    type: string
   plan-artifact-name:
     description: "The GitHub Actions artifact name that contains the plan file."
     required: false
     default: "terraform-plan"
-    type: string
   terraform-additional-apply-args:
     description: "Additional arguments to pass to terraform apply (excluding the plan file)."
     required: false
     default: ""
-    type: string
   AZURE_CLIENT_ID:
     description: "The azure client/application ID configured for federated access"
     required: true
-    type: string
   AZURE_TENANT_ID:
     description: "The target Azure tenant"
     required: true
-    type: string
   AZURE_SUBSCRIPTION_ID:
     description: "The target Azure subscription"
     required: true
-    type: string
   perform-checkout:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
@@ -80,23 +72,25 @@ runs:
       with:
         fetch-depth: 0
 
+    - name: Setup Terraform
+      id: toolchain
+      uses: $/terraform-setup
+      with:
+        terraform-folder: ${{ inputs.terraform-folder }}
+        terraform-version: ${{ inputs.terraform-version }}
+        terraform_wrapper: "false"
+
     - name: Download Terraform Plan Artifact
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
         name: ${{ inputs.plan-artifact-name }}
-        path: ${{ inputs.terraform-folder }}
-
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
-      with:
-        terraform_wrapper: false
+        path: ${{ steps.toolchain.outputs.directory }}/saved-plan
 
     - name: Terraform Init
       shell: pwsh
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd ${{ inputs.terraform-folder }}
-
-        $params = @("init")
+        $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
           $params += "-backend-config=${{ inputs.terraform-backend-file }}"
@@ -127,6 +121,7 @@ runs:
         }
 
         terraform $params
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
@@ -134,11 +129,20 @@ runs:
         ARM_USE_AZUREAD: true
         ARM_USE_OIDC: true
 
-    - name: Terraform Apply (from plan)
+    - name: Verify saved plan source and toolchain before mutation
       shell: bash
+      env:
+        TF_CONTEXT: ${{ steps.toolchain.outputs.directory }}
+        TF_PLAN: ${{ inputs.plan-file-name }}
+        TF_ENVIRONMENT: ${{ inputs.terraform-environment }}
+      run: node "${{ github.action_path }}/../terraform-setup/context.cjs" verify-plan
+
+    - name: Terraform Apply (from plan)
+      id: apply
+      shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         if [ ! -f "${{ inputs.plan-file-name }}" ]; then
           echo "Plan file '${{ inputs.plan-file-name }}' not found in $PWD" >&2
           ls -al
@@ -152,3 +156,12 @@ runs:
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
         ARM_USE_AZUREAD: true
         ARM_USE_OIDC: true
+
+    - name: Publish Terraform apply execution evidence
+      if: always() && steps.toolchain.outcome == 'success'
+      uses: $/terraform-receipt
+      with:
+        context-directory: ${{ steps.toolchain.outputs.directory }}
+        operation: apply
+        outcome: ${{ steps.apply.outcome == 'success' && 'success' || 'failure' }}
+        environment: ${{ inputs.terraform-environment }}
