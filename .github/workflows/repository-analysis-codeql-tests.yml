@@ -26,7 +26,7 @@ jobs:
         with:
           node-version: "22"
           package-manager-cache: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: "3.12"
       - run: node --test repository-analysis-context/origin.test.mjs repository-analysis-codeql/engine.test.mjs repository-analysis-codeql/workflow.test.mjs repository-analysis-codeql/extractor.test.mjs
@@ -80,7 +80,7 @@ jobs:
           assert.equal(context.visibility, "public");
           assert(context.codeql.languages.includes(process.env.LANGUAGE));
           NODE
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: "3.12"
       - name: Exercise byte-bound extraction contracts
@@ -88,7 +88,7 @@ jobs:
       - name: Verify pinned extractor source-format contracts
         run: node --test repository-analysis-codeql/extractor.test.mjs
       - id: init
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         env:
           CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
         with:
@@ -96,7 +96,7 @@ jobs:
           build-mode: none
           tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.1/codeql-bundle-linux64.tar.gz
       - id: analyze
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           category: /language:${{ matrix.language }}
           upload: never
@@ -115,7 +115,7 @@ jobs:
         run: node repository-analysis-codeql/integration.mjs
       - name: Publish only validated same-source output after live-public reauthorization
         id: publish
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           sarif_file: ${{ steps.analyze.outputs.sarif-output }}
           category: /language:${{ matrix.language }}
@@ -179,7 +179,7 @@ jobs:
         with:
           node-version: "22"
           package-manager-cache: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: "3.12"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
@@ -210,7 +210,7 @@ jobs:
           assert(context.codeql.languages.includes(process.env.LANGUAGE));
           NODE
       - id: init
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         env:
           CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
         with:
@@ -227,7 +227,7 @@ jobs:
           source-directory: ${{ github.workspace }}/${{ matrix.directory }}
           github-token: ${{ github.token }}
       - id: analyze
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           upload: never
           upload-database: false
@@ -273,7 +273,7 @@ jobs:
         with:
           node-version: "22"
           package-manager-cache: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: "3.12"
       - id: context
@@ -293,7 +293,7 @@ jobs:
           assert(context.codeql.languages.includes("javascript-typescript"));
           NODE
       - id: init
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         env:
           CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
         with:
@@ -301,7 +301,7 @@ jobs:
           build-mode: none
           tools: https://github.com/github/codeql-action/releases/download/codeql-bundle-v2.27.1/codeql-bundle-linux64.tar.gz
       - id: analyze
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
         with:
           upload: never
           upload-database: false
