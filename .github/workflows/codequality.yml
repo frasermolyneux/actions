@@ -137,6 +137,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up .NET for SonarCloud
+        if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' }}
+        uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
       - name: Set up JDK 17
         if: ${{ inputs.skip-sonar != true }}
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad

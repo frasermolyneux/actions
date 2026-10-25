@@ -2,6 +2,10 @@
 
 Use this reusable workflow to run SonarCloud analysis, CodeQL, and shared build/test composites without duplicating boilerplate across repositories. It supports regular .NET solutions (`dotnet-ci`), ASP.NET/web apps (`dotnet-web-ci`), Azure Functions (`dotnet-func-ci`), and C++/CMake projects (`cmake-ci`).
 
+For .NET Sonar analyses, the requested SDKs are installed before installing or
+starting the scanner, including when the scanner is cached. The supplied SDK
+versions must satisfy the caller's `global.json`.
+
 ## Inputs
 - `sonar-project-key` (required): SonarCloud project key, e.g., `frasermolyneux_portal-server-events`.
 - `sonar-organization` (default `frasermolyneux`): SonarCloud organization key.
