@@ -21,7 +21,7 @@ function client(files, override = {}) {
 test('Terraform files, locks, CLI pins, toolchains and renamed paths always require manual review', () => {
   for (const filename of ['terraform/main.tf', 'edge/main.tf.json', 'edge/.terraform.lock.hcl',
     'root/.terraform-version', '.tool-versions', '.mise.toml', 'mise.toml', 'terraform.rc',
-    'terraform/tfvars/prd.tfvars', 'prd.auto.tfvars', 'prd.auto.tfvars.json']) {
+    'terraform/tfvars/prd.tfvars', 'prd.auto.tfvars', 'prd.auto.tfvars.json', 'prd.tfbackend']) {
     assert.equal(requiresReview({ filename }), true, filename);
     assert.equal(requiresReview({ filename: 'innocent.txt', previous_filename: filename }), true, filename);
   }
@@ -35,6 +35,12 @@ test('Terraform action ref changes are denied while unrelated workflow ref chang
     }
   }
   assert.equal(requiresReview(diff('.github/workflows/ci.yml', '+ - uses: actions/checkout@abcdef')), false);
+  assert.equal(requiresReview(diff('.github/workflows/ci.yml',
+    '@@ -1,2 +1,2 @@\n   terraform_version: >-\n-    1.16.7\n+    1.17.0')), true);
+  assert.equal(requiresReview(diff('.github/workflows/ci.yml',
+    '@@ -1,2 +1,2 @@\n   terraform_version: 1.17.0\n-  node-version: 22\n+  node-version: 24')), false);
+  assert.throws(() => requiresReview(diff('.github/workflows/ci.yml',
+    '@@ -50 +50 @@\n-    1.16.7\n+    1.17.0')), /Ambiguous multiline/);
   assert.throws(() => requiresReview({ filename: '.github/workflows/ci.yml' }), /diff unavailable/);
   assert.equal(requiresReview({ filename: 'package-lock.json' }), false);
 });

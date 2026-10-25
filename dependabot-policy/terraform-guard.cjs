@@ -1,6 +1,28 @@
 const sensitivePath = name => /(?:^|\/)(?:\.terraform-version|\.terraform\.lock\.hcl|\.tool-versions|\.?mise\.toml|\.terraformrc|terraform\.rc)$/.test(name) ||
-  /\.(?:tf|tf\.json|tfvars|tfvars\.json|hcl)$/.test(name);
+  /\.(?:tf|tf\.json|tfvars|tfvars\.json|tfbackend|hcl)$/.test(name);
 const workflowPath = name => /^\.github\/workflows\/.*\.ya?ml$/.test(name) || /(?:^|\/)action\.ya?ml$/.test(name);
+function multilineVersionChanged(patch) {
+  let terraformIndent;
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('@@')) { terraformIndent = undefined; continue; }
+    const content = line.slice(1);
+    const changed = /^[+-]/.test(line);
+    const key = content.match(/^(\s*)['"]?terraform[_-]version['"]?\s*:/i);
+    if (key) {
+      if (changed) return true;
+      terraformIndent = key[1].length;
+      continue;
+    }
+    if (!content.trim()) continue;
+    const indent = content.match(/^\s*/)[0].length;
+    if (terraformIndent !== undefined && indent <= terraformIndent) terraformIndent = undefined;
+    if (changed && terraformIndent !== undefined) return true;
+    if (changed && /^\s+['"]?\d+\.\d+\.\d+['"]?\s*$/.test(content)) {
+      throw new Error('Ambiguous multiline workflow version diff');
+    }
+  }
+  return false;
+}
 function requiresReview(file) {
   const names = [file.filename, file.previous_filename].filter(Boolean);
   if (names.some(sensitivePath)) return true;
@@ -12,6 +34,7 @@ function requiresReview(file) {
         changed.filter(line => line.startsWith('-')).length !== file.deletions) {
       throw new Error('Workflow diff incomplete');
     }
+    if (multilineVersionChanged(file.patch)) return true;
     return file.patch.split('\n').some(line => /^[+-](?![+-])/.test(line) &&
       (/(?:[^@\s'"]*\/terraform-[^@\s'"]*|hashicorp\/setup-terraform)@/i.test(line) ||
        /\bterraform[_-]version\b/i.test(line)));

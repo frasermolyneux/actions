@@ -108,8 +108,9 @@ root locks/pins, Terraform toolchain version files and Terraform action-referenc
 changes. Labels and minor/patch metadata cannot override this guard. Changed files
 are paged completely (100/page, maximum 30 pages/3,000 files), with count,
 duplicate and head/base stability checks. Missing/truncated diffs or API failures
-block auto-merge. Terraform variable files (including auto-loaded JSON variants)
-and folded/multiline action references are included. A blocked Terraform decision
+block auto-merge. Terraform variable files (including auto-loaded JSON variants),
+`.tfbackend` backend files, and folded/multiline action/version values are included.
+A blocked Terraform decision
 revokes any existing auto-merge request; missing permission or unverifiable
 revocation fails the action instead of silently leaving auto-merge enabled.
 Unrelated dependency metadata and major-label behavior remain.
