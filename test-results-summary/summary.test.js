@@ -2,6 +2,8 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { marker, validateReport, normalize, publish } = require('./summary');
 
 const passing = { schema: 1, suite: 'Unit', status: 'passed', reason: 'completed', total: 2, executed: 2,
@@ -38,17 +40,23 @@ test('supports multiple named reports without duplicating unrelated outputs', ()
 
 function setup(t, { event = 'pull_request', actor = 'developer', author = 'developer', repo = 'owner/repo', comments = [], latest } = {}) {
   const previous = { ...process.env };
-  Object.assign(process.env, { TEST_SUMMARY_JOBS: jobs('success'), TEST_SUMMARY_PUBLISH: 'true', GITHUB_RUN_ATTEMPT: '1', GITHUB_SERVER_URL: 'https://github.com' });
+  const environment = {
+    TEST_SUMMARY_JOBS: jobs('success'), TEST_SUMMARY_PUBLISH: 'true', TEST_SUMMARY_EVIDENCE: 'false',
+    GITHUB_RUN_ATTEMPT: '1', GITHUB_SERVER_URL: 'https://github.com',
+    GITHUB_WORKFLOW_REF: 'owner/repo/.github/workflows/build.yml@refs/heads/main', GITHUB_WORKFLOW_SHA: 'a'.repeat(40),
+  };
+  Object.assign(process.env, environment);
   t.after(() => {
-    for (const key of ['TEST_SUMMARY_JOBS', 'TEST_SUMMARY_PUBLISH', 'GITHUB_RUN_ATTEMPT', 'GITHUB_SERVER_URL']) {
+    for (const key of Object.keys(environment)) {
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
     }
   });
   const calls = [];
   const context = { repo: { owner: 'owner', repo: 'repo' }, sha: 'a'.repeat(40), runId: 100, eventName: event, actor,
+    ref: 'refs/heads/main', job: 'test-results',
     payload: { pull_request: { number: 3, head: { sha: 'b'.repeat(40), repo: { full_name: repo } }, user: { login: author } } } };
-  const core = { setOutput: (name, value) => calls.push(['output', value]), info() {}, warning() {},
+  const core = { setOutput: (name, value) => calls.push(['output', value, name]), info() {}, warning() {},
     summary: { addRaw(body) { calls.push(['summary', body]); return this; }, async write() {} } };
   const github = { paginate: async () => comments, rest: {
     pulls: { get: async () => { calls.push(['get']); return { data: latest || { state: 'open', head: { sha: context.payload.pull_request.head.sha } } }; } },
@@ -57,6 +65,51 @@ function setup(t, { event = 'pull_request', actor = 'developer', author = 'devel
   } };
   return { calls, context, core, github };
 }
+
+test('retains only sanitized suites with exact run-attempt and workflow identity', async t => {
+  const fixture = setup(t, { event: 'push' });
+  process.env.TEST_SUMMARY_EVIDENCE = 'true';
+  process.env.GITHUB_RUN_ATTEMPT = '2';
+  process.env.TEST_SUMMARY_JOBS = JSON.stringify({ build: { result: 'failure',
+    outputs: { test_report: JSON.stringify({ ...passing, secret: 'must-not-retain' }), unrelated: 'must-not-retain' } } });
+  await publish(fixture);
+  const file = fixture.calls.find(call => call[2] === 'evidence-path')[1];
+  t.after(() => { fs.unlinkSync(file); fs.rmdirSync(path.dirname(file)); });
+  const text = fs.readFileSync(file, 'utf8');
+  const evidence = JSON.parse(text);
+  assert.equal(evidence.repository, 'owner/repo');
+  assert.equal(evidence.runId, '100');
+  assert.equal(evidence.attempt, 2);
+  assert.equal(evidence.workflowSha, 'a'.repeat(40));
+  assert.equal(evidence.originSha, fixture.context.sha);
+  assert.equal(evidence.reports[0].status, 'failed');
+  assert.equal(evidence.reports[0].reason, 'job-failed');
+  assert.equal(evidence.reports[0].artifactId, '123');
+  assert.ok(!text.includes('must-not-retain'));
+  assert.ok(Buffer.byteLength(text) <= 49152);
+  assert.ok(!fixture.calls.some(([name]) => ['create', 'update'].includes(name)));
+});
+
+test('evidence publication fails explicitly for missing or mismatched workflow identity', async t => {
+  const fixture = setup(t);
+  process.env.TEST_SUMMARY_EVIDENCE = 'true';
+  for (const reference of ['', 'another/repo/.github/workflows/build.yml@refs/heads/main',
+    'owner/repo/.github/workflows/build.yml@refs/heads/another']) {
+    process.env.GITHUB_WORKFLOW_REF = reference;
+    await assert.rejects(publish(fixture), /originating workflow identity/);
+  }
+  assert.ok(!fixture.calls.some(call => call[2] === 'evidence-path'));
+});
+
+test('prepared evidence remains available when PR comment publication fails', async t => {
+  const fixture = setup(t);
+  process.env.TEST_SUMMARY_EVIDENCE = 'true';
+  fixture.github.rest.issues.createComment = async () => { throw new Error('permission denied'); };
+  await assert.rejects(publish(fixture), /permission denied/);
+  const file = fixture.calls.find(call => call[2] === 'evidence-path')[1];
+  t.after(() => { fs.unlinkSync(file); fs.rmdirSync(path.dirname(file)); });
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).reports[0].total, 2);
+});
 
 test('creates one bounded comment with artifact links', async t => {
   const fixture = setup(t);

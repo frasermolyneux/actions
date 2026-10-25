@@ -191,6 +191,22 @@ The summary accepts at most 32 jobs/64 reports and outputs at most 32 KiB of san
 It never includes test names, stack traces, arbitrary report fields, or inferred cross-suite totals.
 Portal-web keeps its richer coverage/provenance, browser bootstrap and required-suite policy local.
 
+Version 1.1 also retains `estate-quality.json` in a unique
+`mxio-test-evidence-*` artifact for seven days by default. It contains only the
+sanitized reports and authoritative job outcomes, plus repository, originating
+workflow revision, event/ref, run ID and exact attempt. It never archives the
+raw `needs` object, test names, traces or arbitrary outputs. Set
+`publish-evidence: "false"` to disable this artifact independently of comments;
+`evidence-artifact-id` exposes its ID.
+
+This envelope is not an independent attestation of tested source, coverage
+import, or a complete workflow test population. `originSha` is the workflow
+context SHA, not proof that a custom checkout tested that revision. Consumers
+must independently verify GitHub run/attempt and artifact metadata, qualify
+the reviewed producer workflow and actual checkout contract, reject untrusted
+PR/branch origins for estate health, and bound archive processing. Evidence
+from a failed/skipped job remains non-success even if its test counters passed.
+
 ## Validation
 
 `node --test dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js` exercises release ordering, parsing,

@@ -46,6 +46,51 @@ jobs:
           no-build: "false"
           artifact-name: test-reporting-smoke-${{ matrix.os }}
 
+      - name: Retain the real test execution as structured evidence
+        id: evidence-smoke
+        uses: ./test-results-summary
+        with:
+          publish-comment: "false"
+          jobs: >-
+            {"smoke":{"result":"${{ steps.smoke.outcome }}","outputs":{"test_report":${{ toJSON(steps.smoke.outputs.report) }}}}}
+
+      - name: Verify structured evidence was uploaded
+        shell: pwsh
+        env:
+          EVIDENCE_ARTIFACT_ID: ${{ steps.evidence-smoke.outputs.evidence-artifact-id }}
+        run: |
+          if ($env:EVIDENCE_ARTIFACT_ID -notmatch '^[1-9][0-9]+$') {
+            throw 'Structured test evidence must have a real uploaded artifact ID.'
+          }
+
+      - name: Download the actual structured evidence artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ steps.evidence-smoke.outputs.evidence-artifact-id }}
+          path: ${{ runner.temp }}/estate-quality-smoke
+          merge-multiple: true
+
+      - name: Verify retained identity and measured counters
+        shell: pwsh
+        env:
+          EVIDENCE_FILE: ${{ runner.temp }}/estate-quality-smoke/estate-quality.json
+          SOURCE_ARTIFACT_ID: ${{ steps.smoke.outputs.artifact-id }}
+        run: |
+          $evidence = Get-Content -LiteralPath $env:EVIDENCE_FILE -Raw | ConvertFrom-Json
+          if ($evidence.schema -ne 1 -or $evidence.kind -ne 'test-summary' -or
+              $evidence.repository -ne $env:GITHUB_REPOSITORY -or
+              $evidence.originSha -ne $env:GITHUB_SHA -or
+              $evidence.runId -ne $env:GITHUB_RUN_ID -or
+              $evidence.attempt -ne [int]$env:GITHUB_RUN_ATTEMPT -or
+              $evidence.workflowRef -ne $env:GITHUB_WORKFLOW_REF -or
+              $evidence.workflowSha -ne $env:GITHUB_WORKFLOW_SHA -or
+              $evidence.reports.Count -ne 1 -or
+              $evidence.reports[0].status -ne 'passed' -or
+              $evidence.reports[0].total -ne 4 -or $evidence.reports[0].passed -ne 4 -or
+              $evidence.reports[0].artifactId -ne $env:SOURCE_ARTIFACT_ID) {
+            throw 'Downloaded evidence must retain exact workflow/attempt identity and actual test counters.'
+          }
+
       - name: Check out reviewed fixture source independently of the caller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
