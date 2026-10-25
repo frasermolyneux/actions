@@ -103,9 +103,8 @@ runs:
 
     - name: Terraform Init
       shell: pwsh
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd "${{ inputs.terraform-folder }}"
-
         $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
@@ -149,9 +148,9 @@ runs:
       id: validate
       continue-on-error: true
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         terraform validate
     
     - name: Terraform Plan
@@ -159,9 +158,9 @@ runs:
       if: steps.validate.outputs.exitcode == '0'
       continue-on-error: true
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         terraform plan -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" ${{ inputs.terraform-additional-args }}
         # Show the plan in the logs (human readable)
         terraform show "${{ inputs.plan-file-name }}"

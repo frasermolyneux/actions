@@ -16,6 +16,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: '22'
@@ -30,7 +32,7 @@ jobs:
         run: node --test terraform-setup/context.test.cjs dependabot-policy/terraform-guard.test.cjs
       - name: Exercise actual pinned setup with HashiCorp wrapper enabled
         id: setup-smoke
-        uses: ./terraform-setup
+        uses: $/terraform-setup
         with:
           terraform-folder: terraform-setup/fixtures
           terraform_wrapper: 'true'
@@ -43,7 +45,7 @@ jobs:
           terraform -chdir=terraform-setup/fixtures validate
       - name: Exercise actual metadata-only receipt artifact publication
         if: always() && steps.setup-smoke.outcome == 'success'
-        uses: ./terraform-receipt
+        uses: $/terraform-receipt
         with:
           context-directory: ${{ steps.setup-smoke.outputs.directory }}
           operation: validate

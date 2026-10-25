@@ -101,9 +101,8 @@ runs:
 
     - name: Terraform Init
       shell: pwsh
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd "${{ inputs.terraform-folder }}"
-
         $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
@@ -147,9 +146,9 @@ runs:
       id: validate
       continue-on-error: true
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         terraform validate
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
@@ -162,9 +161,9 @@ runs:
       id: operation
       if: steps.validate.outcome == 'success'
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         terraform import -var-file=${{ inputs.terraform-var-file }} ${{ inputs.terraform-additional-args }} ${{ inputs.import-address }} ${{ inputs.import-id }}
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
@@ -178,9 +177,9 @@ runs:
       if: steps.validate.outputs.exitcode == '0'
       continue-on-error: true
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         # Tee the plan to a file for the PR comment step. The comment reads this from a
         # file (not an environment variable) so large plans do not exceed the process
         # env/argument size limit when the PR-comment step spawns Node. Keep stderr on

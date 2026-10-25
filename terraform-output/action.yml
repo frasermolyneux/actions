@@ -75,9 +75,8 @@ runs:
     - name: Terraform Init
       id: init
       shell: pwsh
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd "${{ inputs.terraform-folder }}"
-
         $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
@@ -120,9 +119,9 @@ runs:
     - name: Verify Terraform output read
       id: operation
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         terraform output -json >/dev/null
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}

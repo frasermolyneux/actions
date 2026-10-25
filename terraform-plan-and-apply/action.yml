@@ -98,9 +98,8 @@ runs:
 
     - name: Terraform Init
       shell: pwsh
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd "${{ inputs.terraform-folder }}"
-
         $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
@@ -142,17 +141,17 @@ runs:
 
     - name: Terraform Validate
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd "${{ inputs.terraform-folder }}"
         terraform validate
 
     - name: Terraform Plan
       id: plan
       continue-on-error: true
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         terraform plan -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" ${{ inputs.terraform-additional-args }}
         # Show the plan in human readable form
         terraform show "${{ inputs.plan-file-name }}"
@@ -205,9 +204,9 @@ runs:
       id: apply
       if: steps.plan.outputs.exitcode == '0'
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         if [ ! -f "${{ inputs.plan-file-name }}" ]; then
           echo "Expected plan file '${{ inputs.plan-file-name }}' not found" >&2
           ls -al

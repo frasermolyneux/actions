@@ -88,9 +88,8 @@ runs:
 
     - name: Terraform Init
       shell: pwsh
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd "${{ inputs.terraform-folder }}"
-
         $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
@@ -141,9 +140,9 @@ runs:
     - name: Terraform Apply (from plan)
       id: apply
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         if [ ! -f "${{ inputs.plan-file-name }}" ]; then
           echo "Plan file '${{ inputs.plan-file-name }}' not found in $PWD" >&2
           ls -al

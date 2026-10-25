@@ -82,9 +82,8 @@ runs:
 
     - name: Terraform Init
       shell: pwsh
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
-        cd "${{ inputs.terraform-folder }}"
-
         $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
@@ -126,9 +125,9 @@ runs:
 
     - name: Terraform Validate
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         terraform validate
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
@@ -140,9 +139,9 @@ runs:
     - name: Parse and remove state addresses
       id: operation
       shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.terraform-folder }}"
         
         # Parse the JSON array of state addresses
         echo '${{ inputs.state-addresses }}' | jq -r '.[]' | while read -r address; do
