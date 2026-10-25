@@ -15,7 +15,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: ./.github/workflows/codequality.yml
+    uses: $/.github/workflows/codequality.yml
     with:
       sonar-project-key: fixture-unused-no-analysis
       build-target: dotnet-ci

@@ -299,7 +299,7 @@ jobs:
     steps:
       - name: Publish bounded test evidence without PR write permissions
         id: summary
-        uses: frasermolyneux/actions/test-results-summary@test-results-summary/v1.1.0
+        uses: frasermolyneux/actions/test-results-summary@28f6613d746ec836d245f10259ea124897d8254a # test-results-summary/v1.1.0
         with:
           jobs: ${{ toJSON(needs) }}
           publish-comment: "false"
