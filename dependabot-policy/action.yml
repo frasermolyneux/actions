@@ -76,12 +76,14 @@ runs:
           let reason = 'Dependabot policy is not applicable for non-Dependabot pull requests.';
 
           if (isDependabot) {
+            const { terraformGuard } = require('${{ github.action_path }}/terraform-guard.cjs');
+            const guard = await terraformGuard(github, context);
             const hasUpdateType = Boolean(updateType);
-            autoMergeAllowed = hasUpdateType && allowedUpdateTypes.has(updateType);
-            policyCode = hasUpdateType
+            autoMergeAllowed = !guard.blocked && hasUpdateType && allowedUpdateTypes.has(updateType);
+            policyCode = guard.blocked ? guard.code : hasUpdateType
               ? (autoMergeAllowed ? 'allowed_update_type' : 'blocked_update_type')
               : 'metadata_unavailable';
-            reason = autoMergeAllowed
+            reason = guard.blocked ? guard.reason : autoMergeAllowed
               ? `Dependabot auto-merge is allowed for update type: ${updateType}.`
               : hasUpdateType
                 ? `Dependabot auto-merge is blocked for update type: ${updateType}. Manual review required.`

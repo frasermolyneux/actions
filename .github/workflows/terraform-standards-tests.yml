@@ -1,0 +1,51 @@
+name: Terraform standards contracts
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions: {}
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Install Terraform for isolated native fixture (no cloud backend)
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_version: '1.17.0'
+          terraform_wrapper: 'false'
+      - name: Test pin, lock, saved plan, receipt and manual-review behavior
+        env:
+          TERRAFORM_NATIVE_TEST: '1'
+        run: node --test terraform-setup/context.test.cjs dependabot-policy/terraform-guard.test.cjs
+      - name: Exercise actual pinned setup with HashiCorp wrapper enabled
+        id: setup-smoke
+        uses: ./terraform-setup
+        with:
+          terraform-folder: terraform-setup/fixtures
+          terraform_wrapper: 'true'
+      - name: Validate genuine fixture using readonly init
+        id: validate-smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir=terraform-setup/fixtures init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=terraform-setup/fixtures validate
+      - name: Exercise actual metadata-only receipt artifact publication
+        if: always() && steps.setup-smoke.outcome == 'success'
+        uses: ./terraform-receipt
+        with:
+          context-directory: ${{ steps.setup-smoke.outputs.directory }}
+          operation: validate
+          outcome: ${{ steps.validate-smoke.outcome == 'success' && 'success' || 'failure' }}
+          environment: fixture

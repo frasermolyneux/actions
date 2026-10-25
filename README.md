@@ -6,6 +6,8 @@
 [![Devops Secure Scanning](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml)
 
 ## Documentation
+- [docs/terraform-standards.md](docs/terraform-standards.md) - Terraform v2 root pins,
+  readonly provider locks, source-bound saved plans and metadata-only execution receipts.
 - [docs/workflow-linting.md](docs/workflow-linting.md) - Released-parser compatibility
   for commit-bound self references without disabling workflow or ShellCheck rules.
 - [docs/action-versioning.md](docs/action-versioning.md) - Tagging strategy and guidance for selecting version pins.

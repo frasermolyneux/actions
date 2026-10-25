@@ -1,0 +1,42 @@
+name: terraform-setup
+description: Install and verify the exact committed root Terraform toolchain
+inputs:
+  terraform-folder:
+    description: Repository-relative Terraform execution root
+    required: true
+  terraform-version:
+    description: Optional exact assertion; must equal the root .terraform-version
+    default: ''
+  terraform_wrapper:
+    description: Enable the HashiCorp command wrapper
+    default: 'true'
+outputs:
+  terraform-version:
+    description: Exact root CLI version
+    value: ${{ steps.prepare.outputs.version }}
+  directory:
+    description: Unique private execution context directory (not an artifact)
+    value: ${{ steps.prepare.outputs.directory }}
+  version:
+    description: Exact root CLI version
+    value: ${{ steps.prepare.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve committed Terraform root toolchain
+      id: prepare
+      shell: bash
+      env:
+        TF_ROOT: ${{ inputs.terraform-folder }}
+        TF_VERSION: ${{ inputs.terraform-version }}
+      run: node "${{ github.action_path }}/context.cjs" prepare
+    - name: Install pinned Terraform
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+      with:
+        terraform_version: ${{ steps.prepare.outputs.version }}
+        terraform_wrapper: ${{ inputs.terraform_wrapper }}
+    - name: Verify installed Terraform without wrapper output
+      shell: bash
+      env:
+        TF_CONTEXT: ${{ steps.prepare.outputs.directory }}
+      run: node "${{ github.action_path }}/context.cjs" observe

@@ -1,0 +1,45 @@
+name: terraform-receipt
+description: Publish a metadata-only Terraform execution receipt without replaying operations
+inputs:
+  context-directory:
+    description: Directory returned by the commit-bound terraform-setup action
+    required: true
+  operation:
+    description: Actual Terraform operation
+    required: true
+  outcome:
+    description: Explicit success or failure from the operation step
+    required: true
+  environment:
+    description: Environment name, never backend coordinates or variable contents
+    default: ''
+  terraform-var-file:
+    description: Var-file path used only to derive the environment name (no contents read)
+    default: ''
+outputs:
+  artifact-name:
+    description: Unique evidence artifact name
+    value: ${{ steps.record.outputs.name }}
+runs:
+  using: composite
+  steps:
+    - name: Record Terraform execution receipt
+      id: record
+      if: always()
+      shell: bash
+      env:
+        TF_CONTEXT: ${{ inputs.context-directory }}
+        TF_OPERATION: ${{ inputs.operation }}
+        TF_OUTCOME: ${{ inputs.outcome }}
+        TF_ENVIRONMENT: ${{ inputs.environment }}
+        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        TF_PRODUCER_REVISION: ${{ github.action_ref }}
+      run: node "${{ github.action_path }}/receipt.cjs"
+    - name: Upload Terraform execution receipt
+      if: always() && steps.record.outcome == 'success'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.record.outputs.name }}
+        path: ${{ steps.record.outputs.file }}
+        if-no-files-found: error
+        retention-days: 30

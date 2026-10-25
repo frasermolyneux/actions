@@ -2,75 +2,66 @@ name: "terraform-plan"
 description: "Runs terraform init, validate, and plan with Azure OIDC authentication, uploads the plan artifact, and optionally posts results to the PR"
 
 inputs:
+  terraform-version:
+    description: "Optional exact assertion matching the committed root .terraform-version"
+    default: ""
+  terraform-environment:
+    description: "Environment name override for execution evidence"
+    default: ""
   terraform-folder:
     description: "The folder containing the Terraform projects"
     required: true
     default: "terraform"
-    type: string
   terraform-var-file:
     description: "The var-file to to be used for the Terraform plan (tfvars/dev.tfvars, tfvars/test.tfvars, tfvars/prod.tfvars, etc.)"
     required: true
     default: "tfvars/dev.tfvars"
-    type: string
   terraform-backend-file:
     description: "The backend-file to to be used for the Terraform plan (backends/dev.backend.hcl, backends/test.backend.hcl, backends/prod.backend.hcl, etc.)"
     required: false
     default: ""
-    type: string
   terraform-additional-args:
     description: "Additional arguments to be passed to the Terraform"
     required: false
     default: ""
-    type: string
   backend-subscription-id:
     description: "The backend subscription_id if the terraform-backend-file is not being used"
     required: false
-    type: string
   backend-resource-group-name:
     description: "The backend resource_group_name if the terraform-backend-file is not being used"
     required: false
-    type: string
   backend-storage-account-name:
     description: "The backend storage_account_name if the terraform-backend-file is not being used"
     required: false
-    type: string
   backend-container-name:
     description: "The backend container_name if the terraform-backend-file is not being used"
     required: false
     default: "tfstate"
-    type: string
   backend-key:
     description: "The backend key if the terraform-backend-file is not being used"
     required: false
     default: "terraform.tfstate"
-    type: string
   backend-tags:
     description: "The backend tags to be applied to the storage account"
     required: false
-    type: string
     default: ""
   AZURE_CLIENT_ID: 
     description: "The azure client/application ID configured for federated access"
     required: true
-    type: string
   AZURE_TENANT_ID: 
     description: "The target Azure tenant"
     required: true
-    type: string
   AZURE_SUBSCRIPTION_ID: 
     description: "The target Azure subscription"
     required: true
-    type: string
   plan-file-name:
     description: "Filename to write the terraform plan output (-out). Saved in the terraform folder."
     required: false
     default: "plan.tfplan"
-    type: string
   plan-artifact-name:
     description: "The GitHub Actions artifact name to upload the plan file as."
     required: false
     default: "terraform-plan"
-    type: string
   perform-checkout:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
@@ -79,22 +70,18 @@ inputs:
     description: "Post Terraform validation/plan results to the pull request using terraform-pr-commenter"
     required: false
     default: "true"
-    type: string
   pr-comment-workspace:
     description: "Optional TF_WORKSPACE to disambiguate PR comments in matrix runs"
     required: false
     default: ""
-    type: string
   pr-comment-expand-summary-details:
     description: "Whether to expand summary details in the PR comment (EXPAND_SUMMARY_DETAILS)"
     required: false
     default: "true"
-    type: string
   pr-comment-highlight-changes:
     description: "Whether to highlight plan changes in the PR comment (HIGHLIGHT_CHANGES)"
     required: false
     default: "true"
-    type: string
 
 runs:
   using: "composite"
@@ -107,16 +94,19 @@ runs:
         fetch-depth: 0
 
     - name: Setup Terraform
-      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+      id: toolchain
+      uses: $/terraform-setup
       with:
-        terraform_wrapper: true
+        terraform-folder: ${{ inputs.terraform-folder }}
+        terraform-version: ${{ inputs.terraform-version }}
+        terraform_wrapper: "true"
 
     - name: Terraform Init
       shell: pwsh
       run: |
-        cd ${{ inputs.terraform-folder }}
+        cd "${{ inputs.terraform-folder }}"
 
-        $params = @("init")
+        $params = @("init", "-input=false", "-lockfile=readonly")
 
         if ("${{ inputs.terraform-backend-file }}" -ne "") {
           $params += "-backend-config=${{ inputs.terraform-backend-file }}"
@@ -146,9 +136,8 @@ runs:
           $params += "-backend-config=tags=${{ inputs.backend-tags }}"
         }
 
-        $params += "-var-file=${{ inputs.terraform-var-file }}"
-
         terraform $params
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
@@ -162,7 +151,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        cd ${{ inputs.terraform-folder }}
+        cd "${{ inputs.terraform-folder }}"
         terraform validate
     
     - name: Terraform Plan
@@ -172,7 +161,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        cd ${{ inputs.terraform-folder }}
+        cd "${{ inputs.terraform-folder }}"
         terraform plan -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" ${{ inputs.terraform-additional-args }}
         # Show the plan in the logs (human readable)
         terraform show "${{ inputs.plan-file-name }}"
@@ -231,12 +220,25 @@ runs:
 
           await fmt.postComment(github, context, marker, body);
 
+    - name: Bind saved plan to source and toolchain
+      if: steps.plan.outcome == 'success'
+      shell: bash
+      env:
+        TF_CONTEXT: ${{ steps.toolchain.outputs.directory }}
+        TF_PLAN: ${{ inputs.plan-file-name }}
+        TF_ENVIRONMENT: ${{ inputs.terraform-environment }}
+      run: node "${{ github.action_path }}/../terraform-setup/context.cjs" save-plan
+
     - name: Upload Terraform Plan Artifact
       if: steps.plan.outputs.exitcode == '0'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ inputs.plan-artifact-name }}
-        path: ${{ inputs.terraform-folder }}/${{ inputs.plan-file-name }}
+        path: |
+          ${{ inputs.terraform-folder }}/${{ inputs.plan-file-name }}
+          ${{ inputs.terraform-folder }}/${{ inputs.plan-file-name }}.metadata.json
+          ${{ inputs.terraform-folder }}/.terraform.lock.hcl
+        include-hidden-files: true
         if-no-files-found: error
 
     - name: Fail if validate or plan failed
@@ -246,3 +248,13 @@ runs:
         echo "Terraform validate exit code: ${{ steps.validate.outputs.exitcode }}"
         echo "Terraform plan exit code: ${{ steps.plan.outputs.exitcode }}"
         exit 1
+
+    - name: Publish Terraform plan execution evidence
+      if: always() && steps.toolchain.outcome == 'success'
+      uses: $/terraform-receipt
+      with:
+        context-directory: ${{ steps.toolchain.outputs.directory }}
+        operation: plan
+        outcome: ${{ steps.validate.outcome == 'success' && steps.plan.outcome == 'success' && 'success' || 'failure' }}
+        environment: ${{ inputs.terraform-environment }}
+        terraform-var-file: ${{ inputs.terraform-var-file }}
