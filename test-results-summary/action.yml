@@ -9,11 +9,18 @@ inputs:
     description: "Update a comment on eligible same-repository pull_request events."
     required: false
     default: "true"
+  publish-evidence:
+    description: "Retain bounded structured test evidence with workflow/run/attempt identity as a seven-day artifact."
+    required: false
+    default: "true"
 
 outputs:
   report:
     description: "Sanitized JSON array of suite reports including authoritative job outcomes."
     value: ${{ steps.summary.outputs.report }}
+  evidence-artifact-id:
+    description: "ID of the structured evidence artifact, when publication is enabled."
+    value: ${{ steps.evidence.outputs.artifact-id }}
 
 runs:
   using: "composite"
@@ -25,8 +32,18 @@ runs:
         TEST_SUMMARY_ACTION_PATH: ${{ github.action_path }}
         TEST_SUMMARY_JOBS: ${{ inputs.jobs }}
         TEST_SUMMARY_PUBLISH: ${{ inputs.publish-comment }}
+        TEST_SUMMARY_EVIDENCE: ${{ inputs.publish-evidence }}
       with:
         script: |
           const path = require('node:path');
           const reporting = require(path.join(process.env.TEST_SUMMARY_ACTION_PATH, 'summary.js'));
           await reporting.publish({ github, core, context });
+    - name: Retain structured test evidence
+      id: evidence
+      if: always() && steps.summary.outputs.evidence-path != ''
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.summary.outputs.evidence-name }}
+        path: ${{ steps.summary.outputs.evidence-path }}
+        retention-days: 7
+        if-no-files-found: error

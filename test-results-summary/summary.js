@@ -1,5 +1,9 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
 const marker = '<!-- shared-test-results:v1 -->';
 const statuses = new Set(['passed', 'failed', 'invalid', 'not-run', 'cancelled']);
 const reasons = {
@@ -96,6 +100,36 @@ function escape(text) {
   return text.replace(/[&<>"'`_*|[\]\\]/g, char => `&#${char.charCodeAt(0)};`);
 }
 
+function retainEvidence(reports, current, context, core) {
+  const workflowRef = process.env.GITHUB_WORKFLOW_REF;
+  const workflowSha = process.env.GITHUB_WORKFLOW_SHA;
+  if (typeof workflowRef !== 'string' || workflowRef.length > 512 ||
+      !workflowRef.startsWith(`${current.repo}/.github/workflows/`) ||
+      !/^refs\/(?:heads|tags|pull)\/[^\u0000-\u0020\u007f]{1,255}$/u.test(context.ref || '') ||
+      !workflowRef.endsWith(`@${context.ref}`) ||
+      !/^[a-f0-9]{40,64}$/.test(workflowSha || '') ||
+      !/^[a-zA-Z_][a-zA-Z0-9_-]{0,99}$/.test(context.job || '') ||
+      !/^[a-z_]{1,64}$/.test(context.eventName || '')) {
+    throw new Error('Structured evidence requires the originating workflow identity.');
+  }
+  const document = {
+    schema: 1, kind: 'test-summary',
+    repository: current.repo, serverUrl: current.serverUrl,
+    originSha: current.sha, headSha: current.headSha,
+    runId: current.runId, attempt: Number(current.attempt),
+    event: context.eventName, ref: context.ref, job: context.job,
+    workflowRef, workflowSha, generatedAt: new Date().toISOString(),
+    reports,
+  };
+  const serialized = JSON.stringify(document);
+  if (Buffer.byteLength(serialized) > 49152) throw new Error('Structured evidence exceeds its size limit.');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'mxio-test-evidence-'));
+  const file = path.join(directory, 'estate-quality.json');
+  fs.writeFileSync(file, serialized, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+  core.setOutput('evidence-path', file);
+  core.setOutput('evidence-name', `mxio-test-evidence-${current.runId}-${current.attempt}-${path.basename(directory)}`);
+}
+
 function render(reports, current) {
   const url = `${current.serverUrl}/${current.repo}/actions/runs/${current.runId}`;
   const lines = [
@@ -120,6 +154,9 @@ async function publish({ github, core, context }) {
   const output = JSON.stringify(reports);
   if (Buffer.byteLength(output) > 32768) throw new Error('Aggregate report exceeds its output limit.');
   core.setOutput('report', output);
+  const evidence = process.env.TEST_SUMMARY_EVIDENCE ?? 'false';
+  if (!['true', 'false'].includes(evidence)) throw new Error('publish-evidence must be true or false.');
+  if (evidence === 'true') retainEvidence(reports, current, context, core);
   const summary = render(reports, current);
   await core.summary.addRaw(summary).write();
   if (reports.some(report => report.status !== 'passed')) {
