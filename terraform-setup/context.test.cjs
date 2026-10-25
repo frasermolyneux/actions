@@ -80,6 +80,10 @@ test('clean native version JSON verifies pin, lock and initialized selections', 
   t.after(() => { cp.execFileSync = original; });
   assert.equal(observe(context, true).platform, 'linux_amd64');
   assert.equal(observedExecutable, binary);
+  version.provider_selections = { 'registry.terraform.io/hashicorp/random': '3.7.3' };
+  assert.throws(() => observe(context, true), /Selected providers/);
+  version.provider_selections = { ...context.providerSelections, 'registry.terraform.io/hashicorp/null': '3.2.4' };
+  assert.throws(() => observe(context, true), /Selected providers/);
   version.provider_selections = {};
   assert.throws(() => observe(context, true), /Selected providers/);
   assert.doesNotThrow(() => observe(context, false));

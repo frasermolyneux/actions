@@ -73,8 +73,11 @@ function observe(context, requireProviders = false) {
   if (sha256(regular(path.join(context.root, '.terraform.lock.hcl'))) !== context.lockSha256) {
     throw new Error('Provider lock changed during execution');
   }
-  if (requireProviders && JSON.stringify(Object.entries(data.provider_selections || {}).sort()) !==
-      JSON.stringify(Object.entries(context.providerSelections).sort())) throw new Error('Selected providers do not match committed lock');
+  const selected = data.provider_selections || {};
+  if (requireProviders && (Object.keys(selected).length !== Object.keys(context.providerSelections).length ||
+      Object.entries(context.providerSelections).some(([address, version]) => selected[address] !== version))) {
+    throw new Error('Selected providers do not match committed lock');
+  }
   return { ...context, platform: data.platform, observedProviderSelections: data.provider_selections || {} };
 }
 function planFile(context, name) {

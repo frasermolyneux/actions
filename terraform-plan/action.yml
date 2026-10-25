@@ -6,7 +6,7 @@ inputs:
     description: "Optional exact assertion matching the committed root .terraform-version"
     default: ""
   terraform-environment:
-    description: "Environment name override for execution evidence"
+    description: "Saved-plan/evidence environment override; otherwise derived from terraform-var-file"
     default: ""
   terraform-folder:
     description: "The folder containing the Terraform projects"
