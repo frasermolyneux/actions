@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const cp = require('node:child_process');
+const { providerLocks, sha256 } = require('../terraform-setup/context.cjs');
 
 function goExecutable() {
   const candidates = process.platform === 'win32'
@@ -9,7 +10,8 @@ function goExecutable() {
     : ['/usr/local/go/bin/go', '/usr/bin/go'];
   const cache = process.platform === 'win32' ? 'C:\\hostedtoolcache\\windows\\go' : '/opt/hostedtoolcache/go';
   if (fs.existsSync(cache)) {
-    for (const version of fs.readdirSync(cache).filter(name => /^\d+\.\d+\.\d+$/.test(name)).sort().reverse())
+    for (const version of fs.readdirSync(cache).filter(name => /^\d+\.\d+\.\d+$/.test(name))
+      .sort((left, right) => right.localeCompare(left, 'en', { numeric: true })))
       candidates.push(path.join(cache, version, 'x64', 'bin', process.platform === 'win32' ? 'go.exe' : 'go'));
   }
   const executable = candidates.find(file => fs.existsSync(file) && fs.statSync(file).isFile());
@@ -35,7 +37,7 @@ function fileHash(file) {
 }
 
 function packageHash(directory) {
-  const files = fs.readdirSync(directory).sort();
+  const files = fs.readdirSync(directory).sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
   if (!files.length || files.length > 20 || files.some(name => /[\r\n]/.test(name) ||
       !fs.lstatSync(path.join(directory, name)).isFile()))
     throw new Error('Provider package contains unsupported entries');
@@ -50,6 +52,14 @@ function parseBuildInfo(text, platform) {
   if (!version || os.length !== 1 || arch.length !== 1 || `${os[0]}_${arch[0]}` !== platform)
     throw new Error('Stable Go version and target platform were not established');
   return version.split('.').length === 2 ? version + '.0' : version;
+}
+
+function committedLocks(context) {
+  const file = path.join(context.root, '.terraform.lock.hcl');
+  if (!fs.lstatSync(file).isFile()) throw new Error('Committed lock must be a regular file');
+  const bytes = fs.readFileSync(file);
+  if (sha256(bytes) !== context.lockSha256) throw new Error('Provider lock changed during binary inspection');
+  return providerLocks(bytes.toString());
 }
 
 function inventory(context, terraformBinary) {
@@ -69,14 +79,17 @@ function inventory(context, terraformBinary) {
   }
   try { inspect('cli', 'hashicorp/terraform', context.terraformVersion, terraformBinary); }
   catch { gaps.push('CLI: stable Go build metadata or binary identity could not be verified.'); }
-  const lock = fs.readFileSync(path.join(context.root, '.terraform.lock.hcl'), 'utf8');
-  for (const [address, version] of Object.entries(context.providerSelections).sort()) {
+  let locks;
+  try { locks = committedLocks(context); } catch {
+    gaps.push('Committed provider lock bytes are unavailable or changed during binary inspection.');
+    return { method: 'go-buildinfo-v1', status: 'partial', artifacts, gaps };
+  }
+  for (const [address, version] of Object.entries(context.providerSelections).sort(([left], [right]) => left.localeCompare(right, 'en'))) {
     try {
       const directory = fs.realpathSync(path.join(context.root, '.terraform', 'providers', address, version, context.platform));
       const hash = packageHash(directory);
-      const escaped = address.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const block = lock.match(new RegExp(`provider\\s+"${escaped}"\\s*\\{([^}]+)\\}`))?.[1];
-      if (!block?.includes(`"${hash}"`)) throw new Error('Installed package does not match a committed h1 checksum');
+      if (locks[address]?.version !== version || !locks[address]?.hashes.includes(hash))
+        throw new Error('Installed package does not match a committed h1 checksum');
       const name = address.split('/').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const pattern = new RegExp(`^terraform-provider-${name}_v${version.replaceAll('.', '\\.')}(?:_x\\d+)?(?:\\.exe)?$`);
       const files = fs.readdirSync(directory).filter(file => pattern.test(file));
@@ -91,4 +104,4 @@ function inventory(context, terraformBinary) {
   }
   return { method: 'go-buildinfo-v1', status: gaps.length ? 'partial' : 'observed', artifacts, gaps };
 }
-module.exports = { inventory, parseBuildInfo, packageHash };
+module.exports = { inventory, parseBuildInfo, packageHash, committedLocks };
