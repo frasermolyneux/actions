@@ -24,18 +24,55 @@ function regular(file) {
   if (!fs.lstatSync(file).isFile()) throw new Error('Expected a regular file');
   return fs.readFileSync(file);
 }
-function selections(lock) {
-  const result = {};
-  const blocks = [...lock.matchAll(/provider\s+"([^"]+)"\s*\{([^}]+)\}/g)];
-  for (const [, address, body] of blocks) {
-    const version = body.match(/^\s*version\s*=\s*"(\d+\.\d+\.\d+)"/m)?.[1];
-    if (!/^[a-z0-9.-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$/.test(address) || !version ||
-        !/hashes\s*=\s*\[[\s\S]*?"(?:h1:[A-Za-z0-9+/=]+|zh:[a-f0-9]{64})"/.test(body) ||
-        result[address]) throw new Error('Invalid provider lock selection/checksums');
-    result[address] = version;
+function providerLocks(lock) {
+  const tokens = (lock.match(/"(?:\\.|[^"\\\r\n])*"|#[^\r\n]*|\/\/[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_]*|[{}\[\]=,]|\s+|./g) || [])
+    .filter(token => !/^\s+$/.test(token) && !/^(?:#|\/\/|\/\*)/.test(token));
+  let index = 0;
+  function take(expected) {
+    const token = tokens[index++];
+    if (expected && token !== expected) throw new Error('Unsupported provider lock syntax');
+    return token;
   }
-  if (!blocks.length) throw new Error('A real provider lock is required');
+  function string() {
+    const token = take();
+    if (!token?.startsWith('"')) throw new Error('Expected a provider lock string');
+    return JSON.parse(token);
+  }
+  const result = {};
+  while (index < tokens.length) {
+    take('provider');
+    const address = string();
+    take('{');
+    const attributes = {};
+    while (tokens[index] !== '}') {
+      const attribute = take();
+      if (!['version', 'constraints', 'hashes'].includes(attribute) || Object.hasOwn(attributes, attribute))
+        throw new Error('Unsupported or duplicate provider lock attribute');
+      take('=');
+      if (attribute !== 'hashes') attributes[attribute] = string();
+      else {
+        take('[');
+        const hashes = [];
+        while (tokens[index] !== ']') {
+          hashes.push(string());
+          if (tokens[index] !== ']') take(',');
+        }
+        take(']');
+        attributes.hashes = hashes;
+      }
+    }
+    take('}');
+    if (!/^[a-z0-9.-]+\/[a-z0-9_-]+\/[a-z0-9_-]+$/.test(address) ||
+        !/^\d+\.\d+\.\d+$/.test(attributes.version || '') ||
+        !attributes.hashes?.length || attributes.hashes.some(hash => !/^(?:h1:[A-Za-z0-9+/=]+|zh:[a-f0-9]{64})$/.test(hash)) ||
+        Object.hasOwn(result, address)) throw new Error('Invalid provider lock selection/checksums');
+    result[address] = { version: attributes.version, hashes: attributes.hashes };
+  }
+  if (!Object.keys(result).length) throw new Error('A real provider lock is required');
   return result;
+}
+function selections(lock) {
+  return Object.fromEntries(Object.entries(providerLocks(lock)).map(([address, value]) => [address, value.version]));
 }
 function prepare(workspace, folder, requested = '') {
   workspace = fs.realpathSync(workspace);
@@ -156,7 +193,7 @@ function main() {
     throw new Error('Unknown toolchain operation');
   }
 }
-module.exports = { prepare, selections, observe, planIdentity, verifyPlan, sha256, inside, contextFile, output, environmentName, gitExecutable };
+module.exports = { prepare, selections, providerLocks, observe, planIdentity, verifyPlan, sha256, inside, contextFile, output, environmentName, gitExecutable, executable };
 if (require.main === module) {
   try { main(); } catch (error) { console.error(`Terraform toolchain rejected: ${error.message}`); process.exitCode = 1; }
 }
