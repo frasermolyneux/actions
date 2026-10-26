@@ -29,7 +29,13 @@ jobs:
       - name: Test pin, lock, saved plan, receipt and manual-review behavior
         env:
           TERRAFORM_NATIVE_TEST: '1'
-        run: node --test terraform-setup/context.test.cjs dependabot-policy/terraform-guard.test.cjs
+          TERRAFORM_BINARY_TEST: '1'
+        run: node --test terraform-setup/context.test.cjs terraform-receipt/binary.test.cjs dependabot-policy/terraform-guard.test.cjs
+      - name: Exercise readonly toolchain validation and binary receipt
+        uses: $/terraform-validate
+        with:
+          terraform-folder: terraform-setup/fixtures
+          terraform-environment: fixture
       - name: Exercise actual pinned setup with HashiCorp wrapper enabled
         id: setup-smoke
         uses: $/terraform-setup

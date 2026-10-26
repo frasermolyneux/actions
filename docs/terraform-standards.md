@@ -86,6 +86,29 @@ are intentionally rejected by v2 apply.
   version; `lockSha256`: lowercase SHA256 of the committed root lock.
 - Optional `producerRevision`: exact actions SHA when determinable from the action
   ref. Mutable/semantic refs and the caller commit are never invented producer SHAs.
+- The receipt helper's v1.1 stream adds optional `binaryInventory` using
+  `go-buildinfo-v1`. It records only CLI/provider identity, exact selection,
+  platform, binary SHA-256 and embedded stable Go version. Provider observations
+  additionally require the installed package's canonical h1 content checksum to
+  match a committed lock checksum. No binary, build flags, module source, absolute
+  paths, state, plans or environment values are uploaded.
+
+The Go tool reads installed binary build metadata; it does not run the inspected
+binary. The reader must exist in a trusted system/hosted-toolcache installation,
+not a checkout-selected PATH location. Unsupported binaries, missing readers,
+changing files, absent platform h1 checksums and bounded-out metadata leave
+explicit partial/unavailable binary coverage. This never reruns an operation or
+turns a failed operation into success. Receipt and operation artifacts remain
+separate. All ten commit-bound operation packages acquire the reviewed helper
+through their existing release dependency closure; caller contracts are unchanged.
+
+`terraform-validate` uses the same commit-bound helpers for an isolated readonly
+init (`-backend=false -lockfile=readonly`), validation and receipt. It has no Azure
+login, plan, state read or apply. Add a literal root-specific job on approved main
+to collect CI binary provenance without rerunning production mutations. Its
+default empty environment is explicitly CI-only, not a production observation.
+Matrix/dynamic invocation trust is not implied; Radar must authenticate the exact
+released producer, caller root, completed run and successful job.
 
 The operation actions report their principal operation (combined plan/apply reports
 `apply`). Success requires successful command steps and verified selected providers.

@@ -156,7 +156,7 @@ function main() {
     throw new Error('Unknown toolchain operation');
   }
 }
-module.exports = { prepare, selections, observe, planIdentity, verifyPlan, sha256, inside, contextFile, output, environmentName, gitExecutable };
+module.exports = { prepare, selections, observe, planIdentity, verifyPlan, sha256, inside, contextFile, output, environmentName, gitExecutable, executable };
 if (require.main === module) {
   try { main(); } catch (error) { console.error(`Terraform toolchain rejected: ${error.message}`); process.exitCode = 1; }
 }

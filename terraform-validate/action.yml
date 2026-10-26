@@ -1,0 +1,39 @@
+name: terraform-validate
+description: Validate the committed Terraform toolchain and publish binary evidence without a cloud backend or apply
+inputs:
+  terraform-folder:
+    description: Repository-relative committed Terraform root
+    required: true
+  terraform-version:
+    description: Optional exact assertion matching the root pin
+    default: ''
+  terraform-environment:
+    description: Optional execution scope; empty means CI toolchain only, never deployment
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Setup Terraform
+      id: toolchain
+      uses: $/terraform-setup
+      with:
+        terraform-folder: ${{ inputs.terraform-folder }}
+        terraform-version: ${{ inputs.terraform-version }}
+        terraform_wrapper: 'false'
+    - name: Terraform Init without backend
+      shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
+      run: terraform init -backend=false -input=false -lockfile=readonly
+    - name: Terraform Validate
+      id: validate
+      shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
+      run: terraform validate
+    - name: Publish Terraform validation execution evidence
+      if: always() && steps.toolchain.outcome == 'success'
+      uses: $/terraform-receipt
+      with:
+        context-directory: ${{ steps.toolchain.outputs.directory }}
+        operation: validate
+        outcome: ${{ steps.validate.outcome == 'success' && 'success' || 'failure' }}
+        environment: ${{ inputs.terraform-environment }}

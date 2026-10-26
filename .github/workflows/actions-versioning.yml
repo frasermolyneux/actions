@@ -68,6 +68,7 @@ jobs:
             stale-branch-sweep
             terraform-setup
             terraform-receipt
+            terraform-validate
             terraform-apply
             terraform-destroy
             terraform-destroy-resources

@@ -1,7 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { observe, contextFile, output, sha256, environmentName } = require('../terraform-setup/context.cjs');
+const { observe, contextFile, output, sha256, environmentName, executable } = require('../terraform-setup/context.cjs');
+const { inventory } = require('./binary.cjs');
 const operations = new Set(['validate', 'plan', 'apply', 'output', 'state-check', 'state-rm', 'import', 'destroy', 'destroy-resources']);
 function receipt(context, env) {
   if (!operations.has(env.TF_OPERATION) || !['success', 'failure'].includes(env.TF_OUTCOME)) {
@@ -29,6 +30,12 @@ function receipt(context, env) {
 function main() {
   const context = observe(contextFile(process.env.TF_CONTEXT), process.env.TF_OUTCOME === 'success');
   const data = receipt(context, process.env);
+  data.binaryInventory = inventory(context, executable());
+  if (Buffer.byteLength(JSON.stringify(data)) > 60_000)
+    data.binaryInventory = { method: 'go-buildinfo-v1', status: 'partial', artifacts: [],
+      gaps: ['Binary inventory exceeded the receipt bound; no binary observations were published.'] };
+  if (data.binaryInventory.status !== 'observed')
+    console.warn(`::warning::Terraform binary evidence is ${data.binaryInventory.status}; ${data.binaryInventory.gaps.length} explicit collection gaps. The operation is not replayed.`);
   const directory = fs.mkdtempSync(path.join(process.env.TF_CONTEXT, 'receipt-'));
   const file = path.join(directory, 'terraform-execution.json');
   fs.writeFileSync(file, JSON.stringify(data, null, 2));
