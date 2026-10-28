@@ -2,6 +2,7 @@ const SHA = /^[a-f0-9]{40}$/;
 const APPROVED_PR_AUTOMATION = [
   { id: 198982749, login: "Copilot", type: "Bot", origin: "copilot" },
   { id: 49699333, login: "dependabot[bot]", type: "Bot", origin: "dependabot" },
+  { id: 264621363, login: "mx-io-idp-bot[bot]", type: "Bot", origin: "repository-standards" },
 ];
 const GITHUB_ACTIONS_ACTOR = { id: 41898282, login: "github-actions[bot]", type: "Bot" };
 const sameIdentity = (actual, expected) => actual?.id === expected.id &&
@@ -44,6 +45,9 @@ export function trustedOrigin(repository, run, pullRequest, input, event) {
   const automation = APPROVED_PR_AUTOMATION.find((identity) => sameIdentity(author, identity));
   const ownerAuthored = sameIdentity(author, owner);
   requireValue(ownerAuthored || automation, "PR author is not the verified owner or approved automation");
+  requireValue(automation?.origin !== "repository-standards" ||
+    pullRequest.head.ref === "automation/repository-standards",
+  "Repository standards automation requires its exact managed branch");
   requireValue(sameIdentity(actor, owner) || (automation && sameIdentity(actor, automation)) ||
     (automation?.origin === "dependabot" && sameIdentity(actor, GITHUB_ACTIONS_ACTOR)),
   "PR analysis actor is not authorized for this trusted author/source pair");
