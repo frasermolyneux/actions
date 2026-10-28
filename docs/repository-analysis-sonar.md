@@ -37,9 +37,12 @@ residual risk is accepted only inside the following authenticated boundary.
 Before source checkout in planning, and again before prepare/begin/end/CLI upload,
 live originating metadata must authorize the exact current PR head, repository
 and personal owner. PR authors must be the repository owner or the exact GitHub
-Copilot/Dependabot service identities (login, immutable ID and bot type). The run
+Copilot, Dependabot or repository-standards App service identity (login, immutable
+ID and bot type). The run
 actor must be that owner or matching approved automation; `github-actions[bot]`
-is accepted only when paired with a verified Dependabot author. Other bots,
+is accepted only when paired with a verified Dependabot author. The
+repository-standards App is additionally confined to the exact
+`automation/repository-standards` head branch. Other bots,
 collaborators, fork authors, draft/closed PRs and superseded heads are denied.
 Outside PRs, analysis is confined to the default branch or explicit owner dispatch.
 Completed proofs record this trust policy and accepted same-runner boundary.

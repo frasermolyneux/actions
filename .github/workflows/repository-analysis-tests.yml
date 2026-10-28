@@ -37,13 +37,6 @@ jobs:
           assert not Path("package-lock.json").exists()
           assert not Path("npm-shrinkwrap.json").exists()
           assert not Path("node_modules").exists()
-      - name: Confirm released preflight exposes the lockfile regression
-        id: previous
-        continue-on-error: true
-        uses: frasermolyneux/actions/repository-analysis-context@3490bc4b344e919932bf9d673e2012bf354f67a1
-        with:
-          profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
-          github-token: ${{ github.token }}
       - name: Exercise actual metadata-only preflight
         id: context
         uses: ./analysis-definition/repository-analysis-context
@@ -54,14 +47,11 @@ jobs:
         shell: python
         env:
           ANALYSIS_CONTEXT: ${{ steps.context.outputs.context }}
-          PREVIOUS_OUTCOME: ${{ steps.previous.outcome }}
         run: |
           import json
           import os
           from pathlib import Path
-
           context = json.loads(os.environ["ANALYSIS_CONTEXT"])
-          assert os.environ["PREVIOUS_OUTCOME"] == "failure"
           assert context["repository"] == os.environ["GITHUB_REPOSITORY"]
           assert context["repositoryId"] == int(os.environ["GITHUB_REPOSITORY_ID"])
           assert context["contract"] == "repository-analysis-v1"

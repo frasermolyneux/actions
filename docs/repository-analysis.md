@@ -86,7 +86,11 @@ run and current PR metadata, bind the immutable originating runtime separately,
 and repeat admission before privileged execution. Public and private metadata
 must remain internally consistent; visibility is never rewritten for admission.
 Only default source, explicit owner dispatch, or an exact owner/approved-automation
-PR author and actor pair is admitted. Both PR repositories, the non-draft/open
+PR author and actor pair is admitted. Approved automation includes the exact
+Copilot, Dependabot and repository-standards App identities; login, immutable ID
+and account type must all match. Repository-standards admission additionally
+requires the exact `automation/repository-standards` head branch. Both PR
+repositories, the non-draft/open
 state and frozen logical head are required. Unknown or missing metadata fails.
 
 This is source authority, not provider entitlement or completed analysis.

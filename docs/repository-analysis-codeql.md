@@ -13,7 +13,8 @@ Metadata-only planning resolves live visibility, immutable called definition,
 run attempt and actual/logical source before initializing licensed tooling.
 Private or unsupported profiles emit an explicit empty native selection:
 they never enter the native job and do not publish private SARIF. Public source
-authorization retains the verified personal owner, Copilot and Dependabot
+authorization retains the verified personal owner, Copilot, Dependabot and
+repository-standards App
 author/actor checks, including reruns, current non-draft PR head and same-repository
 origin. SDK setup precedes manual CodeQL initialization. The analysis-only build
 preserves original compilation commands and receives no Sonar or deployment token.

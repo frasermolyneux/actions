@@ -6,6 +6,7 @@ import { selectAnalysis } from "./policy.mjs";
 const owner = { id: 789, login: "owner", type: "User" };
 const copilot = { id: 198982749, login: "Copilot", type: "Bot" };
 const dependabot = { id: 49699333, login: "dependabot[bot]", type: "Bot" };
+const repositoryStandards = { id: 264621363, login: "mx-io-idp-bot[bot]", type: "Bot" };
 const actions = { id: 41898282, login: "github-actions[bot]", type: "Bot" };
 const input = { repository: "owner/project", repositoryId: 123,
   sourceSha: "a".repeat(40), pullRequest: 42 };
@@ -14,7 +15,8 @@ const repository = (privateRepository) => ({ id: 123, full_name: input.repositor
   private: privateRepository, visibility: privateRepository ? "private" : "public",
   fork: false, archived: false, default_branch: "main", owner });
 const pull = { number: 42, state: "open", draft: false, user: owner,
-  head: { sha: event.pull_request.head.sha, repo: { id: 123, full_name: input.repository } },
+  head: { ref: "automation/repository-standards", sha: event.pull_request.head.sha,
+    repo: { id: 123, full_name: input.repository } },
   base: { repo: { id: 123, full_name: input.repository } } };
 
 test("actual private and public metadata admit the same verified first-party author/actor pairs", () => {
@@ -22,6 +24,8 @@ test("actual private and public metadata admit the same verified first-party aut
     for (const [author, actor, origin] of [
       [owner, owner, "owner"], [copilot, copilot, "copilot"], [copilot, owner, "copilot"],
       [dependabot, dependabot, "dependabot"], [dependabot, actions, "dependabot"],
+      [repositoryStandards, repositoryStandards, "repository-standards"],
+      [repositoryStandards, owner, "repository-standards"],
     ]) {
       const trust = trustedOrigin(repository(privateRepository), { actor },
         { ...pull, user: author }, input, event);
@@ -61,8 +65,37 @@ test("third-party authors, spoofed bots and mismatched actors remain blocked in 
     [{ ...owner, id: 999 }, owner], [{ ...copilot, id: 999 }, copilot],
     [{ ...copilot, type: "User" }, copilot], [actions, actions], [copilot, actions],
     [owner, copilot], [dependabot, { ...dependabot, id: 999 }],
+    [{ ...repositoryStandards, id: 999 }, repositoryStandards],
+    [{ ...repositoryStandards, login: "repository-standards[bot]" }, repositoryStandards],
+    [{ ...repositoryStandards, type: "User" }, repositoryStandards],
+    [repositoryStandards, { ...repositoryStandards, id: 999 }],
+    [repositoryStandards, { ...repositoryStandards, login: "repository-standards[bot]" }],
+    [repositoryStandards, actions], [repositoryStandards, copilot],
   ]) assert.throws(() => trustedOrigin(repository(true), { actor },
     { ...pull, user: author }, input, event), /author|actor/);
+});
+
+test("repository standards automation requires its exact managed branch for App and owner actors", () => {
+  for (const actor of [repositoryStandards, owner]) {
+    assert.equal(trustedOrigin(repository(true), { actor },
+      { ...pull, user: repositoryStandards }, input, event).origin, "repository-standards");
+    for (const ref of [
+      "Automation/repository-standards",
+      "automation/Repository-standards",
+      "automation/repository-standard",
+      "automation/repository-standards-extra",
+      "automation/repository-standards/",
+      "repository-standards",
+      undefined,
+    ]) {
+      assert.throws(() => trustedOrigin(repository(true), { actor },
+        { ...pull, user: repositoryStandards, head: { ...pull.head, ref } }, input, event),
+      /exact managed branch/);
+    }
+  }
+  assert.equal(trustedOrigin(repository(true), { actor: copilot },
+    { ...pull, user: copilot, head: { ...pull.head, ref: "copilot/change" } }, input, event).origin,
+  "copilot");
 });
 
 test("forks, missing base origins, closed/draft PRs and changed logical heads fail closed", () => {
