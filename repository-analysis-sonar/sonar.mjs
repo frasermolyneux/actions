@@ -46,6 +46,22 @@ const BINDING = {
 const ALLOWED_PROPERTIES = new Set([...Object.values(BINDING),
   "sonar.branch.name", "sonar.pullrequest.key", "sonar.pullrequest.branch",
   "sonar.pullrequest.base", "sonar.cs.cobertura.reportsPaths"]);
+const SONAR_RULE = /^[A-Za-z][A-Za-z0-9_.-]*:[A-Za-z0-9_.-]+$/;
+const SAFE_GLOB = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[,\\\s])[A-Za-z0-9._/*?-]+$/;
+export const ACTIONABLE_RULES = [
+  "csharpsquid:S2699", "csharpsquid:S3237", "csharpsquid:S3427",
+  "javascript:S2004", "javascript:S2699", "javascript:S3358", "javascript:S3776",
+  "javascript:S5843", "javascript:S6353", "javascript:S6535", "javascript:S6582",
+  "javascript:S7758", "javascript:S7767", "javascript:S7770", "javascript:S7772",
+  "javascript:S7773", "javascript:S7776", "javascript:S7780", "javascript:S7781",
+  "javascript:S7785", "javascript:S7786", "javascript:S9382",
+  "python:S1192", "python:S3776", "python:S5778", "shell:S7677",
+  "Web:InputWithoutLabelCheck", "Web:S5254", "Web:S5256", "Web:S6840",
+  "Web:S6843", "Web:S6845", "Web:S6850", "Web:S6853",
+];
+export const COMMON_EXCLUSIONS = [
+  "**/node_modules/**", "**/vendor/**", "**/wwwroot/lib/**", "**/*.min.js", "**/*.min.css",
+];
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
 const coveragePin = JSON.parse(await readFile(new URL("../dotnet-test/coverage-tools.json", import.meta.url), "utf8"));
@@ -74,6 +90,74 @@ export async function definitionDigest() {
 function object(value, fields, label) {
   requireValue(value && typeof value === "object" && !Array.isArray(value) &&
     Object.keys(value).every((key) => fields.includes(key)), `Invalid ${label}`);
+}
+
+function exactObject(value, fields, label) {
+  object(value, fields, label);
+  requireValue(Object.keys(value).length === fields.length, `Invalid ${label}`);
+}
+
+function policyReason(value) {
+  return typeof value === "string" && value === value.trim() &&
+    [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value)].length >= 10 &&
+    [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value)].length <= 240 &&
+    !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\ud800-\udfff\ufffe\uffff]/u.test(value);
+}
+
+export function validateManagedPolicy(value) {
+  exactObject(value, ["version", "provenance", "profiles", "ignoredRules", "exclusions"],
+    "managed Sonar policy");
+  requireValue(value.version === "sonar-policy-v1" &&
+    value.provenance === "repository-standards-v1" &&
+    Array.isArray(value.profiles) && value.profiles.length <= 2 &&
+    value.profiles.every((name) => ["actionable-only", "common-vendor-assets"].includes(name)) &&
+    new Set(value.profiles).size === value.profiles.length &&
+    Array.isArray(value.ignoredRules) && value.ignoredRules.length <= 128 &&
+    Array.isArray(value.exclusions) && value.exclusions.length <= 64,
+  "Invalid managed Sonar policy");
+  const rules = new Set();
+  for (const rule of value.ignoredRules) {
+    exactObject(rule, ["key", "reason"], "managed Sonar ignored rule");
+    requireValue(SONAR_RULE.test(rule.key ?? "") && !rules.has(rule.key) && policyReason(rule.reason),
+      "Invalid managed Sonar ignored rule");
+    rules.add(rule.key);
+  }
+  requireValue(JSON.stringify([...rules]) === JSON.stringify(
+    value.profiles.includes("actionable-only") ? ACTIONABLE_RULES : []),
+  "Managed Sonar ignored rules do not match the approved profile");
+  const patterns = new Set();
+  for (const exclusion of value.exclusions) {
+    exactObject(exclusion, ["pattern", "reason"], "managed Sonar exclusion");
+    requireValue(typeof exclusion.pattern === "string" && exclusion.pattern.length <= 240 &&
+      SAFE_GLOB.test(exclusion.pattern) && !patterns.has(exclusion.pattern) &&
+      policyReason(exclusion.reason), "Invalid managed Sonar exclusion");
+    patterns.add(exclusion.pattern);
+  }
+  const exclusions = [...patterns];
+  const commonCount = value.profiles.includes("common-vendor-assets") ? COMMON_EXCLUSIONS.length : 0;
+  requireValue(JSON.stringify(exclusions.slice(0, commonCount)) ===
+    JSON.stringify(value.profiles.includes("common-vendor-assets") ? COMMON_EXCLUSIONS : []),
+  "Managed Sonar exclusions do not match the approved common profile");
+  for (const pattern of exclusions.slice(commonCount)) {
+    const parts = pattern.split("/");
+    requireValue(!pattern.startsWith("**/") && parts.length >= 3 &&
+      (parts.at(-1) !== "**" || ["less", "scss", "vendor", "lib"].includes(parts.at(-2))),
+    "Managed Sonar targeted exclusion is too broad");
+  }
+  return value;
+}
+
+export async function loadManagedPolicy(root) {
+  const empty = { version: "sonar-policy-v1", provenance: "repository-standards-v1",
+    profiles: [], ignoredRules: [], exclusions: [] };
+  try {
+    return validateManagedPolicy(JSON.parse(await boundedFile(
+      path.join(root, ".sonarcloud.json"), 256 * 1024)));
+  } catch (error) {
+    if (error.code === "ENOENT") return empty;
+    if (error instanceof SyntaxError) throw new Error("Malformed managed Sonar policy");
+    throw error;
+  }
 }
 
 export function validateRecipe(value) {
@@ -334,8 +418,15 @@ export async function verify(context, input, taskId, token, {
   };
 }
 
-export function properties(input, metadataPath) {
+export function properties(input, metadataPath, policy = {
+  version: "sonar-policy-v1",
+  provenance: "repository-standards-v1",
+  profiles: [],
+  ignoredRules: [],
+  exclusions: [],
+}) {
   validateInput(input);
+  validateManagedPolicy(policy);
   requireValue(path.isAbsolute(metadataPath) && !/[\0\r\n]/.test(metadataPath), "An isolated scanner metadata path is required");
   const values = Object.fromEntries(Object.entries(BINDING).map(([field, key]) => [key, String(input[field])]));
   values["sonar.organization"] = "frasermolyneux";
@@ -344,6 +435,18 @@ export function properties(input, metadataPath) {
   if (input.pullRequest !== null) values["sonar.pullrequest.key"] = String(input.pullRequest);
   else values["sonar.branch.name"] = input.branch;
   if (input.coveragePath) values["sonar.cs.cobertura.reportsPaths"] = input.coveragePath;
+  if (policy.exclusions.length) {
+    values["sonar.exclusions"] = policy.exclusions.map(({ pattern }) => pattern).join(",");
+  }
+  if (policy.ignoredRules.length) {
+    const criteria = policy.ignoredRules.map((_, index) => `managed${index + 1}`);
+    values["sonar.issue.ignore.multicriteria"] = criteria.join(",");
+    for (const [index, rule] of policy.ignoredRules.entries()) {
+      const criterion = criteria[index];
+      values[`sonar.issue.ignore.multicriteria.${criterion}.ruleKey`] = rule.key;
+      values[`sonar.issue.ignore.multicriteria.${criterion}.resourceKey`] = "**/*";
+    }
+  }
   return values;
 }
 
@@ -537,6 +640,7 @@ export async function main(env = process.env) {
   validateProducerRun(run, input, runtime, event);
   const trust = await authorizeSource(input, run, event, env.GH_TOKEN);
   const directory = await validateSource(env.SONAR_SOURCE_DIRECTORY, recipe, input.sourceSha);
+  const policy = await loadManagedPolicy(await realpath(env.SONAR_SOURCE_DIRECTORY));
   if (env.SONAR_MODE === "authorize") {
     const stored = JSON.parse(await boundedFile(path.join(env.SONAR_EVIDENCE_DIRECTORY, "producer.json"), 16 * 1024));
     requireValue(JSON.stringify(stored) === JSON.stringify(input) &&
@@ -546,7 +650,7 @@ export async function main(env = process.env) {
       env.SONAR_TOKEN, fetch), context, input);
     if (env.SONAR_AUTH_PHASE === "begin") {
       requireValue(JSON.stringify(JSON.parse(env.SONAR_PROPERTIES)) ===
-        JSON.stringify(properties(input, path.join(env.SONAR_EVIDENCE_DIRECTORY, "report-task.txt"))),
+        JSON.stringify(properties(input, path.join(env.SONAR_EVIDENCE_DIRECTORY, "report-task.txt"), policy)),
       "Native scanner properties must exactly match the prepared fixed-provider/source binding");
     }
     if (env.SONAR_AUTH_PHASE === "end" && recipe.coverage === "cobertura") {
@@ -559,7 +663,7 @@ export async function main(env = process.env) {
       env.SONAR_TOKEN, fetch), context, input);
     const output = await mkdtemp(path.join(env.RUNNER_TEMP, "sonar-evidence-"));
     const metadataPath = path.join(output, "report-task.txt");
-    const args = properties(input, metadataPath);
+    const args = properties(input, metadataPath, policy);
     await writeFile(path.join(output, "currency.json"),
       JSON.stringify(await captureCurrency(context, currencyReader(env.SONAR_TOKEN),
         { projectKey: input.projectKey, organization: "frasermolyneux" })) + "\n");

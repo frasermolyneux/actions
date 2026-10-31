@@ -89,6 +89,13 @@ authenticated commit.
 Supported coverage is C# `cobertura` or explicit `not-applicable`.
 The recipe digest includes the declared build recipe, not just project/source.
 
+When the exact source checkout contains the platform-managed `.sonarcloud.json`,
+prepare and every begin authorization validate its strict versioned schema and derive
+the same `sonar.exclusions` and `sonar.issue.ignore.multicriteria` properties. Missing
+files preserve the prior scanner scope. Malformed files, duplicate rules or globs,
+unsafe paths and policy changes between prepare and begin fail explicitly. Rule
+reasons remain in the reviewed managed file and are not sent to the provider.
+
 SDK build recipe:
 
 ```json

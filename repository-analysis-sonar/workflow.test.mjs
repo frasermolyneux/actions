@@ -70,6 +70,8 @@ test("CLI publication repeats source/producer/live-project authorization after r
   assert.match(step, /mode: authorize/);
   assert.match(step, /producer: \$\{\{ steps.producer.outputs.producer \}\}/);
   assert.match(step, /evidence-directory: \$\{\{ steps.prepare.outputs.evidence-directory \}\}/);
+  assert.match(text, /\.\.\.\(properties\["sonar\.exclusions"\] \?\? ""\)\.split\(","\)\.filter\(Boolean\)/);
+  assert.doesNotMatch(text, /properties\["sonar\.exclusions"\] = "\*\*\/node_modules/);
 });
 
 test("deleted provisioning or build anchors cannot satisfy workflow safety assertions", () => {
