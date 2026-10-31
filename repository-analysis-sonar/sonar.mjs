@@ -50,6 +50,7 @@ const SONAR_RULE = /^[A-Za-z][A-Za-z0-9_.-]*:[A-Za-z0-9_.-]+$/;
 const SAFE_GLOB = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[,\\\s])[A-Za-z0-9._/*?-]+$/;
 export const ACTIONABLE_RULES = [
   "csharpsquid:S2699", "csharpsquid:S3237", "csharpsquid:S3427",
+  "external_roslyn:CA2016",
   "javascript:S2004", "javascript:S2699", "javascript:S3358", "javascript:S3776",
   "javascript:S5843", "javascript:S6353", "javascript:S6535", "javascript:S6582",
   "javascript:S7758", "javascript:S7767", "javascript:S7770", "javascript:S7772",

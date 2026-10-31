@@ -138,7 +138,9 @@ exact versioned schema and translates its exclusions and ignored rules into scan
 The scanner is launched with an argument array so managed values are never evaluated by a shell.
 Missing policy files preserve the previous scanner behavior; malformed or unsafe files fail the
 analysis. The file is generated from `platform-workloads` declarations by `platform-devex` and
-must not be edited locally.
+must not be edited locally. The actionable profile keeps Sonar's native cancellation-forwarding
+rule and hides the duplicate imported Roslyn diagnostic rather than suppressing cancellation
+analysis at compilation time.
 
 ### C++ / CMake project
 ```yaml

@@ -110,6 +110,7 @@ test("native CLI completes module loading and surfaces initial failures instead 
 
 test("managed policy produces bounded scanner properties and rejects unsafe content", async () => {
   validateManagedPolicy(managedPolicy);
+  assert.ok(ACTIONABLE_RULES.includes("external_roslyn:CA2016"));
   const values = properties(input, metadataPath, managedPolicy);
   assert.equal(values["sonar.exclusions"], COMMON_EXCLUSIONS.join(","));
   assert.equal(values["sonar.issue.ignore.multicriteria"],
