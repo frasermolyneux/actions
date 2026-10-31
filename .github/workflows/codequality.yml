@@ -324,7 +324,6 @@ jobs:
           SONAR_ORGANIZATION: ${{ inputs.sonar-organization }}
           SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
           SONAR_SOURCE_DIRECTORY: ${{ inputs.src-folder }}
-          SONAR_SCANNER: ${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner
         run: |
           node --input-type=module <<'NODE'
           import { spawnSync } from "node:child_process";
@@ -338,6 +337,7 @@ jobs:
           }
           const root = realpathSync(process.env.GITHUB_WORKSPACE);
           const source = realpathSync(path.join(root, process.env.SONAR_SOURCE_DIRECTORY));
+          const scanner = path.join(process.env.RUNNER_TEMP, "sonar-scanner", "dotnet-sonarscanner");
           if (source !== root && !source.startsWith(root + path.sep)) {
             throw new Error("Sonar source directory escapes the checked-out repository");
           }
@@ -346,7 +346,7 @@ jobs:
               !policyArguments.every((argument) => typeof argument === "string" && argument.startsWith("/d:sonar."))) {
             throw new Error("Invalid prepared Sonar policy arguments");
           }
-          const result = spawnSync(process.env.SONAR_SCANNER, [
+          const result = spawnSync(scanner, [
             "begin",
             `/k:${process.env.SONAR_PROJECT_KEY}`,
             `/o:${process.env.SONAR_ORGANIZATION}`,
@@ -354,6 +354,7 @@ jobs:
             `/d:sonar.host.url=${process.env.SONAR_HOST_URL}`,
             ...policyArguments,
           ], { cwd: source, env: process.env, stdio: "inherit" });
+          if (result.error) throw result.error;
           if (result.status !== 0) process.exit(result.status ?? 1);
           NODE
 
@@ -431,7 +432,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_SOURCE_DIRECTORY: ${{ inputs.src-folder }}
-          SONAR_SCANNER: ${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner
         run: |
           node --input-type=module <<'NODE'
           import { spawnSync } from "node:child_process";
@@ -440,12 +440,14 @@ jobs:
 
           const root = realpathSync(process.env.GITHUB_WORKSPACE);
           const source = realpathSync(path.join(root, process.env.SONAR_SOURCE_DIRECTORY));
+          const scanner = path.join(process.env.RUNNER_TEMP, "sonar-scanner", "dotnet-sonarscanner");
           if (source !== root && !source.startsWith(root + path.sep)) {
             throw new Error("Sonar source directory escapes the checked-out repository");
           }
-          const result = spawnSync(process.env.SONAR_SCANNER,
+          const result = spawnSync(scanner,
             ["end", `/d:sonar.token=${process.env.SONAR_TOKEN}`],
             { cwd: source, env: process.env, stdio: "inherit" });
+          if (result.error) throw result.error;
           if (result.status !== 0) process.exit(result.status ?? 1);
           NODE
 
