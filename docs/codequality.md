@@ -133,6 +133,13 @@ jobs:
 
 The workflow caches the SonarCloud scanner and package cache, initializes CodeQL for the configured language(s), runs the selected composite build, and finalizes Sonar analysis. Keep `fetch-depth: 0` in place to ensure CodeQL and Sonar have full history context.
 
+When a repository contains the platform-managed `.sonarcloud.json`, the workflow validates its
+exact versioned schema and translates its exclusions and ignored rules into scanner properties.
+The scanner is launched with an argument array so managed values are never evaluated by a shell.
+Missing policy files preserve the previous scanner behavior; malformed or unsafe files fail the
+analysis. The file is generated from `platform-workloads` declarations by `platform-devex` and
+must not be edited locally.
+
 ### C++ / CMake project
 ```yaml
 name: Code Quality

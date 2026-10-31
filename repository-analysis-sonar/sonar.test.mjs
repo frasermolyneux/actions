@@ -11,6 +11,8 @@ import { validateUntracked } from "./sonar.mjs";
 import { validateSource } from "./sonar.mjs";
 import { validateCoverageSelection } from "./sonar.mjs";
 import { currencyReader, retainCoverage } from "./sonar.mjs";
+import { loadManagedPolicy, validateManagedPolicy } from "./sonar.mjs";
+import { ACTIONABLE_RULES, COMMON_EXCLUSIONS } from "./sonar.mjs";
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -68,6 +70,19 @@ const pullEvent = { pull_request: { head: { sha: "d".repeat(40) } } };
 const pull = { number: 42, state: "open", draft: false, user: owner,
   head: { sha: pullEvent.pull_request.head.sha, repo: { id: input.repositoryId, full_name: input.repository } },
   base: { repo: { id: input.repositoryId, full_name: input.repository } } };
+const managedPolicy = {
+  version: "sonar-policy-v1",
+  provenance: "repository-standards-v1",
+  profiles: ["actionable-only", "common-vendor-assets"],
+  ignoredRules: ACTIONABLE_RULES.map((key) => ({
+    key,
+    reason: "Cognitive complexity is deferred from the initial actionable-only baseline.",
+  })),
+  exclusions: COMMON_EXCLUSIONS.map((pattern) => ({
+    pattern,
+    reason: "Vendored dependencies are third-party inputs and are not maintained source.",
+  })),
+};
 
 test("native CLI completes module loading and surfaces initial failures instead of deadlocking", () => {
   const filename = fileURLToPath(new URL("./sonar.mjs", import.meta.url));
@@ -84,11 +99,46 @@ test("native CLI completes module loading and surfaces initial failures instead 
           SONAR_BUILD: JSON.stringify(selection), SONAR_PRODUCER: producer,
           GH_TOKEN: "", SONAR_TOKEN: "" },
       });
+
       assert.equal(result.error, undefined);
       assert.equal(result.status, 1, result.stderr);
       assert.match(result.stderr, message);
       assert.doesNotMatch(result.stderr, /unsettled top-level await/);
     }
+  }
+});
+
+test("managed policy produces bounded scanner properties and rejects unsafe content", async () => {
+  validateManagedPolicy(managedPolicy);
+  const values = properties(input, metadataPath, managedPolicy);
+  assert.equal(values["sonar.exclusions"], COMMON_EXCLUSIONS.join(","));
+  assert.equal(values["sonar.issue.ignore.multicriteria"],
+    ACTIONABLE_RULES.map((_, index) => `managed${index + 1}`).join(","));
+  assert.equal(values["sonar.issue.ignore.multicriteria.managed1.ruleKey"], "csharpsquid:S2699");
+  assert.equal(values["sonar.issue.ignore.multicriteria.managed1.resourceKey"], "**/*");
+
+  for (const invalid of [
+    { ...managedPolicy, extra: true },
+    { ...managedPolicy, ignoredRules: [...managedPolicy.ignoredRules, managedPolicy.ignoredRules[0]] },
+    { ...managedPolicy, ignoredRules: managedPolicy.ignoredRules.map((rule, index) =>
+      index === 0 ? { ...rule, key: "csharpsquid:S6640" } : rule) },
+    { ...managedPolicy, exclusions: [{ ...managedPolicy.exclusions[0], pattern: "../src/**" }] },
+    { ...managedPolicy, exclusions: [{ ...managedPolicy.exclusions[0], pattern: "**/*,sonar.login=x" }] },
+    { ...managedPolicy, exclusions: [...managedPolicy.exclusions, {
+      pattern: "src/app/**",
+      reason: "This overly broad first-party exclusion must not be accepted by the scanner.",
+    }] },
+  ]) assert.throws(() => validateManagedPolicy(invalid), /[Mm]anaged Sonar/);
+
+  const root = await mkdtemp(path.join(os.tmpdir(), "sonar-policy-"));
+  try {
+    assert.deepEqual((await loadManagedPolicy(root)).ignoredRules, []);
+    await writeFile(path.join(root, ".sonarcloud.json"), JSON.stringify(managedPolicy));
+    assert.deepEqual(await loadManagedPolicy(root), managedPolicy);
+    await writeFile(path.join(root, ".sonarcloud.json"), "{");
+    await assert.rejects(loadManagedPolicy(root), /Malformed managed Sonar policy/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 

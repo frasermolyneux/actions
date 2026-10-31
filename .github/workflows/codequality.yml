@@ -198,18 +198,164 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare managed SonarCloud policy
+        id: sonar-policy
+        if: ${{ inputs.skip-sonar != true }}
+        shell: bash
+        env:
+          SONAR_POLICY_PATH: ${{ github.workspace }}/.sonarcloud.json
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFile, readFile, stat } from "node:fs/promises";
+
+          const exactKeys = (value, keys, message) => {
+            if (!value || typeof value !== "object" || Array.isArray(value) ||
+                Object.keys(value).sort().join("\0") !== [...keys].sort().join("\0")) {
+              throw new Error(message);
+            }
+          };
+          const reason = (value) => typeof value === "string" && value === value.trim() &&
+            [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value)].length >= 10 &&
+            [...new Intl.Segmenter("und", { granularity: "grapheme" }).segment(value)].length <= 240 &&
+            !/[\u0000-\u001f\u007f-\u009f\u2028\u2029\ud800-\udfff\ufffe\uffff]/u.test(value);
+          const rulePattern = /^[A-Za-z][A-Za-z0-9_.-]*:[A-Za-z0-9_.-]+$/;
+          const globPattern = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[,\\\s])[A-Za-z0-9._/*?-]+$/;
+          const actionableRules = [
+            "csharpsquid:S2699", "csharpsquid:S3237", "csharpsquid:S3427",
+            "javascript:S2004", "javascript:S2699", "javascript:S3358", "javascript:S3776",
+            "javascript:S5843", "javascript:S6353", "javascript:S6535", "javascript:S6582",
+            "javascript:S7758", "javascript:S7767", "javascript:S7770", "javascript:S7772",
+            "javascript:S7773", "javascript:S7776", "javascript:S7780", "javascript:S7781",
+            "javascript:S7785", "javascript:S7786", "javascript:S9382",
+            "python:S1192", "python:S3776", "python:S5778", "shell:S7677",
+            "Web:InputWithoutLabelCheck", "Web:S5254", "Web:S5256", "Web:S6840",
+            "Web:S6843", "Web:S6845", "Web:S6850", "Web:S6853",
+          ];
+          const commonExclusions = [
+            "**/node_modules/**", "**/vendor/**", "**/wwwroot/lib/**", "**/*.min.js", "**/*.min.css",
+          ];
+          let policy = {
+            version: "sonar-policy-v1",
+            provenance: "repository-standards-v1",
+            profiles: [],
+            ignoredRules: [],
+            exclusions: [],
+          };
+          try {
+            const metadata = await stat(process.env.SONAR_POLICY_PATH);
+            if (!metadata.isFile() || metadata.size > 256 * 1024) {
+              throw new Error("Managed Sonar policy exceeds the file bound");
+            }
+            policy = JSON.parse(await readFile(process.env.SONAR_POLICY_PATH, "utf8"));
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
+          exactKeys(policy, ["version", "provenance", "profiles", "ignoredRules", "exclusions"],
+            "Invalid managed Sonar policy");
+          if (policy.version !== "sonar-policy-v1" ||
+              policy.provenance !== "repository-standards-v1" ||
+              !Array.isArray(policy.profiles) || policy.profiles.length > 2 ||
+              !policy.profiles.every((name) => ["actionable-only", "common-vendor-assets"].includes(name)) ||
+              new Set(policy.profiles).size !== policy.profiles.length ||
+              !Array.isArray(policy.ignoredRules) || policy.ignoredRules.length > 128 ||
+              !Array.isArray(policy.exclusions) || policy.exclusions.length > 64) {
+            throw new Error("Invalid managed Sonar policy");
+          }
+          const rules = new Set();
+          for (const rule of policy.ignoredRules) {
+            exactKeys(rule, ["key", "reason"], "Invalid managed Sonar ignored rule");
+            if (!rulePattern.test(rule.key) || rules.has(rule.key) || !reason(rule.reason)) {
+              throw new Error("Invalid managed Sonar ignored rule");
+            }
+            rules.add(rule.key);
+          }
+          const expectedRules = policy.profiles.includes("actionable-only") ? actionableRules : [];
+          if (JSON.stringify([...rules]) !== JSON.stringify(expectedRules)) {
+            throw new Error("Managed Sonar ignored rules do not match the approved profile");
+          }
+          const patterns = new Set();
+          for (const exclusion of policy.exclusions) {
+            exactKeys(exclusion, ["pattern", "reason"], "Invalid managed Sonar exclusion");
+            if (exclusion.pattern.length > 240 || !globPattern.test(exclusion.pattern) ||
+                patterns.has(exclusion.pattern) || !reason(exclusion.reason)) {
+              throw new Error("Invalid managed Sonar exclusion");
+            }
+            patterns.add(exclusion.pattern);
+          }
+          const exclusions = [...patterns];
+          const commonCount = policy.profiles.includes("common-vendor-assets") ? commonExclusions.length : 0;
+          const expectedCommon = policy.profiles.includes("common-vendor-assets") ? commonExclusions : [];
+          if (JSON.stringify(exclusions.slice(0, commonCount)) !== JSON.stringify(expectedCommon)) {
+            throw new Error("Managed Sonar exclusions do not match the approved common profile");
+          }
+          for (const pattern of exclusions.slice(commonCount)) {
+            const parts = pattern.split("/");
+            if (pattern.startsWith("**/") || parts.length < 3 ||
+                (parts.at(-1) === "**" && !["less", "scss", "vendor", "lib"].includes(parts.at(-2)))) {
+              throw new Error("Managed Sonar targeted exclusion is too broad");
+            }
+          }
+          const properties = [];
+          if (policy.exclusions.length) {
+            properties.push(["sonar.exclusions", policy.exclusions.map(({ pattern }) => pattern).join(",")]);
+          }
+          if (policy.ignoredRules.length) {
+            const criteria = policy.ignoredRules.map((_, index) => `managed${index + 1}`);
+            properties.push(["sonar.issue.ignore.multicriteria", criteria.join(",")]);
+            for (const [index, rule] of policy.ignoredRules.entries()) {
+              const criterion = criteria[index];
+              properties.push([`sonar.issue.ignore.multicriteria.${criterion}.ruleKey`, rule.key]);
+              properties.push([`sonar.issue.ignore.multicriteria.${criterion}.resourceKey`, "**/*"]);
+            }
+          }
+          const dotnet = properties.map(([key, value]) => `/d:${key}=${value}`);
+          const cli = properties.map(([key, value]) => `-D${key}=${value}`);
+          await appendFile(process.env.GITHUB_OUTPUT,
+            `dotnet-arguments=${JSON.stringify(dotnet)}\ncli-arguments=${cli.join(" ")}\n`);
+          NODE
+
       - name: Begin SonarCloud analysis
         if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' }}
         shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_POLICY_ARGUMENTS: ${{ steps.sonar-policy.outputs.dotnet-arguments }}
+          SONAR_PROJECT_KEY: ${{ inputs.sonar-project-key }}
+          SONAR_ORGANIZATION: ${{ inputs.sonar-organization }}
+          SONAR_HOST_URL: ${{ inputs.sonar-host-url }}
+          SONAR_SOURCE_DIRECTORY: ${{ inputs.src-folder }}
+          SONAR_SCANNER: ${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner
         run: |
-          cd "${{ inputs.src-folder }}"
-          "${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner" begin \
-            /k:"${{ inputs.sonar-project-key }}" \
-            /o:"${{ inputs.sonar-organization }}" \
-            /d:sonar.token="$SONAR_TOKEN" \
-            /d:sonar.host.url="${{ inputs.sonar-host-url }}"
+          node --input-type=module <<'NODE'
+          import { spawnSync } from "node:child_process";
+          import { realpathSync } from "node:fs";
+          import path from "node:path";
+
+          if (!/^[A-Za-z0-9_.:-]+$/.test(process.env.SONAR_PROJECT_KEY) ||
+              !/^[A-Za-z0-9_.-]+$/.test(process.env.SONAR_ORGANIZATION) ||
+              !/^https:\/\/[A-Za-z0-9.-]+(?::[0-9]+)?(?:\/.*)?$/.test(process.env.SONAR_HOST_URL)) {
+            throw new Error("Invalid Sonar project configuration");
+          }
+          const root = realpathSync(process.env.GITHUB_WORKSPACE);
+          const source = realpathSync(path.join(root, process.env.SONAR_SOURCE_DIRECTORY));
+          if (source !== root && !source.startsWith(root + path.sep)) {
+            throw new Error("Sonar source directory escapes the checked-out repository");
+          }
+          const policyArguments = JSON.parse(process.env.SONAR_POLICY_ARGUMENTS);
+          if (!Array.isArray(policyArguments) ||
+              !policyArguments.every((argument) => typeof argument === "string" && argument.startsWith("/d:sonar."))) {
+            throw new Error("Invalid prepared Sonar policy arguments");
+          }
+          const result = spawnSync(process.env.SONAR_SCANNER, [
+            "begin",
+            `/k:${process.env.SONAR_PROJECT_KEY}`,
+            `/o:${process.env.SONAR_ORGANIZATION}`,
+            `/d:sonar.token=${process.env.SONAR_TOKEN}`,
+            `/d:sonar.host.url=${process.env.SONAR_HOST_URL}`,
+            ...policyArguments,
+          ], { cwd: source, env: process.env, stdio: "inherit" });
+          if (result.status !== 0) process.exit(result.status ?? 1);
+          NODE
 
       - name: Build and test (.NET)
         id: build-dotnet
@@ -277,15 +423,31 @@ jobs:
             -Dsonar.projectKey=${{ inputs.sonar-project-key }}
             -Dsonar.organization=${{ inputs.sonar-organization }}
             -Dsonar.host.url=${{ inputs.sonar-host-url }}
+            ${{ steps.sonar-policy.outputs.cli-arguments }}
 
       - name: End SonarCloud analysis
         if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' && always() }}
         shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_SOURCE_DIRECTORY: ${{ inputs.src-folder }}
+          SONAR_SCANNER: ${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner
         run: |
-          cd "${{ inputs.src-folder }}"
-          "${{ env.SONAR_SCANNER_DIR }}/dotnet-sonarscanner" end /d:sonar.token="$SONAR_TOKEN"
+          node --input-type=module <<'NODE'
+          import { spawnSync } from "node:child_process";
+          import { realpathSync } from "node:fs";
+          import path from "node:path";
+
+          const root = realpathSync(process.env.GITHUB_WORKSPACE);
+          const source = realpathSync(path.join(root, process.env.SONAR_SOURCE_DIRECTORY));
+          if (source !== root && !source.startsWith(root + path.sep)) {
+            throw new Error("Sonar source directory escapes the checked-out repository");
+          }
+          const result = spawnSync(process.env.SONAR_SCANNER,
+            ["end", `/d:sonar.token=${process.env.SONAR_TOKEN}`],
+            { cwd: source, env: process.env, stdio: "inherit" });
+          if (result.status !== 0) process.exit(result.status ?? 1);
+          NODE
 
       - name: Perform CodeQL analysis
         if: ${{ inputs.skip-codeql != true }}

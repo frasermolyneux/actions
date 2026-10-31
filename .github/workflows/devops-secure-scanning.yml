@@ -57,9 +57,23 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve managed ESLint exclusions
+        id: eslint-exclusions
+        shell: bash
+        run: |
+          if [[ -f .eslintignore ]]; then
+            path="${GITHUB_WORKSPACE}/.eslintignore"
+          else
+            path="${RUNNER_TEMP}/empty-eslintignore"
+            : > "$path"
+          fi
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
       - name: Run Microsoft Security DevOps Analysis
         id: msdo
         uses: microsoft/security-devops-action@08976cb623803b1b36d7112d4ff9f59eae704de0
+        env:
+          GDN_ESLINT_EXCLUSIONSFILEPATH: ${{ steps.eslint-exclusions.outputs.path }}
         with:
           config: ${{ inputs.config }}
           policy: ${{ inputs.policy }}

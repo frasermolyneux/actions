@@ -218,7 +218,14 @@ jobs:
             import path from "node:path";
             const properties = JSON.parse(process.env.SONAR_PROPERTIES);
             properties["sonar.sources"] = ".";
-            properties["sonar.exclusions"] = "**/node_modules/**,**/vendor/**,**/fixtures/**,**/build/**";
+            const exclusions = new Set([
+              ...(properties["sonar.exclusions"] ?? "").split(",").filter(Boolean),
+              "**/node_modules/**",
+              "**/vendor/**",
+              "**/fixtures/**",
+              "**/build/**",
+            ]);
+            properties["sonar.exclusions"] = [...exclusions].join(",");
             if (process.env.SONAR_DRIVER === "cpp") {
               properties["sonar.cfamily.compile-commands"] = path.join(process.env.SONAR_SOURCE, "build", "compile_commands.json");
             }
