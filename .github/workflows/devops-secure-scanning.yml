@@ -71,7 +71,7 @@ jobs:
 
       - name: Run Microsoft Security DevOps Analysis
         id: msdo
-        uses: microsoft/security-devops-action@08976cb623803b1b36d7112d4ff9f59eae704de0
+        uses: microsoft/security-devops-action@cf28f87c67770dbaa208cce3665fafc849f77507
         env:
           GDN_ESLINT_EXCLUSIONSFILEPATH: ${{ steps.eslint-exclusions.outputs.path }}
         with:
