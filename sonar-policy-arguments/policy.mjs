@@ -51,13 +51,14 @@ const MAX_POLICY_BYTES = 256 * 1024;
 const SAFE_RELATIVE_PATH = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/;
 const RULE_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*:[A-Za-z0-9_.-]+$/;
 const GLOB_PATTERN = /^(?!\/)(?!.*(?:^|\/)\.{1,2}(?:\/|$))(?!.*[,\\\s])[A-Za-z0-9._/*?-]+$/;
+const compareKeys = (left, right) => left.localeCompare(right, "en");
 
 function exactKeys(value, keys, message) {
   if (
     !value ||
     typeof value !== "object" ||
     Array.isArray(value) ||
-    Object.keys(value).sort().join("\0") !== [...keys].sort().join("\0")
+    Object.keys(value).sort(compareKeys).join("\0") !== [...keys].sort(compareKeys).join("\0")
   ) {
     throw new Error(message);
   }
