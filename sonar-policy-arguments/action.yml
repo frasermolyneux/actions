@@ -1,0 +1,16 @@
+name: Sonar policy arguments
+description: Validate a managed Sonar policy and emit safe scanner CLI arguments
+
+inputs:
+  policy-path:
+    description: Repository-relative path to the managed Sonar policy
+    required: false
+    default: .sonarcloud.json
+
+outputs:
+  cli-arguments:
+    description: Validated Sonar scanner CLI arguments
+
+runs:
+  using: node20
+  main: policy.mjs
