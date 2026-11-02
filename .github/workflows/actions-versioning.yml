@@ -65,6 +65,7 @@ jobs:
             repository-analysis-codeql
             repository-analysis
             repository-publication-origin
+            sonar-policy-arguments
             stale-branch-sweep
             terraform-setup
             terraform-receipt
