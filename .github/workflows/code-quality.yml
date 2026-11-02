@@ -13,7 +13,25 @@ on:
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  quality:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      actions: read
+    uses: frasermolyneux/actions/.github/workflows/repository-analysis-sonar.yml@repository-analysis-sonar/v1.3.0 # zizmor: ignore[unpinned-uses] Immutable release tags are required by source-bound workflow admission.
+    with:
+      profile: ${{ vars.REPOSITORY_ANALYSIS_PROFILE }}
+      recipe: ${{ vars.REPOSITORY_ANALYSIS_SONAR_RECIPE }}
+      build: ${{ vars.REPOSITORY_ANALYSIS_BUILD }}
+      expected-sha: ${{ github.sha }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   devops-secure-scanning:
     permissions:
       contents: read
