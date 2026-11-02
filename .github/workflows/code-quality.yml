@@ -14,6 +14,19 @@ on:
 permissions: {}
 
 jobs:
+  quality:
+    permissions:
+      contents: read
+      actions: read
+    uses: frasermolyneux/actions/.github/workflows/repository-analysis-sonar.yml@repository-analysis-sonar/v1.3.0
+    with:
+      profile: ${{ vars.REPOSITORY_ANALYSIS_PROFILE }}
+      recipe: ${{ vars.REPOSITORY_ANALYSIS_SONAR_RECIPE }}
+      build: ${{ vars.REPOSITORY_ANALYSIS_BUILD }}
+      expected-sha: ${{ github.sha }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   devops-secure-scanning:
     permissions:
       contents: read
