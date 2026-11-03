@@ -13,6 +13,7 @@
 - [docs/action-versioning.md](docs/action-versioning.md) - Tagging strategy and guidance for selecting version pins.
 - [docs/codequality.md](docs/codequality.md) - Reusable workflow that wires SonarCloud, CodeQL, and composite builds.
 - [docs/sonar-policy-arguments.md](docs/sonar-policy-arguments.md) - Validated scanner arguments for custom Sonar workflows.
+- [docs/scanner-sarif-policy.md](docs/scanner-sarif-policy.md) - Finding-preserving SARIF classification for scanner policy diagnostics.
 - [docs/repository-analysis.md](docs/repository-analysis.md) - Visibility-aware scanner selection
   and private result boundaries for the estate analysis migration.
 - [docs/repository-analysis-local.md](docs/repository-analysis-local.md) - Pinned local

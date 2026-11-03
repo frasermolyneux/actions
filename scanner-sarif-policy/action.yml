@@ -1,0 +1,14 @@
+name: Scanner SARIF Policy
+description: Classify approved informational scanner policy findings without dropping security results.
+inputs:
+  sarif-file:
+    description: Path to the SARIF file to normalize in place.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Apply scanner finding policy
+      shell: bash
+      env:
+        SCANNER_SARIF_FILE: ${{ inputs.sarif-file }}
+      run: node "$GITHUB_ACTION_PATH/policy.mjs"

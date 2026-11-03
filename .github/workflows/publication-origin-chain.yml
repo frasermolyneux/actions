@@ -48,7 +48,7 @@ jobs:
       - name: Verify a real two-hop workflow_run lineage
         if: steps.producer.outputs.executed == 'true'
         id: origin
-        uses: ./repository-publication-origin
+        uses: $/repository-publication-origin
         with:
           github-token: ${{ github.token }}
           app-id: '1'

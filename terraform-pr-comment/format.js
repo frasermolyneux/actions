@@ -176,12 +176,16 @@ function buildDeprecationSection(deprecations) {
   section += '| Warning | Details |\n';
   section += '|:--|:--|\n';
   for (const d of deprecations) {
-    const escapedDetail = d.detail.replace(/\|/g, '\\|');
-    const escapedTitle = d.title.replace(/\|/g, '\\|');
+    const escapedDetail = escapeMarkdownTableCell(d.detail);
+    const escapedTitle = escapeMarkdownTableCell(d.title);
     section += `| ${escapedTitle} | ${escapedDetail || '—'} |\n`;
   }
   section += '\n</details>\n\n';
   return section;
+}
+
+function escapeMarkdownTableCell(value) {
+  return value.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 }
 
 /**
@@ -317,4 +321,4 @@ async function postComment(github, context, marker, body) {
   });
 }
 
-module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, parseDeprecations, buildSummaryTable, buildResourceTable, buildDeprecationSection, buildComment, postComment, deriveEnvironment, readOutputFile };
+module.exports = { stripAnsi, parsePlanSummary, parseResourceActions, parseDeprecations, buildSummaryTable, buildResourceTable, buildDeprecationSection, escapeMarkdownTableCell, buildComment, postComment, deriveEnvironment, readOutputFile };
