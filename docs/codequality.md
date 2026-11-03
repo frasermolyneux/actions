@@ -140,6 +140,12 @@ Missing policy files preserve the previous scanner behavior; malformed or unsafe
 analysis. The file is generated from `platform-workloads` declarations by `platform-devex` and
 must not be edited locally.
 
+The shared DevOps Secure Scanning workflow applies the released
+`scanner-sarif-policy` action before upload. It retains every finding and leaves security
+rules at their native severity. Only the exact `zizmor/self-repository` source-binding
+recommendation is classified as informational static policy, with its original level and
+rationale retained in SARIF properties.
+
 ### C++ / CMake project
 ```yaml
 name: Code Quality

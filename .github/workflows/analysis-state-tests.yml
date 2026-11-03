@@ -53,7 +53,7 @@ jobs:
           '
       - name: Exercise actual composite against live repository visibility
         id: state
-        uses: ./repository-analysis-state
+        uses: $/repository-analysis-state
         with:
           profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
           github-token: ${{ github.token }}

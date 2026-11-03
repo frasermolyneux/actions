@@ -81,6 +81,12 @@ jobs:
           languages: ${{ inputs.languages }}
           tools: ${{ inputs.tools }}
 
+      - name: Classify scanner policy findings
+        if: ${{ always() && steps.msdo.outputs.sarifFile != '' }}
+        uses: $/scanner-sarif-policy
+        with:
+          sarif-file: ${{ steps.msdo.outputs.sarifFile }}
+
       - name: Upload alerts to Security tab
         if: ${{ always() }}
         uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370

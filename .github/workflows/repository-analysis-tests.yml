@@ -87,7 +87,7 @@ jobs:
           persist-credentials: false
       - name: Exercise actual composite and live repository identity
         id: scan
-        uses: ./repository-analysis-local
+        uses: $/repository-analysis-local
         with:
           profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
           tool: zizmor

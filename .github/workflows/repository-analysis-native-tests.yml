@@ -76,7 +76,7 @@ jobs:
           wait-for-processing: true
       - name: Independently verify actual native processing
         id: proof
-        uses: ./repository-analysis-sarif
+        uses: $/repository-analysis-sarif
         with:
           profile: '{"version":"repository-analysis-v1","languages":["actions"],"sonar":false}'
           github-token: ${{ github.token }}

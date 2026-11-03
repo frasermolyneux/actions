@@ -30,7 +30,7 @@ jobs:
         env:
           TERRAFORM_NATIVE_TEST: '1'
           TERRAFORM_BINARY_TEST: '1'
-        run: node --test terraform-setup/context.test.cjs terraform-receipt/binary.test.cjs dependabot-policy/terraform-guard.test.cjs
+        run: node --test terraform-setup/context.test.cjs terraform-receipt/binary.test.cjs dependabot-policy/terraform-guard.test.cjs terraform-pr-comment/format.test.js
       - name: Exercise readonly toolchain validation and binary receipt
         uses: $/terraform-validate
         with:

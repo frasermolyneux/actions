@@ -38,7 +38,7 @@ jobs:
           persist-credentials: false
       - name: Exercise the actual composite with live read-only run metadata
         id: origin
-        uses: ./repository-publication-origin
+        uses: $/repository-publication-origin
         with:
           github-token: ${{ github.token }}
           app-id: '1'
