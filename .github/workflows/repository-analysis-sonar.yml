@@ -250,7 +250,7 @@ jobs:
           sonar-token: ${{ secrets.SONAR_TOKEN }}
       - name: Scan substantive CLI/C++ source using signed pinned binaries
         if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
-        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9
+        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
