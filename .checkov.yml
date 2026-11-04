@@ -5,7 +5,7 @@ soft-fail: false
 compact: true
 skip-check:
   # Profile: base
-  - CKV_AZURE_41  # Platform baseline permits managed database password authentication during migration.
-  - CKV_AZURE_114 # Platform baseline does not require public network access to be disabled for every managed database.
-  - CKV_GHA_7     # Repository workflows intentionally expose approved workflow_dispatch inputs.
-  - CKV_GIT_1     # GitHub branch protection is governed centrally rather than from repository IaC.
+  - CKV_AZURE_41
+  - CKV_AZURE_114
+  - CKV_GHA_7
+  - CKV_GIT_1
