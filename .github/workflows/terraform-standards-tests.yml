@@ -26,11 +26,11 @@ jobs:
         with:
           terraform_version: '1.17.0'
           terraform_wrapper: 'false'
-      - name: Test pin, lock, saved plan, receipt and manual-review behavior
+      - name: Test pin, lock, saved plan, receipt and auto-merge policy behavior
         env:
           TERRAFORM_NATIVE_TEST: '1'
           TERRAFORM_BINARY_TEST: '1'
-        run: node --test terraform-setup/context.test.cjs terraform-receipt/binary.test.cjs dependabot-policy/terraform-guard.test.cjs terraform-pr-comment/format.test.js
+        run: node --test terraform-setup/context.test.cjs terraform-receipt/binary.test.cjs dependabot-policy/policy.test.cjs terraform-pr-comment/format.test.js
       - name: Exercise readonly toolchain validation and binary receipt
         uses: $/terraform-validate
         with:

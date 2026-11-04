@@ -128,17 +128,15 @@ receipt publication**. Inspect the already-completed mutation and its logs first
 
 ## Dependabot
 
-`dependabot-policy/v1.2.0` requires manual review for actual Terraform/HCL files,
-root locks/pins, Terraform toolchain version files and Terraform action-reference
-changes. Labels and minor/patch metadata cannot override this guard. Changed files
-are paged completely (100/page, maximum 30 pages/3,000 files), with count,
-duplicate and head/base stability checks. Missing/truncated diffs or API failures
-block auto-merge. Terraform variable files (including auto-loaded JSON variants),
-`.tfbackend` backend files, and folded/multiline action/version values are included.
-A blocked Terraform decision
-revokes any existing auto-merge request; missing permission or unverifiable
-revocation fails the action instead of silently leaving auto-merge enabled.
-Unrelated dependency metadata and major-label behavior remain.
+Starting with `dependabot-policy/v2`, auto-merge eligibility depends only on the
+pull request author: `dependabot[bot]` or `mx-io-idp-bot[bot]`. Terraform files,
+toolchain and action changes, all update types and missing metadata do not block
+eligibility. The caller must enable GitHub auto-merge without bypassing branch
+protection or required checks. `is_dependabot` continues to identify Dependabot
+only; use `auto_merge_allowed` or `is_eligible_author` to include both bots.
+The legacy metadata outputs return `unknown`, the major-label output returns
+`false`, and the retained `major-update-label` input has no effect. Existing
+callers using an older exact or minor tag retain the old behavior.
 
 ## Release operation
 
@@ -161,7 +159,7 @@ blobs.
 ## Validation
 
 ```powershell
-node --test terraform-setup/context.test.cjs dependabot-policy/terraform-guard.test.cjs
+node --test terraform-setup/context.test.cjs dependabot-policy/policy.test.cjs
 git diff --check
 ```
 
