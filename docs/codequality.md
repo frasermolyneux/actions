@@ -152,8 +152,8 @@ The CMake argument-list inputs are parsed using Python 3 `shlex` on PATH. Quotes
 and backslash escapes group arguments; shell expansion, globbing, substitution,
 redirection and pipelines are not executed, and unmatched quotes fail the step.
 The same contract applies to `cmake-ci/v2` once its new tag is published.
-The workflow's web build uses `dotnet-web-ci/v3`; publish that tag before
-consumers run this workflow revision.
+The workflow's web build uses the `dotnet-web-ci` action from the same commit
+as the reusable workflow, rather than depending on a separately published tag.
 
 ```yaml
 name: Code Quality

@@ -376,7 +376,7 @@ jobs:
       - name: Build and publish (Web)
         id: build-web
         if: inputs.build-target == 'dotnet-web-ci'
-        uses: frasermolyneux/actions/dotnet-web-ci@dotnet-web-ci/v3
+        uses: $/dotnet-web-ci
         with:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}

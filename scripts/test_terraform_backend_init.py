@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import unittest
 
@@ -32,6 +33,9 @@ FIELDS = (
 
 class BackendInitTests(unittest.TestCase):
     def test_literal_backend_values_reach_native_command(self):
+        pwsh = shutil.which("pwsh")
+        if not pwsh:
+            raise FileNotFoundError("Required executable not found on PATH: pwsh")
         for action in ACTIONS:
             text = (ROOT / action / "action.yml").read_text(encoding="utf-8")
             step = text.split("    - name: Terraform Init\n", 1)[1].split("\n    - name:", 1)[0]
@@ -54,7 +58,7 @@ class BackendInitTests(unittest.TestCase):
                         '@args; $global:LASTEXITCODE = $LASTEXITCODE }\n'
                     )
                     result = subprocess.run(
-                        ["pwsh", "-NoProfile", "-NonInteractive", "-Command", harness + script],
+                        [pwsh, "-NoProfile", "-NonInteractive", "-Command", harness + script],
                         env=environment,
                         text=True,
                         capture_output=True,

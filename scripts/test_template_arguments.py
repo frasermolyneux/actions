@@ -16,7 +16,14 @@ def bash_executable():
         git_bash = Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe"
         if git_bash.is_file():
             return str(git_bash)
-    return shutil.which("bash")
+    return required_executable("bash")
+
+
+def required_executable(name):
+    executable = shutil.which(name)
+    if not executable:
+        raise FileNotFoundError(f"Required executable not found on PATH: {name}")
+    return executable
 
 
 def step_script(path, name, indentation=4):
@@ -180,7 +187,7 @@ class ArgumentTests(unittest.TestCase):
                 "GITHUB_OUTPUT": str(output),
             }
             result = subprocess.run(
-                ["pwsh", "-NoProfile", "-NonInteractive", "-Command", script],
+                [required_executable("pwsh"), "-NoProfile", "-NonInteractive", "-Command", script],
                 env=environment,
                 text=True,
                 capture_output=True,
@@ -217,7 +224,7 @@ class ArgumentTests(unittest.TestCase):
             directory.mkdir()
             (directory / "main.bicep").touch()
             result = subprocess.run(
-                ["pwsh", "-NoProfile", "-NonInteractive", "-Command", harness + script],
+                [required_executable("pwsh"), "-NoProfile", "-NonInteractive", "-Command", harness + script],
                 env={**os.environ, "BICEP_DIRECTORY": str(directory)},
                 text=True,
                 capture_output=True,
