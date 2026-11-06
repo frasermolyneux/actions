@@ -94,6 +94,29 @@ current checkout, and only then copies/applies the binary plan. A missing blob,
 failed transfer, corrupt bundle or failed verification stops apply. There is no
 GitHub-artifact fallback.
 
+## Pull request comments
+
+The four plan-producing actions post the workflow name, Terraform folder, workspace
+and target environment alongside fixed validation and plan status labels, numeric
+add/change/destroy counts, and a generic warning when
+the parsed destroy count is nonzero (including replacements). Missing, failed,
+ambiguous or unparseable output never appears verbatim; a successful plan with no
+parseable summary is marked unavailable. Resource addresses and diagnostic text
+are not included in comment bodies. Context labels are escaped, bounded and
+visible to readers of the pull request; do not put secrets in these labels.
+
+Comments contain no hidden markers or input-derived identifiers. Each invocation
+appends a separate comment, including matrix jobs and later runs; it does not
+supersede or edit earlier comments. The workspace label uses the optional
+`pr-comment-workspace` override, otherwise `TF_WORKSPACE`, the Terraform data
+directory's selected workspace, or `default` when no selection file exists.
+The target environment is `terraform-environment` when set, otherwise the
+var-file basename. Missing context is shown as `Not specified`; labels longer
+than 256 characters are truncated. The four plan-producing actions release as
+v4 because the unused `pr-comment-expand-summary-details` and
+`pr-comment-highlight-changes` inputs have been removed; remove those inputs
+from caller workflows when upgrading.
+
 ## Execution receipt
 
 `terraform-receipt/v1.0.0` uploads a single `terraform-execution.json` with schema
@@ -187,7 +210,7 @@ blobs.
 ## Validation
 
 ```powershell
-node --test terraform-setup/context.test.cjs terraform-plan-storage/storage.test.cjs dependabot-policy/policy.test.cjs
+node --test terraform-setup/context.test.cjs terraform-plan-storage/storage.test.cjs terraform-pr-comment/format.test.js dependabot-policy/policy.test.cjs
 git diff --check
 ```
 

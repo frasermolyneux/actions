@@ -75,18 +75,8 @@ inputs:
     required: false
     default: "true"
   pr-comment-workspace:
-    description: "Optional TF_WORKSPACE to disambiguate PR comments in matrix runs"
-    required: false
+    description: "Optional workspace label override for PR comments; otherwise use the selected Terraform workspace"
     default: ""
-  pr-comment-expand-summary-details:
-    description: "Whether to expand summary details in the PR comment (EXPAND_SUMMARY_DETAILS)"
-    required: false
-    default: "true"
-  pr-comment-highlight-changes:
-    description: "Whether to highlight plan changes in the PR comment (HIGHLIGHT_CHANGES)"
-    required: false
-    default: "true"
-
 runs:
   using: "composite"
 
@@ -204,45 +194,34 @@ runs:
       if: inputs.enable-pr-comment == 'true' && github.event_name == 'pull_request' && always() && (steps.validate.outcome == 'success' || steps.validate.outcome == 'failure' || steps.plan.outcome == 'success' || steps.plan.outcome == 'failure')
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
       env:
-        VALIDATE_STDOUT: ${{ steps.validate.outputs.stdout }}
-        VALIDATE_STDERR: ${{ steps.validate.outputs.stderr }}
         VALIDATE_EXITCODE: ${{ steps.validate.outputs.exitcode }}
         VALIDATE_OUTCOME: ${{ steps.validate.outcome }}
         PLAN_OUTPUT_FILE: ${{ runner.temp }}/tf-plan-output.txt
-        PLAN_STDERR: ${{ steps.plan.outputs.stderr }}
         PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
         PLAN_OUTCOME: ${{ steps.plan.outcome }}
-        TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
-        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        TF_COMMENT_FOLDER: ${{ inputs.terraform-folder }}
+        TF_COMMENT_WORKSPACE: ${{ inputs.pr-comment-workspace }}
+        TF_COMMENT_ENVIRONMENT: ${{ inputs.terraform-environment }}
+        TF_COMMENT_VAR_FILE: ${{ inputs.terraform-var-file }}
       with:
         script: |
           const fmt = require('${{ github.action_path }}/../terraform-pr-comment/format.js');
-          const workspace = process.env.TF_WORKSPACE || '';
-          const environment = fmt.deriveEnvironment(process.env.TF_VAR_FILE);
-          const envSuffix = environment ? ` ${environment}` : '';
-          const wsSuffix = workspace ? ` (${workspace})` : '';
-          const marker = `<!-- terraform-pr-comment: import${envSuffix}${wsSuffix} -->`;
-
-          const body = fmt.buildComment({
-            marker,
-            title: '📦 Terraform Import',
-            workspace,
-            environment,
+          await fmt.postComment(github, context, {
+            kind: 'import',
+            workflow: process.env.GITHUB_WORKFLOW,
+            folder: process.env.TF_COMMENT_FOLDER,
+            workspace: fmt.workspaceName(process.env.TF_COMMENT_WORKSPACE, process.env),
+            environment: fmt.environmentName(process.env.TF_COMMENT_ENVIRONMENT, process.env.TF_COMMENT_VAR_FILE),
             validate: {
-              stdout: process.env.VALIDATE_STDOUT,
-              stderr: process.env.VALIDATE_STDERR,
               exitcode: process.env.VALIDATE_EXITCODE,
               outcome: process.env.VALIDATE_OUTCOME,
             },
             plan: {
               stdout: fmt.readOutputFile(process.env.PLAN_OUTPUT_FILE),
-              stderr: process.env.PLAN_STDERR,
               exitcode: process.env.PLAN_EXITCODE,
               outcome: process.env.PLAN_OUTCOME,
             },
           });
-
-          await fmt.postComment(github, context, marker, body);
 
     - name: Bind saved plan to source and toolchain
       if: steps.plan.outcome == 'success'
