@@ -3,7 +3,7 @@ description: "Builds, tests, publishes, and optionally uploads artifacts and NuG
 
 inputs:
   dotnet-project:
-    description: "The .NET project to build and test"
+    description: "The .NET project name to build and test (a single path component)"
     required: true
   dotnet-version:
     description: "The version(s) of .NET to use (comma or newline separated)"
@@ -78,8 +78,10 @@ runs:
 
     - name: Resolve publish frameworks
       shell: pwsh
+      env:
+        PUBLISH_FRAMEWORKS: ${{ inputs.publish-frameworks }}
       run: |
-        $raw = "${{ inputs.publish-frameworks }}"
+        $raw = $env:PUBLISH_FRAMEWORKS
         $frameworks = $raw -split '[,\s]+' | Where-Object { $_ }
         if (-not $frameworks) {
           Write-Host 'No explicit publish frameworks supplied.'
@@ -88,7 +90,7 @@ runs:
         $formatted = $frameworks -join "`n"
         Write-Host 'Publishing frameworks:'
         $frameworks | ForEach-Object { Write-Host " - $_" }
-        $marker = '__PUBLISH_FRAMEWORKS__'
+        $marker = [guid]::NewGuid().ToString()
         Add-Content -Path $Env:GITHUB_ENV -Value "DOTNET_PUBLISH_FRAMEWORKS<<$marker"
         Add-Content -Path $Env:GITHUB_ENV -Value $formatted
         Add-Content -Path $Env:GITHUB_ENV -Value $marker
@@ -101,8 +103,11 @@ runs:
     - name: Install .NET Workloads
       if: inputs.dotnet-workloads != ''
       shell: bash
+      env:
+        DOTNET_WORKLOADS: ${{ inputs.dotnet-workloads }}
       run: |
-        for workload in ${{ inputs.dotnet-workloads }}; do
+        set -f
+        for workload in $DOTNET_WORKLOADS; do
           echo "Installing workload: $workload"
           dotnet workload install "$workload"
         done
@@ -118,21 +123,28 @@ runs:
         
     - name: Restore Dependencies
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
       run: |
-        cd ${{ inputs.src-folder }}
+        cd -- "$SRC_FOLDER"
         dotnet restore
 
     - name: Verify formatting
       if: inputs.skip-format-check != 'true'
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
+        FORMAT_TARGET: ${{ inputs.format-target }}
       run: |
-        cd ${{ inputs.src-folder }}
-        dotnet format "${{ inputs.format-target }}" --no-restore --verify-no-changes
+        cd -- "$SRC_FOLDER"
+        dotnet format "$FORMAT_TARGET" --no-restore --verify-no-changes
       
     - name: Build
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
       run: |
-        cd ${{ inputs.src-folder }}
+        cd -- "$SRC_FOLDER"
         dotnet build --configuration Release --no-restore \
           /p:ContinuousIntegrationBuild=true \
           /p:IncludeSymbols=true \
@@ -141,8 +153,10 @@ runs:
     - name: Test
       if: inputs.test-reporting != 'true'
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
       run: |
-        cd ${{ inputs.src-folder }}
+        cd -- "$SRC_FOLDER"
         dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
 
     - name: Upload Test Results
@@ -165,9 +179,14 @@ runs:
       shell: bash
       env:
         DOTNET_PUBLISH_FRAMEWORKS: ${{ env.DOTNET_PUBLISH_FRAMEWORKS }}
+        SRC_FOLDER: ${{ inputs.src-folder }}
+        DOTNET_PROJECT: ${{ inputs.dotnet-project }}
       run: |
-        cd ${{ inputs.src-folder }}
-        publish_dir="$RUNNER_TEMP/dotnet-publish/${{ inputs.dotnet-project }}"
+        cd -- "$SRC_FOLDER"
+        case "$DOTNET_PROJECT" in
+          ''|.|..|*/*|*\\*) echo "::error::dotnet-project must be a single project name." >&2; exit 1 ;;
+        esac
+        publish_dir="$RUNNER_TEMP/dotnet-publish/$DOTNET_PROJECT"
         rm -rf "$publish_dir"
         mkdir -p "$publish_dir"
         if [ -n "$DOTNET_PUBLISH_FRAMEWORKS" ]; then
@@ -175,12 +194,15 @@ runs:
             if [ -z "$framework" ]; then
               continue
             fi
+            case "$framework" in
+              .|..|*/*|*\\*) echo "::error::Invalid publish framework." >&2; exit 1 ;;
+            esac
             target_dir="$publish_dir/$framework"
             mkdir -p "$target_dir"
-            dotnet publish ${{ inputs.dotnet-project }}/${{ inputs.dotnet-project }}.csproj --configuration Release --framework "$framework" --output "$target_dir"
+            dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --framework "$framework" --output "$target_dir"
           done <<< "$DOTNET_PUBLISH_FRAMEWORKS"
         else
-          dotnet publish ${{ inputs.dotnet-project }}/${{ inputs.dotnet-project }}.csproj --configuration Release --output "$publish_dir"
+          dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --output "$publish_dir"
         fi
 
     - name: Upload artifact ${{ inputs.dotnet-project }}

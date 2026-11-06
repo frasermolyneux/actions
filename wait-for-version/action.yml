@@ -22,14 +22,14 @@ runs:
   steps:
     - name: Wait for version ${{ inputs.expected-version }}
       shell: bash
+      env:
+        EXPECTED_VERSION: ${{ inputs.expected-version }}
+        INFO_URL: ${{ inputs.info-url }}
+        MAX_ATTEMPTS: ${{ inputs.max-attempts }}
+        DELAY: ${{ inputs.delay-seconds }}
       run: |
-        EXPECTED_VERSION="${{ inputs.expected-version }}"
-        INFO_URL="${{ inputs.info-url }}"
-        MAX_ATTEMPTS=${{ inputs.max-attempts }}
-        DELAY=${{ inputs.delay-seconds }}
-
         echo "Waiting for $INFO_URL to report version '$EXPECTED_VERSION' (max ${MAX_ATTEMPTS} attempts, ${DELAY}s interval)..."
-        for i in $(seq 1 $MAX_ATTEMPTS); do
+        for i in $(seq 1 "$MAX_ATTEMPTS"); do
           RESPONSE=$(curl -s "$INFO_URL" || true)
           CURRENT_VERSION=$(echo "$RESPONSE" | jq -r '.buildVersion // empty' 2>/dev/null || true)
           if [ "$CURRENT_VERSION" = "$EXPECTED_VERSION" ]; then
@@ -43,7 +43,7 @@ runs:
             exit 0
           fi
           echo "Attempt $i/$MAX_ATTEMPTS: got version '$CURRENT_VERSION' - waiting ${DELAY}s..."
-          sleep $DELAY
+          sleep "$DELAY"
         done
         echo "### ❌ Deployment verification failed" >> $GITHUB_STEP_SUMMARY
         echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY

@@ -21,7 +21,7 @@ inputs:
     required: false
     default: ""
   terraform-additional-args:
-    description: "Additional arguments to be passed to the Terraform"
+    description: "POSIX-style quoted argument list; no shell expansion; requires Python 3 on PATH"
     required: false
     default: ""
   backend-subscription-id:
@@ -97,37 +97,44 @@ runs:
       run: |
         $params = @("init", "-input=false", "-lockfile=readonly")
 
-        if ("${{ inputs.terraform-backend-file }}" -ne "") {
-          $params += "-backend-config=${{ inputs.terraform-backend-file }}"
+        if ($env:TF_BACKEND_TERRAFORM_BACKEND_FILE -ne "") {
+          $params += "-backend-config=" + $env:TF_BACKEND_TERRAFORM_BACKEND_FILE
         }
 
-        if ("${{ inputs.backend-subscription-id }}" -ne "") {
-          $params += "-backend-config=subscription_id=${{ inputs.backend-subscription-id }}"
+        if ($env:TF_BACKEND_BACKEND_SUBSCRIPTION_ID -ne "") {
+          $params += "-backend-config=subscription_id=" + $env:TF_BACKEND_BACKEND_SUBSCRIPTION_ID
         }
 
-        if ("${{ inputs.backend-resource-group-name }}" -ne "") {
-          $params += "-backend-config=resource_group_name=${{ inputs.backend-resource-group-name }}"
+        if ($env:TF_BACKEND_BACKEND_RESOURCE_GROUP_NAME -ne "") {
+          $params += "-backend-config=resource_group_name=" + $env:TF_BACKEND_BACKEND_RESOURCE_GROUP_NAME
         }
 
-        if ("${{ inputs.backend-storage-account-name }}" -ne "") {
-          $params += "-backend-config=storage_account_name=${{ inputs.backend-storage-account-name }}"
+        if ($env:TF_BACKEND_BACKEND_STORAGE_ACCOUNT_NAME -ne "") {
+          $params += "-backend-config=storage_account_name=" + $env:TF_BACKEND_BACKEND_STORAGE_ACCOUNT_NAME
         }
 
-        if ("${{ inputs.backend-container-name }}" -ne "") {
-          $params += "-backend-config=container_name=${{ inputs.backend-container-name }}"
+        if ($env:TF_BACKEND_BACKEND_CONTAINER_NAME -ne "") {
+          $params += "-backend-config=container_name=" + $env:TF_BACKEND_BACKEND_CONTAINER_NAME
         }
 
-        if ("${{ inputs.backend-key }}" -ne "") {
-          $params += "-backend-config=key=${{ inputs.backend-key }}"
+        if ($env:TF_BACKEND_BACKEND_KEY -ne "") {
+          $params += "-backend-config=key=" + $env:TF_BACKEND_BACKEND_KEY
         }
 
-        if ("${{ inputs.backend-tags }}" -ne "") {
-          $params += "-backend-config=tags=${{ inputs.backend-tags }}"
+        if ($env:TF_BACKEND_BACKEND_TAGS -ne "") {
+          $params += "-backend-config=tags=" + $env:TF_BACKEND_BACKEND_TAGS
         }
 
         terraform $params
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       env:
+        TF_BACKEND_TERRAFORM_BACKEND_FILE: ${{ inputs.terraform-backend-file }}
+        TF_BACKEND_BACKEND_SUBSCRIPTION_ID: ${{ inputs.backend-subscription-id }}
+        TF_BACKEND_BACKEND_RESOURCE_GROUP_NAME: ${{ inputs.backend-resource-group-name }}
+        TF_BACKEND_BACKEND_STORAGE_ACCOUNT_NAME: ${{ inputs.backend-storage-account-name }}
+        TF_BACKEND_BACKEND_CONTAINER_NAME: ${{ inputs.backend-container-name }}
+        TF_BACKEND_BACKEND_KEY: ${{ inputs.backend-key }}
+        TF_BACKEND_BACKEND_TAGS: ${{ inputs.backend-tags }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
@@ -151,14 +158,23 @@ runs:
       working-directory: ${{ inputs.terraform-folder }}
       run: |
         set -euo pipefail
-        terraform plan -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" ${{ inputs.terraform-additional-args }}
+        args_file=$(mktemp)
+        trap 'rm -f -- "$args_file"' EXIT
+        python -c 'import os, shlex, sys; sys.stdout.buffer.write(b"".join(arg.encode() + b"\0" for arg in shlex.split(os.environ["TF_ADDITIONAL_ARGS"])))' > "$args_file"
+        mapfile -d '' -t additional_args < "$args_file"
+        rm -f -- "$args_file"
+        trap - EXIT
+        terraform plan -var-file="$ACTION_TF_VARS_PATH" -out="$TF_PLAN_FILE" "${additional_args[@]}"
         # Show the plan in the logs (human readable)
-        terraform show "${{ inputs.plan-file-name }}"
+        terraform show "$TF_PLAN_FILE"
         # Write a no-color copy for the PR comment step. The comment reads this from a
         # file (not an environment variable) so large plans do not exceed the process
         # env/argument size limit when the PR-comment step spawns Node.
-        terraform show -no-color "${{ inputs.plan-file-name }}" > "$RUNNER_TEMP/tf-plan-output.txt"
+        terraform show -no-color "$TF_PLAN_FILE" > "$RUNNER_TEMP/tf-plan-output.txt"
       env:
+        TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
+        TF_PLAN_FILE: ${{ inputs.plan-file-name }}
+        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
@@ -224,9 +240,12 @@ runs:
     - name: Fail if validate or plan failed
       if: steps.validate.outputs.exitcode != '0' || steps.plan.outputs.exitcode != '0'
       shell: bash
+      env:
+        VALIDATE_EXITCODE: ${{ steps.validate.outputs.exitcode }}
+        PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
       run: |
-        echo "Terraform validate exit code: ${{ steps.validate.outputs.exitcode }}"
-        echo "Terraform plan exit code: ${{ steps.plan.outputs.exitcode }}"
+        echo "Terraform validate exit code: $VALIDATE_EXITCODE"
+        echo "Terraform plan exit code: $PLAN_EXITCODE"
         exit 1
 
     - name: Publish Terraform plan execution evidence

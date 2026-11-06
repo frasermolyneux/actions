@@ -66,9 +66,10 @@ runs:
 
     - name: Check SCM endpoint health
       shell: bash
+      env:
+        WEB_APP_NAME: ${{ inputs.web-app-name }}
+        RESOURCE_GROUP: ${{ inputs.resource-group-name }}
       run: |
-        WEB_APP_NAME="${{ inputs.web-app-name }}"
-        RESOURCE_GROUP="${{ inputs.resource-group-name }}"
         SCM_URL="https://${WEB_APP_NAME}.scm.azurewebsites.net/"
         MAX_RETRIES=5
         WAIT_SECONDS=120
@@ -109,9 +110,12 @@ runs:
     - name: Restart app service after failed deployment (attempt 1)
       if: steps.deploy-attempt-1.outcome == 'failure'
       shell: bash
+      env:
+        WEB_APP_NAME: ${{ inputs.web-app-name }}
+        RESOURCE_GROUP: ${{ inputs.resource-group-name }}
       run: |
         echo "Deployment attempt 1 failed with potential 503. Restarting app service..."
-        az webapp restart --name "${{ inputs.web-app-name }}" --resource-group "${{ inputs.resource-group-name }}"
+        az webapp restart --name "$WEB_APP_NAME" --resource-group "$RESOURCE_GROUP"
         echo "Waiting 120s for app service to fully restart..."
         sleep 120
 
@@ -128,9 +132,12 @@ runs:
     - name: Restart app service after failed deployment (attempt 2)
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
       shell: bash
+      env:
+        WEB_APP_NAME: ${{ inputs.web-app-name }}
+        RESOURCE_GROUP: ${{ inputs.resource-group-name }}
       run: |
         echo "Deployment attempt 2 failed with potential 503. Restarting app service..."
-        az webapp restart --name "${{ inputs.web-app-name }}" --resource-group "${{ inputs.resource-group-name }}"
+        az webapp restart --name "$WEB_APP_NAME" --resource-group "$RESOURCE_GROUP"
         echo "Waiting 240s for app service to fully restart..."
         sleep 240
 
@@ -148,14 +155,15 @@ runs:
       if: ${{ inputs.info-url != '' && inputs.expected-version != '' }}
       continue-on-error: true
       shell: bash
+      env:
+        EXPECTED_VERSION: ${{ inputs.expected-version }}
+        INFO_URL: ${{ inputs.info-url }}
+        MAX_ATTEMPTS: ${{ inputs.verify-max-attempts }}
+        DELAY: ${{ inputs.verify-delay-seconds }}
       run: |
-        EXPECTED_VERSION="${{ inputs.expected-version }}"
-        INFO_URL="${{ inputs.info-url }}"
-        MAX_ATTEMPTS="${{ inputs.verify-max-attempts }}"
-        DELAY="${{ inputs.verify-delay-seconds }}"
 
         echo "Waiting for $INFO_URL to report version '$EXPECTED_VERSION' (max ${MAX_ATTEMPTS} attempts, ${DELAY}s interval)..."
-        for i in $(seq 1 $MAX_ATTEMPTS); do
+        for i in $(seq 1 "$MAX_ATTEMPTS"); do
           RESPONSE=$(curl -s --connect-timeout 5 --max-time 15 "$INFO_URL" || true)
           CURRENT_VERSION=$(echo "$RESPONSE" | jq -r '.buildVersion // empty' 2>/dev/null || true)
           if [ "$CURRENT_VERSION" = "$EXPECTED_VERSION" ]; then
@@ -173,9 +181,12 @@ runs:
     - name: Restart app service after failed version verification
       if: ${{ steps.verify-version-attempt-1.outcome == 'failure' }}
       shell: bash
+      env:
+        WEB_APP_NAME: ${{ inputs.web-app-name }}
+        RESOURCE_GROUP: ${{ inputs.resource-group-name }}
       run: |
         echo "Version verification failed after deployment. Restarting app service before redeploy..."
-        az webapp restart --name "${{ inputs.web-app-name }}" --resource-group "${{ inputs.resource-group-name }}"
+        az webapp restart --name "$WEB_APP_NAME" --resource-group "$RESOURCE_GROUP"
         echo "Waiting 60s for restart to settle..."
         sleep 60
 
@@ -190,14 +201,15 @@ runs:
     - name: Verify deployed version (attempt 2)
       if: ${{ steps.verify-version-attempt-1.outcome == 'failure' }}
       shell: bash
+      env:
+        EXPECTED_VERSION: ${{ inputs.expected-version }}
+        INFO_URL: ${{ inputs.info-url }}
+        MAX_ATTEMPTS: ${{ inputs.verify-max-attempts }}
+        DELAY: ${{ inputs.verify-delay-seconds }}
       run: |
-        EXPECTED_VERSION="${{ inputs.expected-version }}"
-        INFO_URL="${{ inputs.info-url }}"
-        MAX_ATTEMPTS="${{ inputs.verify-max-attempts }}"
-        DELAY="${{ inputs.verify-delay-seconds }}"
 
         echo "Retrying version verification for $INFO_URL expecting '$EXPECTED_VERSION'..."
-        for i in $(seq 1 $MAX_ATTEMPTS); do
+        for i in $(seq 1 "$MAX_ATTEMPTS"); do
           RESPONSE=$(curl -s --connect-timeout 5 --max-time 15 "$INFO_URL" || true)
           CURRENT_VERSION=$(echo "$RESPONSE" | jq -r '.buildVersion // empty' 2>/dev/null || true)
           if [ "$CURRENT_VERSION" = "$EXPECTED_VERSION" ]; then

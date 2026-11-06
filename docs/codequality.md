@@ -13,7 +13,7 @@ versions must satisfy the caller's `global.json`.
 - `build-target` (default `dotnet-ci`): `dotnet-ci`, `dotnet-web-ci`, `dotnet-func-ci`, or `cmake-ci` composite to run.
 - `skip-format-check` (default `false`): Set to `true` for .NET build targets when format validation already runs in dedicated build/test workflows.
 - `test-reporting` (default `false`): Opt in to isolated multi-project .NET TRX artifacts, validated step summaries, failure annotations and a bounded structured quality artifact. Requires real test execution; missing, zero-test and all-skipped runs fail. See [test reporting](dotnet-test-reporting.md). Does not publish PR comments from this analysis job.
-- `dotnet-project`: Required when `build-target` is `dotnet-web-ci` or `dotnet-func-ci`; project name to upload as the artifact.
+- `dotnet-project`: Required when `build-target` is `dotnet-web-ci` or `dotnet-func-ci`; project name to upload as the artifact. For `dotnet-web-ci/v3`, use a single project name without path separators.
 - `publish-frameworks` (default empty): For `dotnet-web-ci`, optional comma/newline list of target frameworks to publish explicitly.
 - `nuget-artifact-name` (default `nuget-packages`): For `dotnet-web-ci`, artifact name for NuGet packages.
 - `dotnet-version` (default `9.0.x`): SDK version(s) to install.
@@ -147,6 +147,14 @@ recommendation is classified as informational static policy, with its original l
 rationale retained in SARIF properties.
 
 ### C++ / CMake project
+
+The CMake argument-list inputs are parsed using Python 3 `shlex` on PATH. Quotes
+and backslash escapes group arguments; shell expansion, globbing, substitution,
+redirection and pipelines are not executed, and unmatched quotes fail the step.
+The same contract applies to `cmake-ci/v2` once its new tag is published.
+The workflow's web build uses the `dotnet-web-ci` action from the same commit
+as the reusable workflow, rather than depending on a separately published tag.
+
 ```yaml
 name: Code Quality
 

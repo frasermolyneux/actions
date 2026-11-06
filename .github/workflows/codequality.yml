@@ -86,17 +86,17 @@ on:
         default: build
         type: string
       cmake-configure-args:
-        description: Additional arguments passed to cmake configure.
+        description: POSIX-style quoted arguments for cmake configure; no shell expansion; requires Python 3.
         required: false
         default: -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         type: string
       cmake-build-args:
-        description: Additional arguments passed to cmake --build.
+        description: POSIX-style quoted arguments for cmake --build; no shell expansion; requires Python 3.
         required: false
         default: --config Release
         type: string
       ctest-args:
-        description: Additional arguments passed to ctest.
+        description: POSIX-style quoted arguments for ctest; no shell expansion; requires Python 3.
         required: false
         default: --output-on-failure --build-config Release
         type: string
@@ -174,11 +174,13 @@ jobs:
 
       - name: Validate build target
         shell: bash
+        env:
+          BUILD_TARGET: ${{ inputs.build-target }}
         run: |
-          case "${{ inputs.build-target }}" in
+          case "$BUILD_TARGET" in
             dotnet-ci|dotnet-web-ci|dotnet-func-ci|cmake-ci) ;;
             *)
-              echo "Unsupported build-target: ${{ inputs.build-target }}" >&2
+              echo "Unsupported build-target: $BUILD_TARGET" >&2
               exit 1
               ;;
           esac
@@ -192,8 +194,10 @@ jobs:
       - name: Validate project inputs
         if: inputs.build-target == 'dotnet-func-ci' || inputs.build-target == 'dotnet-web-ci'
         shell: bash
+        env:
+          DOTNET_PROJECT: ${{ inputs.dotnet-project }}
         run: |
-          if [ -z "${{ inputs.dotnet-project }}" ]; then
+          if [ -z "$DOTNET_PROJECT" ]; then
             echo "dotnet-project is required when build-target is dotnet-func-ci or dotnet-web-ci" >&2
             exit 1
           fi
@@ -372,7 +376,7 @@ jobs:
       - name: Build and publish (Web)
         id: build-web
         if: inputs.build-target == 'dotnet-web-ci'
-        uses: frasermolyneux/actions/dotnet-web-ci@dotnet-web-ci/v2
+        uses: $/dotnet-web-ci
         with:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}
@@ -399,20 +403,51 @@ jobs:
       - name: Configure CMake
         if: inputs.build-target == 'cmake-ci'
         shell: bash
+        env:
+          CMAKE_SOURCE_DIR: ${{ inputs.cmake-source-dir }}
+          CMAKE_BUILD_DIR: ${{ inputs.cmake-build-dir }}
+          CMAKE_ADDITIONAL_ARGS: ${{ inputs.cmake-configure-args }}
         run: |
-          cmake -S "${{ inputs.cmake-source-dir }}" -B "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-configure-args }}
+          set -euo pipefail
+          args_file=$(mktemp)
+          trap 'rm -f -- "$args_file"' EXIT
+          python -c 'import os, shlex, sys; sys.stdout.buffer.write(b"".join(arg.encode() + b"\0" for arg in shlex.split(os.environ["CMAKE_ADDITIONAL_ARGS"])))' > "$args_file"
+          mapfile -d '' -t additional_args < "$args_file"
+          rm -f -- "$args_file"
+          trap - EXIT
+          cmake -S "$CMAKE_SOURCE_DIR" -B "$CMAKE_BUILD_DIR" "${additional_args[@]}"
 
       - name: Build (CMake)
         if: inputs.build-target == 'cmake-ci'
         shell: bash
+        env:
+          CMAKE_BUILD_DIR: ${{ inputs.cmake-build-dir }}
+          CMAKE_ADDITIONAL_ARGS: ${{ inputs.cmake-build-args }}
         run: |
-          cmake --build "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-build-args }}
+          set -euo pipefail
+          args_file=$(mktemp)
+          trap 'rm -f -- "$args_file"' EXIT
+          python -c 'import os, shlex, sys; sys.stdout.buffer.write(b"".join(arg.encode() + b"\0" for arg in shlex.split(os.environ["CMAKE_ADDITIONAL_ARGS"])))' > "$args_file"
+          mapfile -d '' -t additional_args < "$args_file"
+          rm -f -- "$args_file"
+          trap - EXIT
+          cmake --build "$CMAKE_BUILD_DIR" "${additional_args[@]}"
 
       - name: Test (CMake)
         if: inputs.build-target == 'cmake-ci'
         shell: bash
+        env:
+          CMAKE_BUILD_DIR: ${{ inputs.cmake-build-dir }}
+          CMAKE_ADDITIONAL_ARGS: ${{ inputs.ctest-args }}
         run: |
-          ctest --test-dir "${{ inputs.cmake-build-dir }}" ${{ inputs.ctest-args }}
+          set -euo pipefail
+          args_file=$(mktemp)
+          trap 'rm -f -- "$args_file"' EXIT
+          python -c 'import os, shlex, sys; sys.stdout.buffer.write(b"".join(arg.encode() + b"\0" for arg in shlex.split(os.environ["CMAKE_ADDITIONAL_ARGS"])))' > "$args_file"
+          mapfile -d '' -t additional_args < "$args_file"
+          rm -f -- "$args_file"
+          trap - EXIT
+          ctest --test-dir "$CMAKE_BUILD_DIR" "${additional_args[@]}"
 
       - name: Run SonarCloud analysis (C/C++)
         if: ${{ inputs.skip-sonar != true && inputs.build-target == 'cmake-ci' }}

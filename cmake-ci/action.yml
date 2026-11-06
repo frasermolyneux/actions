@@ -15,15 +15,15 @@ inputs:
     required: false
     default: "build"
   cmake-configure-args:
-    description: "Additional arguments passed to cmake configure"
+    description: "POSIX-style quoted arguments for cmake configure; no shell expansion; requires Python 3 on PATH"
     required: false
     default: "-DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
   cmake-build-args:
-    description: "Additional arguments passed to cmake --build"
+    description: "POSIX-style quoted arguments for cmake --build; no shell expansion; requires Python 3 on PATH"
     required: false
     default: "--config Release"
   ctest-args:
-    description: "Additional arguments passed to ctest"
+    description: "POSIX-style quoted arguments for ctest; no shell expansion; requires Python 3 on PATH"
     required: false
     default: "--output-on-failure --build-config Release"
   run-tests:
@@ -42,16 +42,47 @@ runs:
 
     - name: Configure CMake
       shell: bash
+      env:
+        CMAKE_SOURCE_DIR: ${{ inputs.cmake-source-dir }}
+        CMAKE_BUILD_DIR: ${{ inputs.cmake-build-dir }}
+        CMAKE_ADDITIONAL_ARGS: ${{ inputs.cmake-configure-args }}
       run: |
-        cmake -S "${{ inputs.cmake-source-dir }}" -B "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-configure-args }}
+        set -euo pipefail
+        args_file=$(mktemp)
+        trap 'rm -f -- "$args_file"' EXIT
+        python -c 'import os, shlex, sys; sys.stdout.buffer.write(b"".join(arg.encode() + b"\0" for arg in shlex.split(os.environ["CMAKE_ADDITIONAL_ARGS"])))' > "$args_file"
+        mapfile -d '' -t additional_args < "$args_file"
+        rm -f -- "$args_file"
+        trap - EXIT
+        cmake -S "$CMAKE_SOURCE_DIR" -B "$CMAKE_BUILD_DIR" "${additional_args[@]}"
 
     - name: Build
       shell: bash
+      env:
+        CMAKE_BUILD_DIR: ${{ inputs.cmake-build-dir }}
+        CMAKE_ADDITIONAL_ARGS: ${{ inputs.cmake-build-args }}
       run: |
-        cmake --build "${{ inputs.cmake-build-dir }}" ${{ inputs.cmake-build-args }}
+        set -euo pipefail
+        args_file=$(mktemp)
+        trap 'rm -f -- "$args_file"' EXIT
+        python -c 'import os, shlex, sys; sys.stdout.buffer.write(b"".join(arg.encode() + b"\0" for arg in shlex.split(os.environ["CMAKE_ADDITIONAL_ARGS"])))' > "$args_file"
+        mapfile -d '' -t additional_args < "$args_file"
+        rm -f -- "$args_file"
+        trap - EXIT
+        cmake --build "$CMAKE_BUILD_DIR" "${additional_args[@]}"
 
     - name: Test
       if: inputs.run-tests == 'true'
       shell: bash
+      env:
+        CMAKE_BUILD_DIR: ${{ inputs.cmake-build-dir }}
+        CMAKE_ADDITIONAL_ARGS: ${{ inputs.ctest-args }}
       run: |
-        ctest --test-dir "${{ inputs.cmake-build-dir }}" ${{ inputs.ctest-args }}
+        set -euo pipefail
+        args_file=$(mktemp)
+        trap 'rm -f -- "$args_file"' EXIT
+        python -c 'import os, shlex, sys; sys.stdout.buffer.write(b"".join(arg.encode() + b"\0" for arg in shlex.split(os.environ["CMAKE_ADDITIONAL_ARGS"])))' > "$args_file"
+        mapfile -d '' -t additional_args < "$args_file"
+        rm -f -- "$args_file"
+        trap - EXIT
+        ctest --test-dir "$CMAKE_BUILD_DIR" "${additional_args[@]}"

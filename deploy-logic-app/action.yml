@@ -43,9 +43,10 @@ runs:
 
     - name: Check SCM endpoint health
       shell: bash
+      env:
+        LOGIC_APP_NAME: ${{ inputs.logic-app-name }}
+        RESOURCE_GROUP: ${{ inputs.logic-app-resource-group }}
       run: |
-        LOGIC_APP_NAME="${{ inputs.logic-app-name }}"
-        RESOURCE_GROUP="${{ inputs.logic-app-resource-group }}"
         SCM_URL="https://${LOGIC_APP_NAME}.scm.azurewebsites.net/"
         MAX_RETRIES=5
         WAIT_SECONDS=120
@@ -85,9 +86,12 @@ runs:
     - name: Restart logic app after failed deployment (attempt 1)
       if: steps.deploy-attempt-1.outcome == 'failure'
       shell: bash
+      env:
+        LOGIC_APP_NAME: ${{ inputs.logic-app-name }}
+        RESOURCE_GROUP: ${{ inputs.logic-app-resource-group }}
       run: |
         echo "Deployment attempt 1 failed with potential 503. Restarting logic app..."
-        az functionapp restart --name "${{ inputs.logic-app-name }}" --resource-group "${{ inputs.logic-app-resource-group }}"
+        az functionapp restart --name "$LOGIC_APP_NAME" --resource-group "$RESOURCE_GROUP"
         echo "Waiting 120s for logic app to fully restart..."
         sleep 120
 
@@ -103,9 +107,12 @@ runs:
     - name: Restart logic app after failed deployment (attempt 2)
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
       shell: bash
+      env:
+        LOGIC_APP_NAME: ${{ inputs.logic-app-name }}
+        RESOURCE_GROUP: ${{ inputs.logic-app-resource-group }}
       run: |
         echo "Deployment attempt 2 failed with potential 503. Restarting logic app..."
-        az functionapp restart --name "${{ inputs.logic-app-name }}" --resource-group "${{ inputs.logic-app-resource-group }}"
+        az functionapp restart --name "$LOGIC_APP_NAME" --resource-group "$RESOURCE_GROUP"
         echo "Waiting 240s for logic app to fully restart..."
         sleep 240
 

@@ -9,7 +9,7 @@ inputs:
     description: "The SQL Server fully qualified domain name"
     required: true
   sql-database-name:
-    description: "The target SQL Database name"
+    description: "The target SQL Database name; when exporting, it must be a single filename component without line breaks"
     required: true
   project-folder:
     description: "The folder containing the SQL Project"
@@ -71,8 +71,10 @@ runs:
     - name: Validate allow-data-loss inputs
       if: inputs.allow-data-loss == 'true'
       shell: bash
+      env:
+        BACKUP_STORAGE_ACCOUNT: ${{ inputs.backup-storage-account-name }}
       run: |
-        if [ -z "${{ inputs.backup-storage-account-name }}" ]; then
+        if [ -z "$BACKUP_STORAGE_ACCOUNT" ]; then
           echo "::error::allow-data-loss is true but backup-storage-account-name is not set. A pre-deploy export target is required."
           exit 1
         fi
@@ -81,9 +83,18 @@ runs:
       id: pre-deploy-export
       if: inputs.allow-data-loss == 'true'
       shell: bash
+      env:
+        SQL_DATABASE_NAME: ${{ inputs.sql-database-name }}
+        SQL_SERVER_FQDN: ${{ inputs.sql-server-fqdn }}
       run: |
+        case "$SQL_DATABASE_NAME" in
+          ''|.|..|*/*|*\\*|*$'\n'*|*$'\r'*)
+            echo "::error::SQL database name cannot be used safely as a backup filename." >&2
+            exit 1
+            ;;
+        esac
         TIMESTAMP=$(date -u +"%Y%m%dT%H%M%SZ")
-        BACPAC_FILENAME="${{ inputs.sql-database-name }}-${TIMESTAMP}.bacpac"
+        BACPAC_FILENAME="${SQL_DATABASE_NAME}-${TIMESTAMP}.bacpac"
         BACPAC_PATH="/tmp/${BACPAC_FILENAME}"
 
         echo "bacpac_path=${BACPAC_PATH}" >> $GITHUB_OUTPUT
@@ -97,8 +108,8 @@ runs:
           if sqlpackage \
             /Action:Export \
             /TargetFile:"${BACPAC_PATH}" \
-            /SourceServerName:"${{ inputs.sql-server-fqdn }}" \
-            /SourceDatabaseName:"${{ inputs.sql-database-name }}" \
+            /SourceServerName:"${SQL_SERVER_FQDN}" \
+            /SourceDatabaseName:"${SQL_DATABASE_NAME}" \
             /AccessToken:"${SQL_TOKEN}"; then
             echo "Export succeeded on attempt ${attempt}"
             break
@@ -112,20 +123,22 @@ runs:
           fi
         done
 
-        echo "Export complete: $(ls -lh ${BACPAC_PATH})"
+        echo "Export complete: $(ls -lh -- "${BACPAC_PATH}")"
 
     - name: Upload pre-deploy export to blob storage
       if: inputs.allow-data-loss == 'true' && steps.pre-deploy-export.outcome == 'success'
       shell: bash
+      env:
+        BACPAC_PATH: ${{ steps.pre-deploy-export.outputs.bacpac_path }}
+        BACPAC_FILENAME: ${{ steps.pre-deploy-export.outputs.bacpac_filename }}
+        BACKUP_STORAGE_ACCOUNT: ${{ inputs.backup-storage-account-name }}
+        BACKUP_CONTAINER: ${{ inputs.backup-container-name }}
       run: |
-        BACPAC_PATH="${{ steps.pre-deploy-export.outputs.bacpac_path }}"
-        BACPAC_FILENAME="${{ steps.pre-deploy-export.outputs.bacpac_filename }}"
-
-        echo "Uploading ${BACPAC_FILENAME} to ${{ inputs.backup-storage-account-name }}/${{ inputs.backup-container-name }}..."
+        echo "Uploading ${BACPAC_FILENAME} to ${BACKUP_STORAGE_ACCOUNT}/${BACKUP_CONTAINER}..."
         for attempt in 1 2; do
           if az storage blob upload \
-            --account-name "${{ inputs.backup-storage-account-name }}" \
-            --container-name "${{ inputs.backup-container-name }}" \
+            --account-name "${BACKUP_STORAGE_ACCOUNT}" \
+            --container-name "${BACKUP_CONTAINER}" \
             --name "${BACPAC_FILENAME}" \
             --file "${BACPAC_PATH}" \
             --auth-mode login \
@@ -142,15 +155,16 @@ runs:
           fi
         done
 
-        echo "Pre-deploy export uploaded: ${{ inputs.backup-storage-account-name }}/${{ inputs.backup-container-name }}/${BACPAC_FILENAME}"
+        echo "Pre-deploy export uploaded: ${BACKUP_STORAGE_ACCOUNT}/${BACKUP_CONTAINER}/${BACPAC_FILENAME}"
 
     - name: Cleanup local export file
       if: always() && inputs.allow-data-loss == 'true' && steps.pre-deploy-export.outcome == 'success'
       shell: bash
+      env:
+        BACPAC_PATH: ${{ steps.pre-deploy-export.outputs.bacpac_path }}
       run: |
-        BACPAC_PATH="${{ steps.pre-deploy-export.outputs.bacpac_path }}"
         if [ -f "${BACPAC_PATH}" ]; then
-          rm -f "${BACPAC_PATH}"
+          rm -f -- "${BACPAC_PATH}"
           echo "Cleaned up local export file"
         fi
 

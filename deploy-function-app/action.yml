@@ -43,9 +43,10 @@ runs:
 
     - name: Check SCM endpoint health
       shell: bash
+      env:
+        FUNC_APP_NAME: ${{ inputs.function-app-name }}
+        RESOURCE_GROUP: ${{ inputs.function-app-resource-group }}
       run: |
-        FUNC_APP_NAME="${{ inputs.function-app-name }}"
-        RESOURCE_GROUP="${{ inputs.function-app-resource-group }}"
         SCM_URL="https://${FUNC_APP_NAME}.scm.azurewebsites.net/"
         MAX_RETRIES=5
         WAIT_SECONDS=120
@@ -85,9 +86,12 @@ runs:
     - name: Restart function app after failed deployment (attempt 1)
       if: steps.deploy-attempt-1.outcome == 'failure'
       shell: bash
+      env:
+        FUNC_APP_NAME: ${{ inputs.function-app-name }}
+        RESOURCE_GROUP: ${{ inputs.function-app-resource-group }}
       run: |
         echo "Deployment attempt 1 failed with potential 503. Restarting function app..."
-        az functionapp restart --name "${{ inputs.function-app-name }}" --resource-group "${{ inputs.function-app-resource-group }}"
+        az functionapp restart --name "$FUNC_APP_NAME" --resource-group "$RESOURCE_GROUP"
         echo "Waiting 120s for function app to fully restart..."
         sleep 120
 
@@ -103,9 +107,12 @@ runs:
     - name: Restart function app after failed deployment (attempt 2)
       if: steps.deploy-attempt-1.outcome == 'failure' && steps.deploy-attempt-2.outcome == 'failure'
       shell: bash
+      env:
+        FUNC_APP_NAME: ${{ inputs.function-app-name }}
+        RESOURCE_GROUP: ${{ inputs.function-app-resource-group }}
       run: |
         echo "Deployment attempt 2 failed with potential 503. Restarting function app..."
-        az functionapp restart --name "${{ inputs.function-app-name }}" --resource-group "${{ inputs.function-app-resource-group }}"
+        az functionapp restart --name "$FUNC_APP_NAME" --resource-group "$RESOURCE_GROUP"
         echo "Waiting 240s for function app to fully restart..."
         sleep 240
 
