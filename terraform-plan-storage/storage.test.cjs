@@ -133,6 +133,30 @@ function az {
   assert.equal(fs.readFileSync(path.join(root, 'plan.tfplan')).length, 2 * 1024 * 1024 + 17);
 });
 
+test('post-import plan passes filenames as literal arguments and propagates command failure', t => {
+  const { base } = fixture(t);
+  const manifest = fs.readFileSync(path.join(__dirname, '..', 'terraform-import', 'action.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const step = manifest.split('    - name: Terraform Plan (post-import)\n')[1].split('    - name: Post Terraform PR comment\n')[0];
+  const script = step.split('      run: |\n')[1].split('      env:\n')[0]
+    .split('\n').map(line => line.replace(/^        /, '')).join('\n');
+  const variable = 'vars file"; $(echo injected >&2).tfvars';
+  const plan = 'plan"; $(echo injected >&2).tfplan';
+  const run = exitCode => cp.spawnSync('bash', ['-c',
+    `terraform() { printf '<%s>\\n' "$@"; return ${exitCode}; }\n${script}`], {
+    cwd: base, encoding: 'utf8',
+    env: { ...process.env, RUNNER_TEMP: '.', TF_VAR_FILE: variable, TF_PLAN_FILE: plan }
+  });
+  const success = run(0);
+  assert.equal(success.status, 0, success.stderr);
+  assert.equal(success.stderr, '');
+  assert.equal(success.stdout, `<plan>\n<-no-color>\n<-var-file=${variable}>\n<-out=${plan}>\n`);
+  assert.equal(fs.readFileSync(path.join(base, 'tf-plan-output.txt'), 'utf8'), success.stdout);
+  assert.equal(run(9).status, 9);
+  assert.match(step, /TF_VAR_FILE: \$\{\{ inputs\.terraform-var-file \}\}/);
+  assert.match(step, /TF_PLAN_FILE: \$\{\{ inputs\.plan-file-name \}\}/);
+  assert.doesNotMatch(script, /\$\{\{\s*inputs\./);
+});
+
 test('all plan producers and split apply use the storage helper without plan artifact fallback', () => {
   const repo = path.join(__dirname, '..');
   for (const action of ['terraform-plan', 'terraform-plan-readonly', 'terraform-plan-and-apply', 'terraform-import']) {

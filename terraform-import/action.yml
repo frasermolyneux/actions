@@ -190,8 +190,10 @@ runs:
         # file (not an environment variable) so large plans do not exceed the process
         # env/argument size limit when the PR-comment step spawns Node. Keep stderr on
         # its own channel (no 2>&1) so deprecation warnings aren't double-counted.
-        terraform plan -no-color -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" | tee "$RUNNER_TEMP/tf-plan-output.txt"
+        terraform plan -no-color -var-file="$TF_VAR_FILE" -out="$TF_PLAN_FILE" | tee "$RUNNER_TEMP/tf-plan-output.txt"
       env:
+        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        TF_PLAN_FILE: ${{ inputs.plan-file-name }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
