@@ -10,6 +10,21 @@ The plan-producing actions and split apply now release as **v3** because saved
 plans move from GitHub artifacts to Azure Blob Storage. Upgrade producers and
 consumers together; v2 and v3 saved-plan transfers are not compatible.
 
+The safe argument parsing change releases `terraform-plan`,
+`terraform-plan-readonly`, `terraform-plan-and-apply`, and `terraform-import` as
+**v5**, `terraform-apply` as **v4**, and `terraform-destroy`,
+`terraform-destroy-resources`, and `terraform-state-rm` as **v3**. Upgrade only
+after the corresponding tags are published.
+
+`terraform-additional-args` and `terraform-additional-apply-args` are parsed as
+POSIX-style quoted argument lists using Python's `shlex`, not executed as shell
+code. Whitespace, single and double quotes, and backslash escaping delimit
+arguments; an unmatched quote fails the step. Shell variable and command
+substitution, globbing, redirection and pipelines are not performed. Expand any
+needed values before passing the input. These steps require `python` (Python 3)
+on PATH. State addresses and targeted resources must be JSON arrays of strings;
+each address is passed as one literal argument.
+
 ## Root toolchain
 
 Each execution root must commit `.terraform-version` containing exactly one stable

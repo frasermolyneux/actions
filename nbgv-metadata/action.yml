@@ -24,13 +24,15 @@ runs:
     - id: nbgv
       name: Resolve Nerdbank.GitVersioning metadata
       shell: pwsh
+      env:
+        NBGV_VERSION: ${{ inputs.nbgv-version }}
       run: |
         $toolPath = Join-Path $PWD '.nbgv-tool'
         if (Test-Path $toolPath) {
           Remove-Item -Path $toolPath -Recurse -Force
         }
 
-        $nbgvVersion = "${{ inputs.nbgv-version }}"
+        $nbgvVersion = $env:NBGV_VERSION
         if ($nbgvVersion -notmatch '^\d+\.\d+\.\d+([-.][0-9A-Za-z.-]+)?$') {
           throw "Invalid nbgv-version '$nbgvVersion'. Expected format like '3.9.50' or prerelease variants."
         }

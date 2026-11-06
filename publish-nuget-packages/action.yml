@@ -50,9 +50,11 @@ runs:
 
     - name: Publish to NuGet.org
       shell: bash
+      env:
+        ARTIFACT_OUTPUT_PATH: ${{ inputs.artifact-output-path }}
       run: |
         set -euo pipefail
-        cd "${{ inputs.artifact-output-path }}"
+        cd "$ARTIFACT_OUTPUT_PATH"
 
         NUGET_LOG=/tmp/nuget-push.log
         dotnet nuget push "**/*.nupkg" --source 'https://api.nuget.org/v3/index.json' --api-key "$NUGET_API_KEY" --skip-duplicate | tee "$NUGET_LOG"

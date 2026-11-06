@@ -75,26 +75,43 @@ runs:
 
     - name: Import OpenAPI spec for ${{ inputs.api-id }}
       shell: bash
+      env:
+        APIM_RESOURCE_GROUP: ${{ inputs.apim-resource-group }}
+        APIM_NAME: ${{ inputs.apim-name }}
+        API_ID: ${{ inputs.api-id }}
+        API_DISPLAY_NAME: ${{ inputs.api-display-name }}
+        API_PATH: ${{ inputs.api-path }}
+        API_VERSION: ${{ inputs.api-version }}
+        API_VERSION_SET_ID: ${{ inputs.api-version-set-id }}
+        SPECIFICATION_FORMAT: ${{ inputs.specification-format }}
+        SPECIFICATION_URL: ${{ inputs.specification-url }}
+        SERVICE_URL: ${{ inputs.service-url }}
+        SUBSCRIPTION_REQUIRED: ${{ inputs.subscription-required }}
       run: |
         az apim api import \
-          --resource-group "${{ inputs.apim-resource-group }}" \
-          --service-name "${{ inputs.apim-name }}" \
-          --api-id "${{ inputs.api-id }}" \
-          --display-name "${{ inputs.api-display-name }}" \
-          --path "${{ inputs.api-path }}" \
-          --api-version "${{ inputs.api-version }}" \
-          --api-version-set-id "${{ inputs.api-version-set-id }}" \
+          --resource-group "$APIM_RESOURCE_GROUP" \
+          --service-name "$APIM_NAME" \
+          --api-id "$API_ID" \
+          --display-name "$API_DISPLAY_NAME" \
+          --path "$API_PATH" \
+          --api-version "$API_VERSION" \
+          --api-version-set-id "$API_VERSION_SET_ID" \
           --protocols https \
-          --specification-format "${{ inputs.specification-format }}" \
-          --specification-url "${{ inputs.specification-url }}" \
-          --service-url "${{ inputs.service-url }}" \
-          --subscription-required "${{ inputs.subscription-required }}"
+          --specification-format "$SPECIFICATION_FORMAT" \
+          --specification-url "$SPECIFICATION_URL" \
+          --service-url "$SERVICE_URL" \
+          --subscription-required "$SUBSCRIPTION_REQUIRED"
 
     - name: Add ${{ inputs.api-id }} to product
       shell: bash
+      env:
+        APIM_RESOURCE_GROUP: ${{ inputs.apim-resource-group }}
+        APIM_NAME: ${{ inputs.apim-name }}
+        PRODUCT_ID: ${{ inputs.product-id }}
+        API_ID: ${{ inputs.api-id }}
       run: |
         az apim product api add \
-          --resource-group "${{ inputs.apim-resource-group }}" \
-          --service-name "${{ inputs.apim-name }}" \
-          --product-id "${{ inputs.product-id }}" \
-          --api-id "${{ inputs.api-id }}" || true
+          --resource-group "$APIM_RESOURCE_GROUP" \
+          --service-name "$APIM_NAME" \
+          --product-id "$PRODUCT_ID" \
+          --api-id "$API_ID" || true

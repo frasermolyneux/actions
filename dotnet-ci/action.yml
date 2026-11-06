@@ -69,8 +69,11 @@ runs:
     - name: Install .NET Workloads
       if: inputs.dotnet-workloads != ''
       shell: bash
+      env:
+        DOTNET_WORKLOADS: ${{ inputs.dotnet-workloads }}
       run: |
-        for workload in ${{ inputs.dotnet-workloads }}; do
+        set -f
+        for workload in $DOTNET_WORKLOADS; do
           echo "Installing workload: $workload"
           dotnet workload install "$workload"
         done
@@ -86,21 +89,28 @@ runs:
         
     - name: Restore Dependencies
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
       run: |
-        cd ${{ inputs.src-folder }}
+        cd -- "$SRC_FOLDER"
         dotnet restore
 
     - name: Verify formatting
       if: inputs.skip-format-check != 'true'
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
+        FORMAT_TARGET: ${{ inputs.format-target }}
       run: |
-        cd ${{ inputs.src-folder }}
-        dotnet format "${{ inputs.format-target }}" --no-restore --verify-no-changes
+        cd -- "$SRC_FOLDER"
+        dotnet format "$FORMAT_TARGET" --no-restore --verify-no-changes
       
     - name: Build
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
       run: |
-        cd ${{ inputs.src-folder }}
+        cd -- "$SRC_FOLDER"
         dotnet build --configuration Release --no-restore \
           /p:ContinuousIntegrationBuild=true \
           /p:IncludeSymbols=true \
@@ -109,8 +119,10 @@ runs:
     - name: Test
       if: inputs.test-reporting != 'true'
       shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
       run: |
-        cd ${{ inputs.src-folder }}
+        cd -- "$SRC_FOLDER"
         dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
 
     - name: Upload Test Results

@@ -31,6 +31,10 @@ jobs:
           TERRAFORM_NATIVE_TEST: '1'
           TERRAFORM_BINARY_TEST: '1'
         run: node --test terraform-setup/context.test.cjs terraform-plan-storage/storage.test.cjs terraform-receipt/binary.test.cjs dependabot-policy/policy.test.cjs terraform-pr-comment/format.test.js
+      - name: Test literal Terraform backend arguments
+        run: python scripts/test_terraform_backend_init.py
+      - name: Test shell argument and template boundaries
+        run: python scripts/test_template_arguments.py
       - name: Exercise readonly toolchain validation and binary receipt
         uses: $/terraform-validate
         with:
