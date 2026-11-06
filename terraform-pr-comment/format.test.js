@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const test = require('node:test');
 const fmt = require('./format');
 
@@ -23,10 +24,10 @@ function fakeGitHub() {
   return { github, updates, creates, requests };
 }
 
-test('comments contain fixed status and counts, never resource, diagnostic, input or custom text', () => {
+test('comments include selected labels but not plan content or arbitrary text', () => {
   const options = {
-    kind: 'plan', varFile: `tfvars/${secret}.tfvars`, workspace: secret,
-    title: secret, marker: secret, environment: secret,
+    kind: 'plan', workflow: 'deploy', folder: 'infra/network', workspace: 'default',
+    environment: 'production', title: secret, marker: secret,
     validate: { ...success, stdout: secret, stderr: secret },
     plan: { ...success, stderr: secret, stdout: [
       `  # module.test.resource["${secret}"] must be replaced`,
@@ -47,6 +48,10 @@ test('comments contain fixed status and counts, never resource, diagnostic, inpu
     assert.ok(body.includes(`| ${label} | ${count} |`));
   }
   assert.doesNotMatch(body, /Resource|Deprecated|stderr/);
+  assert.match(body, /\*\*Workflow:\*\*/);
+  assert.match(body, /\*\*Terraform folder:\*\*/);
+  assert.match(body, /\*\*Workspace:\*\*/);
+  assert.match(body, /\*\*Target environment:\*\*/);
 });
 
 test('unavailable, failed, malformed, ambiguous and diagnostic output never becomes raw comment text', () => {
@@ -79,26 +84,60 @@ test('unavailable, failed, malformed, ambiguous and diagnostic output never beco
   assert.equal(fmt.readOutputFile(path.join(__dirname, 'missing-synthetic-plan-output')), null);
 });
 
-test('comments have no marker or input-derived identifier', () => {
+test('comments have no marker and render context labels safely', () => {
   const base = { kind: 'plan', plan: { ...success, stdout: 'No changes. Your infrastructure matches the configuration.' } };
   const body = fmt.buildComment(base);
-  assert.equal(body, fmt.buildComment({ ...base, varFile: `tfvars/${secret}.tfvars`, workspace: secret, marker: secret }));
+  assert.equal(body, fmt.buildComment({ ...base, varFile: `tfvars/${secret}.tfvars`, marker: secret }));
   assert.doesNotMatch(body, /<!--|[a-f0-9]{64}/);
   assert.throws(() => fmt.buildComment({ kind: secret }), /Unsupported/);
+  const injected = fmt.buildComment({ ...base, workflow: '@example\n<script>', folder: 'infra/x',
+    workspace: 'dev`</code><!--', environment: 'prod' });
+  assert.doesNotMatch(injected, /@example|<script>|<!--|dev`/);
+  assert.match(injected, /&#64;&#101;&#120;&#97;&#109;&#112;&#108;&#101;/);
+  assert.match(injected, /\*\*Target environment:\*\* <code>&#112;&#114;&#111;&#100;<\/code>/);
+  assert.match(fmt.buildComment({ ...base, folder: 'x'.repeat(257) }), /\(truncated\)/);
+});
+
+test('workspace selection and target environment follow Terraform settings without changing them', t => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'tf-comment-workspace-'));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  const root = path.join(base, 'infra');
+  fs.mkdirSync(path.join(root, '.terraform'), { recursive: true });
+  const env = { GITHUB_WORKSPACE: base, TF_COMMENT_FOLDER: 'infra' };
+  assert.equal(fmt.workspaceName('', env), 'default');
+  fs.writeFileSync(path.join(root, '.terraform', 'environment'), 'selected\n');
+  assert.equal(fmt.workspaceName('', env), 'selected');
+  assert.equal(fmt.workspaceName('', { ...env, TF_WORKSPACE: 'env-workspace' }), 'env-workspace');
+  assert.equal(fmt.workspaceName('explicit', { ...env, TF_WORKSPACE: 'env-workspace' }), 'explicit');
+  fs.mkdirSync(path.join(root, 'data'));
+  fs.writeFileSync(path.join(root, 'data', 'environment'), 'custom');
+  assert.equal(fmt.workspaceName('', { ...env, TF_DATA_DIR: 'data' }), 'custom');
+  assert.equal(fmt.workspaceName('', {}), '');
+  assert.equal(fmt.environmentName('override', 'tfvars/dev.tfvars'), 'override');
+  assert.equal(fmt.environmentName('', 'tfvars\\production.tfvars'), 'production');
+  assert.equal(fmt.environmentName('', ''), '');
 });
 
 test('matrix runs append independent comments without reading or updating old bodies', async () => {
-  const options = { kind: 'plan', varFile: `tfvars/${secret}.tfvars`, workspace: secret,
+  const options = { kind: 'plan', workflow: 'deploy', folder: 'terraform/network',
+    workspace: 'default', environment: 'prod',
     plan: { ...success, stdout: `# sensitive["${secret}"] will be destroyed\nPlan: 0 to add, 0 to change, 1 to destroy.` } };
   const api = fakeGitHub();
   await fmt.postComment(api.github, context, options);
-  await fmt.postComment(api.github, context, { ...options, workspace: 'other', varFile: 'tfvars/other.tfvars',
+  await fmt.postComment(api.github, context, { ...options, folder: 'terraform/app',
     plan: { ...success, stdout: 'Plan: 2 to add, 0 to change, 0 to destroy.' } });
+  await fmt.postComment(api.github, context, { ...options, environment: 'test',
+    plan: { ...success, stdout: 'Plan: 1 to add, 0 to change, 0 to destroy.' } });
   assert.equal(api.requests.length, 0);
   assert.equal(api.updates.length, 0);
-  assert.equal(api.creates.length, 2);
+  assert.equal(api.creates.length, 3);
   assert.match(api.creates[0].body, /\| Destroy \| 1 \|/);
   assert.match(api.creates[1].body, /\| Add \| 2 \|/);
+  const rendered = api.creates.map(request => request.body.replace(/&#(\d+);/g, (_, value) => String.fromCodePoint(Number(value))));
+  assert.match(rendered[0], /Terraform folder:\*\* <code>terraform\/network<\/code>/);
+  assert.match(rendered[1], /Terraform folder:\*\* <code>terraform\/app<\/code>/);
+  assert.match(rendered[0], /Target environment:\*\* <code>prod<\/code>/);
+  assert.match(rendered[2], /Target environment:\*\* <code>test<\/code>/);
   for (const request of api.creates) {
     assert.ok(!request.body.includes(secret));
     assert.doesNotMatch(request.body, /<!--|[a-f0-9]{64}/);
@@ -109,17 +148,21 @@ test('each action comment script sends only allowlisted bodies on success and fa
   for (const [name, kind] of [['terraform-plan', 'plan'], ['terraform-plan-readonly', 'plan-readonly'],
     ['terraform-plan-and-apply', 'plan-and-apply'], ['terraform-import', 'import']]) {
     const manifest = fs.readFileSync(path.join(__dirname, '..', name, 'action.yml'), 'utf8').replace(/\r\n/g, '\n');
+    assert.match(manifest, /pr-comment-workspace:/);
+    assert.doesNotMatch(manifest, /pr-comment-(?:expand-summary-details|highlight-changes)/);
     const comment = manifest.split('    - name: Post Terraform PR comment\n')[1].split('\n    - name: ')[0];
     const script = comment.split('        script: |\n')[1].split('\n').map(line => line.replace(/^          /, '')).join('\n');
     assert.match(script, new RegExp(`kind: '${kind}'`));
-    assert.doesNotMatch(comment, /VALIDATE_STDOUT|VALIDATE_STDERR|PLAN_STDERR|TF_WORKSPACE|TF_VAR_FILE/);
+    assert.doesNotMatch(comment, /VALIDATE_STDOUT|VALIDATE_STDERR|PLAN_STDERR/);
     const execute = new Function('require', 'process', 'github', 'context',
       `return (async () => { ${script} })();`);
     for (const outcome of ['success', 'failure']) {
       const api = fakeGitHub();
       const shim = { ...fmt, readOutputFile: () => `# resource["${secret}"] must be replaced\nPlan: 1 to add, 0 to change, 1 to destroy.\nWarning: ${secret}` };
       await execute(() => shim, { env: {
-        TF_WORKSPACE: secret, TF_VAR_FILE: `tfvars/${secret}.tfvars`, PLAN_OUTPUT_FILE: secret,
+        GITHUB_WORKFLOW: 'deploy-workflow', TF_COMMENT_FOLDER: 'terraform/network',
+        TF_COMMENT_WORKSPACE: 'production-workspace', TF_COMMENT_ENVIRONMENT: '',
+        TF_COMMENT_VAR_FILE: 'tfvars/production.tfvars', PLAN_OUTPUT_FILE: secret,
         PLAN_OUTCOME: outcome, PLAN_EXITCODE: outcome === 'success' ? '0' : '1',
         VALIDATE_OUTCOME: outcome, VALIDATE_EXITCODE: outcome === 'success' ? '0' : '1',
         PLAN_STDERR: secret, VALIDATE_STDERR: secret,
@@ -128,6 +171,10 @@ test('each action comment script sends only allowlisted bodies on success and fa
       assert.equal(api.updates.length, 0, name);
       for (const request of [...api.creates, ...api.updates]) assert.ok(!request.body.includes(secret), name);
       assert.doesNotMatch(api.creates[0].body, /<!--|[a-f0-9]{64}/);
+      assert.match(api.creates[0].body, /\*\*Workflow:\*\* <code>&#100;&#101;&#112;&#108;&#111;&#121;/);
+      assert.match(api.creates[0].body, /\*\*Terraform folder:\*\*/);
+      assert.match(api.creates[0].body, /\*\*Workspace:\*\*/);
+      assert.match(api.creates[0].body, /\*\*Target environment:\*\*/);
       assert.match(api.creates[0].body, outcome === 'success' ? /Plan: Passed/ : /Plan: Failed/);
       if (outcome === 'success') assert.match(api.creates[0].body, /Destructive changes are planned/);
       else assert.doesNotMatch(api.creates[0].body, /Destructive changes are planned/);

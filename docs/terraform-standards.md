@@ -96,18 +96,26 @@ GitHub-artifact fallback.
 
 ## Pull request comments
 
-The four plan-producing actions can post a fixed action heading, validation and
-plan status labels, numeric add/change/destroy counts, and a generic warning when
+The four plan-producing actions post the workflow name, Terraform folder, workspace
+and target environment alongside fixed validation and plan status labels, numeric
+add/change/destroy counts, and a generic warning when
 the parsed destroy count is nonzero (including replacements). Missing, failed,
 ambiguous or unparseable output never appears verbatim; a successful plan with no
-parseable summary is marked unavailable. Resource addresses, environment and
-workspace names, and diagnostics are not included in comment bodies.
+parseable summary is marked unavailable. Resource addresses and diagnostic text
+are not included in comment bodies. Context labels are escaped, bounded and
+visible to readers of the pull request; do not put secrets in these labels.
 
 Comments contain no hidden markers or input-derived identifiers. Each invocation
 appends a separate comment, including matrix jobs and later runs; it does not
-supersede or edit earlier comments. Results cannot be identified by environment
-or workspace in the comment itself. The `pr-comment-workspace` input is retained
-for compatibility but has no effect on comments.
+supersede or edit earlier comments. The workspace label uses the optional
+`pr-comment-workspace` override, otherwise `TF_WORKSPACE`, the Terraform data
+directory's selected workspace, or `default` when no selection file exists.
+The target environment is `terraform-environment` when set, otherwise the
+var-file basename. Missing context is shown as `Not specified`; labels longer
+than 256 characters are truncated. The four plan-producing actions release as
+v4 because the unused `pr-comment-expand-summary-details` and
+`pr-comment-highlight-changes` inputs have been removed; remove those inputs
+from caller workflows when upgrading.
 
 ## Execution receipt
 

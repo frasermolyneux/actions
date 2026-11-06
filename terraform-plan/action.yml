@@ -71,18 +71,8 @@ inputs:
     required: false
     default: "true"
   pr-comment-workspace:
-    description: "Retained for compatibility; comments are appended independently"
-    required: false
+    description: "Optional workspace label override for PR comments; otherwise use the selected Terraform workspace"
     default: ""
-  pr-comment-expand-summary-details:
-    description: "Whether to expand summary details in the PR comment (EXPAND_SUMMARY_DETAILS)"
-    required: false
-    default: "true"
-  pr-comment-highlight-changes:
-    description: "Whether to highlight plan changes in the PR comment (HIGHLIGHT_CHANGES)"
-    required: false
-    default: "true"
-
 runs:
   using: "composite"
 
@@ -184,11 +174,19 @@ runs:
         PLAN_OUTPUT_FILE: ${{ runner.temp }}/tf-plan-output.txt
         PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
         PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        TF_COMMENT_FOLDER: ${{ inputs.terraform-folder }}
+        TF_COMMENT_WORKSPACE: ${{ inputs.pr-comment-workspace }}
+        TF_COMMENT_ENVIRONMENT: ${{ inputs.terraform-environment }}
+        TF_COMMENT_VAR_FILE: ${{ inputs.terraform-var-file }}
       with:
         script: |
           const fmt = require('${{ github.action_path }}/../terraform-pr-comment/format.js');
           await fmt.postComment(github, context, {
             kind: 'plan',
+            workflow: process.env.GITHUB_WORKFLOW,
+            folder: process.env.TF_COMMENT_FOLDER,
+            workspace: fmt.workspaceName(process.env.TF_COMMENT_WORKSPACE, process.env),
+            environment: fmt.environmentName(process.env.TF_COMMENT_ENVIRONMENT, process.env.TF_COMMENT_VAR_FILE),
             validate: {
               exitcode: process.env.VALIDATE_EXITCODE,
               outcome: process.env.VALIDATE_OUTCOME,
