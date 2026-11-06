@@ -123,6 +123,16 @@ test("plan confines branch/merge contract definitions to the shared Actions repo
   }
 });
 
+test("plan requires an independently approved package commit for SHA definitions", () => {
+  const { run, runtime, event } = admission();
+  const sha = run.referenced_workflows[0].sha;
+  run.referenced_workflows[0].ref = sha;
+  assert.throws(() => plan(run, runtime, event, dotnet, build), /definition/);
+  assert.equal(plan(run, runtime, event, dotnet, build, sha).definitionSha, sha);
+  run.referenced_workflows[0].ref = "c".repeat(40);
+  assert.throws(() => plan(run, runtime, event, dotnet, build, sha), /definition/);
+});
+
 test("canonical SDK/Framework/CLI/CMake families preserve explicit original build selections", () => {
   assert.deepEqual(validateBuild(build, dotnet), build);
   assert.deepEqual(validateBuild({ ...build, sdk: ["10.0.1xx"] }, dotnet).sdk, ["10.0.1xx"]);

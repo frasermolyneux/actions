@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
+  "version": "1.0",
+  "inherit": false,
+  "pathFilters": [
+    ":/codequality",
+    ":/.github/workflows/codequality.yml",
+    ":/dotnet-ci",
+    ":/dotnet-web-ci",
+    ":/dotnet-func-ci",
+    ":/dotnet-sdk-setup",
+    ":/dotnet-test",
+    ":/dotnet-test-report",
+    ":/nbgv-metadata",
+    ":/test-results-summary"
+  ],
+  "publicReleaseRefSpec": ["^refs/heads/main$"]
+}

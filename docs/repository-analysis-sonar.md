@@ -22,7 +22,10 @@ fixture language explicitly without changing Actions' estate source profile.
 
 The actual run attempt independently binds repository ID, caller path/revision,
 actual checkout, logical PR head and the executing reusable definition. Foreign
-callers must use an immutable `repository-analysis-sonar/vX.Y.Z` release. Only
+callers must use the full commit SHA of an exact published
+`repository-analysis-sonar/vX.Y.Z` release (exact patch tags remain supported).
+For SHA references, authenticated definition metadata must match a live exact
+lightweight package patch tag; lookup failures fail closed. Only
 Actions' own contracts can use an executing branch/merge definition. Production
 admission is not relaxed for candidate acceptance.
 

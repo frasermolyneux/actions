@@ -139,7 +139,7 @@ jobs:
 
       - name: Set up .NET for SonarCloud
         if: ${{ inputs.skip-sonar != true && inputs.build-target != 'cmake-ci' }}
-        uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
+        uses: frasermolyneux/actions/dotnet-sdk-setup@027d7e31bb32b734090aaed01b36d74f1d658b61 # dotnet-sdk-setup/v1.1.2
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
@@ -365,7 +365,7 @@ jobs:
       - name: Build and test (.NET)
         id: build-dotnet
         if: inputs.build-target == 'dotnet-ci'
-        uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v2
+        uses: $/dotnet-ci
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
           skip-format-check: ${{ inputs.skip-format-check }}
@@ -390,7 +390,7 @@ jobs:
       - name: Build and test (Function)
         id: build-function
         if: inputs.build-target == 'dotnet-func-ci'
-        uses: frasermolyneux/actions/dotnet-func-ci@dotnet-func-ci/v2
+        uses: $/dotnet-func-ci
         with:
           dotnet-project: ${{ inputs.dotnet-project }}
           dotnet-version: ${{ inputs.dotnet-version }}

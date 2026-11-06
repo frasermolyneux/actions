@@ -31,6 +31,7 @@ jobs:
         run: |
           set -euo pipefail
           ACTIONS=(
+            wait-for-version
             apim-api-import
             approve-copilot-workflow-runs
             assert-app-service-plan-empty
@@ -46,15 +47,15 @@ jobs:
             deploy-sql-database
             dotnet-test-report
             dotnet-test
+            dotnet-sdk-setup
+            nbgv-metadata
             dotnet-ci
             dotnet-func-ci
             dotnet-node-setup
             dotnet-playwright-tests
             test-results-summary
             dotnet-web-ci
-            dotnet-sdk-setup
             logic-app-ci
-            nbgv-metadata
             publish-nuget-packages
             run-api-integration-tests
             repository-analysis-context
@@ -66,6 +67,8 @@ jobs:
             repository-analysis
             repository-publication-origin
             scanner-sarif-policy
+            codequality
+            devops-secure-scanning
             sonar-policy-arguments
             stale-branch-sweep
             terraform-setup
@@ -82,7 +85,6 @@ jobs:
             terraform-plan-readonly
             terraform-state-check
             terraform-state-rm
-            wait-for-version
           )
 
           BEFORE="${{ github.event.before }}"
@@ -95,6 +97,10 @@ jobs:
           for ACTION in "${ACTIONS[@]}"; do
             if [[ "$ACTION" == "repository-analysis" ]]; then
               PATTERN='^(repository-analysis(-context|-local|-sarif)?/|\.github/workflows/repository-analysis-local\.yml$)'
+            elif [[ "$ACTION" == "codequality" ]]; then
+              PATTERN='^(codequality/|dotnet-(ci|web-ci|func-ci|sdk-setup|test|test-report)/|nbgv-metadata/|test-results-summary/|\.github/workflows/codequality\.yml$)'
+            elif [[ "$ACTION" == "devops-secure-scanning" ]]; then
+              PATTERN='^(devops-secure-scanning/|scanner-sarif-policy/|\.github/workflows/devops-secure-scanning\.yml$)'
             elif [[ "$ACTION" == "repository-analysis-sonar" ]]; then
               PATTERN='^(repository-analysis-sonar/|repository-analysis-(context|state)/|dotnet-test(-report)?/|\.github/workflows/repository-analysis-sonar\.yml$)'
             elif [[ "$ACTION" == "repository-analysis-codeql" ]]; then

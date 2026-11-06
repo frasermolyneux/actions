@@ -9,6 +9,7 @@ import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
 import { validateUntrackedFiles, validateUntrackedWorktree } from "../repository-analysis-context/source.mjs";
 import { factsSummary, verifyFacts } from "./facts.mjs";
 import { captureCurrency, sameCurrency } from "./currency.mjs";
+import { admittedReference, publishedShaForRun } from "../repository-analysis-context/release.mjs";
 
 export const HOST = "https://sonarcloud.io";
 export const DOTNET_VERSION = "11.3.0";
@@ -23,7 +24,7 @@ export const DEFINITION_FILES = [
   "repository-analysis-sonar/currency.mjs", "repository-analysis-state/state.mjs",
   "repository-analysis-context/action.yml",
   "repository-analysis-context/policy.mjs", "repository-analysis-context/source.mjs",
-  "repository-analysis-context/origin.mjs",
+  "repository-analysis-context/origin.mjs", "repository-analysis-context/release.mjs",
   "dotnet-test/action.yml", "dotnet-test/run-tests.ps1",
   "dotnet-test/report-coverage.ps1", "dotnet-test/coverage-tools.json",
   "dotnet-test-report/action.yml", "dotnet-test-report/report-test-results.ps1",
@@ -264,7 +265,7 @@ export function validateProject(project, context, input) {
   "Sonar project must be public, bound to this repository and configured for CI analysis");
 }
 
-export function validateProducerRun(run, input, runtime, event) {
+export function validateProducerRun(run, input, runtime, event, approvedSha) {
   requireValue(input.repository === runtime.repository && input.repositoryId === runtime.repositoryId &&
     input.runId === runtime.runId && input.attempt === runtime.attempt && input.sourceSha === runtime.sourceSha &&
     input.workflowPath === runtime.workflowPath && input.workflowSha === runtime.workflowSha &&
@@ -283,9 +284,7 @@ export function validateProducerRun(run, input, runtime, event) {
   requireValue(definitions?.length === 1 && definitions[0].sha === input.definitionSha,
     "Missing or ambiguous authenticated Sonar reusable definition");
   const reference = definitions[0].ref ?? definitions[0].path.split("@")[1];
-  requireValue(/^(?:refs\/tags\/)?repository-analysis-sonar\/v\d+\.\d+\.\d+$/.test(reference) ||
-    (input.repository === "frasermolyneux/actions" &&
-      /^refs\/(?:heads\/[A-Za-z0-9_./-]+|pull\/[1-9]\d*\/merge)$/.test(reference)),
+  requireValue(admittedReference(reference, definitions[0].sha, input.repository, "repository-analysis-sonar", approvedSha),
   "Sonar reusable analysis requires an immutable release, not an unreviewed foreign branch");
 }
 
@@ -637,7 +636,8 @@ export async function main(env = process.env) {
   const event = JSON.parse(await boundedFile(env.GITHUB_EVENT_PATH, 5 * 1024 * 1024));
   const run = await readJson(`https://api.github.com/repos/${input.repository}/actions/runs/${input.runId}/attempts/${input.attempt}`,
     env.GH_TOKEN, fetch);
-  validateProducerRun(run, input, runtime, event);
+  const approved = await publishedShaForRun(run, WORKFLOW_PATH, "repository-analysis-sonar", env.GH_TOKEN);
+  validateProducerRun(run, input, runtime, event, approved);
   const trust = await authorizeSource(input, run, event, env.GH_TOKEN);
   const directory = await validateSource(env.SONAR_SOURCE_DIRECTORY, recipe, input.sourceSha);
   const policy = await loadManagedPolicy(await realpath(env.SONAR_SOURCE_DIRECTORY));

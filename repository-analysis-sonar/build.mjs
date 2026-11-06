@@ -2,6 +2,7 @@ import { appendFile, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 import { authorizeSource, recipeDigest, validateRecipe, WORKFLOW_PATH } from "./sonar.mjs";
+import { admittedReference, publishedShaForRun } from "../repository-analysis-context/release.mjs";
 
 const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
 const relative = (value) => typeof value === "string" &&
@@ -55,7 +56,7 @@ export function validateBuild(value, recipeInput) {
   return value;
 }
 
-export function plan(run, runtime, event, recipeInput, buildInput) {
+export function plan(run, runtime, event, recipeInput, buildInput, approvedSha) {
   const recipe = validateRecipe(recipeInput);
   const build = validateBuild(buildInput, recipe);
   requireValue(["push", "pull_request", "schedule", "workflow_dispatch"].includes(runtime.event) &&
@@ -73,9 +74,7 @@ export function plan(run, runtime, event, recipeInput, buildInput) {
   requireValue(definitions?.length === 1 && /^[a-f0-9]{40}$/.test(definitions[0].sha ?? ""),
     "Missing or ambiguous called Sonar definition");
   const reference = definitions[0].ref ?? definitions[0].path.split("@")[1];
-  requireValue(/^(?:refs\/tags\/)?repository-analysis-sonar\/v\d+\.\d+\.\d+$/.test(reference) ||
-    (runtime.repository === "frasermolyneux/actions" &&
-      /^refs\/(?:heads\/[A-Za-z0-9_./-]+|pull\/[1-9]\d*\/merge)$/.test(reference)),
+  requireValue(admittedReference(reference, definitions[0].sha, runtime.repository, "repository-analysis-sonar", approvedSha),
   "Sonar plan rejects a mutable foreign definition");
   const branch = runtime.event === "pull_request" ? event.pull_request.head.ref : runtime.refName;
   return {
@@ -98,8 +97,9 @@ export async function main(env = process.env) {
     expectedSha: env.SONAR_EXPECTED_SHA, refName: env.GITHUB_REF_NAME };
   const run = JSON.parse(env.SONAR_RUN);
   const event = JSON.parse(await readFile(env.GITHUB_EVENT_PATH, "utf8"));
+  const approved = await publishedShaForRun(run, WORKFLOW_PATH, "repository-analysis-sonar", env.GH_TOKEN);
   const result = plan(run, runtime, event,
-    JSON.parse(env.SONAR_RECIPE), JSON.parse(env.SONAR_BUILD));
+    JSON.parse(env.SONAR_RECIPE), JSON.parse(env.SONAR_BUILD), approved);
   await authorizeSource(result.producer, run, event, env.GH_TOKEN);
   await appendFile(env.GITHUB_OUTPUT, Object.entries(result).map(([key, value]) =>
     `${key}=${typeof value === "string" ? value : JSON.stringify(value)}`).join("\n") + "\n" +

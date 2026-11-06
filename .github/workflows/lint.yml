@@ -64,7 +64,7 @@ jobs:
 
       - name: Test analysis capability selection
         shell: bash
-        run: node --test repository-analysis-context/policy.test.mjs scanner-sarif-policy/policy.test.mjs scripts/scanner-config.test.mjs
+        run: node --test repository-analysis-context/policy.test.mjs repository-analysis-context/release.test.mjs scanner-sarif-policy/policy.test.mjs scripts/scanner-config.test.mjs scripts/workflow-releases.test.mjs
 
       - name: Exercise live repository analysis preflight
         uses: $/repository-analysis-context
