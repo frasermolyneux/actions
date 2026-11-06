@@ -111,9 +111,11 @@ test('comments have no marker and render context labels safely', () => {
   assert.equal(body, fmt.buildComment({ ...base, varFile: `tfvars/${secret}.tfvars`, marker: secret }));
   assert.doesNotMatch(body, /<!--|[a-f0-9]{64}/);
   assert.throws(() => fmt.buildComment({ kind: secret }), /Unsupported/);
-  const injected = fmt.buildComment({ ...base, workflow: '@example\n<script>', folder: 'infra/x',
+  const injected = fmt.buildComment({ ...base, workflow: '@example\n<script><SCRIPT>', folder: 'infra/x',
     workspace: 'dev`</code><!--', environment: 'prod' });
-  assert.doesNotMatch(injected, /@example|<script>|<!--|dev`/);
+  for (const unsafe of ['@example', '<script>', '<SCRIPT>', '<!--', 'dev`']) {
+    assert.equal(injected.includes(unsafe), false);
+  }
   assert.match(injected, /&#64;&#101;&#120;&#97;&#109;&#112;&#108;&#101;/);
   assert.match(injected, /\*\*Target environment:\*\* <code>&#112;&#114;&#111;&#100;<\/code>/);
   assert.match(fmt.buildComment({ ...base, folder: 'x'.repeat(257) }), /\(truncated\)/);
