@@ -177,7 +177,7 @@ jobs:
         subprocess.run(["shellcheck", "--version"], check=True, capture_output=True)
         self.write(
             ".github/workflows/test.yml",
-            WORKFLOW + '      - run: |\n          echo "$unassigned"\n          cd /tmp\n',
+            WORKFLOW + '      - run: |\n          echo "$unassigned"\n          echo $(date)\n',
         )
         self.assertNotEqual(run(self.executable, self.root, quiet=True), 0)
 
