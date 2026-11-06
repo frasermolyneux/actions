@@ -142,17 +142,18 @@ test('post-import plan passes filenames as literal arguments and propagates comm
   const variable = 'vars file"; $(echo injected >&2).tfvars';
   const plan = 'plan"; $(echo injected >&2).tfplan';
   const run = exitCode => cp.spawnSync('bash', ['-c',
-    `terraform() { printf '<%s>\\n' "$@"; return ${exitCode}; }\n${script}`], {
+    `terraform() { printf 'TF_VAR_FILE=<%s>\\n' "$TF_VAR_FILE" >&2; printf '<%s>\\n' "$@"; return ${exitCode}; }\n${script}`], {
     cwd: base, encoding: 'utf8',
-    env: { ...process.env, RUNNER_TEMP: '.', TF_VAR_FILE: variable, TF_PLAN_FILE: plan }
+    env: { ...process.env, RUNNER_TEMP: '.', TF_VAR_FILE: 'caller value', ACTION_TF_VARS_PATH: variable, TF_PLAN_FILE: plan }
   });
   const success = run(0);
   assert.equal(success.status, 0, success.stderr);
-  assert.equal(success.stderr, '');
+  assert.equal(success.stderr, 'TF_VAR_FILE=<caller value>\n');
   assert.equal(success.stdout, `<plan>\n<-no-color>\n<-var-file=${variable}>\n<-out=${plan}>\n`);
   assert.equal(fs.readFileSync(path.join(base, 'tf-plan-output.txt'), 'utf8'), success.stdout);
   assert.equal(run(9).status, 9);
-  assert.match(step, /TF_VAR_FILE: \$\{\{ inputs\.terraform-var-file \}\}/);
+  assert.match(step, /ACTION_TF_VARS_PATH: \$\{\{ inputs\.terraform-var-file \}\}/);
+  assert.doesNotMatch(step, /^\s+TF_VAR_FILE:/m);
   assert.match(step, /TF_PLAN_FILE: \$\{\{ inputs\.plan-file-name \}\}/);
   assert.doesNotMatch(script, /\$\{\{\s*inputs\./);
 });

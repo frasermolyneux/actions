@@ -152,7 +152,7 @@ runs:
         while true; do
           echo "Running terraform destroy (attempt ${attempt}/${max_attempts})"
 
-          if terraform destroy -auto-approve -var-file="$TF_VAR_FILE" "${additional_args[@]}"; then
+          if terraform destroy -auto-approve -var-file="$ACTION_TF_VARS_PATH" "${additional_args[@]}"; then
             echo "Terraform destroy succeeded."
             break
           fi
@@ -168,7 +168,7 @@ runs:
         done
       env:
         TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
-        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}

@@ -160,11 +160,11 @@ runs:
 
         for resource in "${resourceArray[@]}"
         do
-          terraform destroy -auto-approve -target="$resource" -var-file="$TF_VAR_FILE" "${additional_args[@]}"
+          terraform destroy -auto-approve -target="$resource" -var-file="$ACTION_TF_VARS_PATH" "${additional_args[@]}"
         done
       env:
         TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
-        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
         TF_RESOURCES: ${{ inputs.resources }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}

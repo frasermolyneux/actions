@@ -173,10 +173,10 @@ runs:
         mapfile -d '' -t additional_args < "$args_file"
         rm -f -- "$args_file"
         trap - EXIT
-        terraform import -var-file="$TF_VAR_FILE" "${additional_args[@]}" "$TF_IMPORT_ADDRESS" "$TF_IMPORT_ID"
+        terraform import -var-file="$ACTION_TF_VARS_PATH" "${additional_args[@]}" "$TF_IMPORT_ADDRESS" "$TF_IMPORT_ID"
       env:
         TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
-        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
         TF_IMPORT_ADDRESS: ${{ inputs.import-address }}
         TF_IMPORT_ID: ${{ inputs.import-id }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
@@ -197,9 +197,9 @@ runs:
         # file (not an environment variable) so large plans do not exceed the process
         # env/argument size limit when the PR-comment step spawns Node. Keep stderr on
         # its own channel (no 2>&1) so deprecation warnings aren't double-counted.
-        terraform plan -no-color -var-file="$TF_VAR_FILE" -out="$TF_PLAN_FILE" | tee "$RUNNER_TEMP/tf-plan-output.txt"
+        terraform plan -no-color -var-file="$ACTION_TF_VARS_PATH" -out="$TF_PLAN_FILE" | tee "$RUNNER_TEMP/tf-plan-output.txt"
       env:
-        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
         TF_PLAN_FILE: ${{ inputs.plan-file-name }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}

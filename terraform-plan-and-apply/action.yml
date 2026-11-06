@@ -158,7 +158,7 @@ runs:
         mapfile -d '' -t additional_args < "$args_file"
         rm -f -- "$args_file"
         trap - EXIT
-        terraform plan -var-file="$TF_VAR_FILE" -out="$TF_PLAN_FILE" "${additional_args[@]}"
+        terraform plan -var-file="$ACTION_TF_VARS_PATH" -out="$TF_PLAN_FILE" "${additional_args[@]}"
         # Show the plan in human readable form
         terraform show "$TF_PLAN_FILE"
         # Write a no-color copy for the PR comment step. The comment reads this from a
@@ -168,7 +168,7 @@ runs:
       env:
         TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
         TF_PLAN_FILE: ${{ inputs.plan-file-name }}
-        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}

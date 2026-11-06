@@ -37,7 +37,7 @@ def step_script(path, name, indentation=4):
 
 def run_step(script, environment, cwd):
     harness = """
-        function terraform { printf 'TRACE:'; python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"; }
+        function terraform { printf 'TFVAR:%s\\n' "${TF_VAR_FILE-unset}"; printf 'TRACE:'; python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"; }
         function cmake { printf 'TRACE:'; python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"; }
         function ctest { printf 'TRACE:'; python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"; }
         function dotnet { printf 'TRACE:'; python -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"; }
@@ -101,7 +101,8 @@ class ArgumentTests(unittest.TestCase):
             environment = {
                 "RUNNER_TEMP": Path(temporary).as_posix(),
                 "TF_PLAN_FILE": "plan with spaces",
-                "TF_VAR_FILE": "var file'$(touch injected)",
+                "ACTION_TF_VARS_PATH": "var file'$(touch injected)",
+                "TF_VAR_FILE": "caller supplied value",
                 "TF_IMPORT_ADDRESS": addresses[0],
                 "TF_IMPORT_ID": "id with spaces",
                 "TF_ADDITIONAL_ARGS": "-var='hello world' '$(touch injected)' \"\"",
@@ -113,6 +114,8 @@ class ArgumentTests(unittest.TestCase):
                     script = step_script(path, name)
                     result, traces = run_step(script, environment, temporary)
                     self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn("TFVAR:caller supplied value", result.stdout)
+                    self.assertNotIn("TF_VAR_FILE:", script)
                     commands = [trace for trace in traces if trace and trace[0] == operation]
                     self.assertEqual(len(commands), 2 if name in ("Parse and remove state addresses",) or path.startswith("terraform-destroy-resources") else 1)
                     for command in commands:
@@ -125,6 +128,16 @@ class ArgumentTests(unittest.TestCase):
                         self.assertEqual([x[-1] for x in commands], addresses)
                     if path.startswith("terraform-import"):
                         self.assertEqual(commands[0][-2:], [addresses[0], "id with spaces"])
+                    if path.startswith(("terraform-plan/", "terraform-plan-readonly/", "terraform-import/",
+                                        "terraform-destroy/", "terraform-destroy-resources/")) or (
+                        path.startswith("terraform-plan-and-apply/") and name == "Terraform Plan"
+                    ):
+                        manifest = (ROOT / path).read_text(encoding="utf-8")
+                        step = manifest.split(f"    - name: {name}\n", 1)[1].split("\n    - name:", 1)[0]
+                        self.assertIn("ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}", step)
+                        self.assertNotIn("\n        TF_VAR_FILE:", step)
+                        for command in commands:
+                            self.assertIn("-var-file=" + environment["ACTION_TF_VARS_PATH"], command)
                     self.assertFalse(Path(temporary, "injected").exists())
                     bad = {**environment, "TF_ADDITIONAL_ARGS": "'unterminated"}
                     result, traces = run_step(script, bad, temporary)
