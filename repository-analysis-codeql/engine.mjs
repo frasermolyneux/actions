@@ -7,6 +7,7 @@ import { resolveAnalysis } from "../repository-analysis-context/policy.mjs";
 import { selectedTools } from "../repository-analysis-state/state.mjs";
 import { authorizeSource, validateRecipe, validateSource } from "../repository-analysis-sonar/sonar.mjs";
 import { validateBuild } from "../repository-analysis-sonar/build.mjs";
+import { admittedReference, publishedShaForRun } from "../repository-analysis-context/release.mjs";
 
 export const VERSION = "2.27.1";
 export const WORKFLOW_PATH = ".github/workflows/repository-analysis-codeql.yml";
@@ -16,7 +17,7 @@ export const DEFINITION_FILES = [
   "repository-analysis-codeql/version.json", "repository-analysis-codeql/integration.mjs",
   "repository-analysis-codeql/extractor.mjs", "repository-analysis-codeql/archive.py",
   "repository-analysis-context/policy.mjs", "repository-analysis-context/source.mjs",
-  "repository-analysis-context/origin.mjs",
+  "repository-analysis-context/origin.mjs", "repository-analysis-context/release.mjs",
   "repository-analysis-state/state.mjs", "repository-analysis-sonar/sonar.mjs",
   "repository-analysis-sonar/facts.mjs",
   "repository-analysis-sonar/currency.mjs",
@@ -39,7 +40,7 @@ export async function definitionDigest() {
   return hash(JSON.stringify(manifest));
 }
 
-export function plan(context, run, runtime, event, buildInput, sourceDirectory) {
+export function plan(context, run, runtime, event, buildInput, sourceDirectory, approvedSha) {
   const tools = selectedTools(context).filter(({ tool }) => tool === "codeql");
   requireValue(context.repository === runtime.repository && context.repositoryId === runtime.repositoryId &&
     [runtime.sourceSha, runtime.workflowSha].every((sha) => SHA.test(sha ?? "")) &&
@@ -61,9 +62,7 @@ export function plan(context, run, runtime, event, buildInput, sourceDirectory) 
   requireValue(definitions?.length === 1 && SHA.test(definitions[0].sha ?? ""),
     "Missing or ambiguous called CodeQL definition");
   const reference = definitions[0].ref ?? definitions[0].path.split("@")[1];
-  requireValue(/^(?:refs\/tags\/)?repository-analysis-codeql\/v\d+\.\d+\.\d+$/.test(reference) ||
-    (runtime.repository === "frasermolyneux/actions" &&
-      /^refs\/(?:heads\/[A-Za-z0-9_./-]+|pull\/[1-9]\d*\/merge)$/.test(reference)),
+  requireValue(admittedReference(reference, definitions[0].sha, runtime.repository, "repository-analysis-codeql", approvedSha),
   "CodeQL requires an immutable foreign release before checkout or licensed execution");
   const needsBuild = tools.some(({ id }) => compiled.has(id.slice(7)));
   const sourceRecipe = validateRecipe({ version: 1,
@@ -233,8 +232,9 @@ export async function main(env = process.env) {
     runtime.repository, env.GH_TOKEN);
   const run = await readRun(runtime, env.GH_TOKEN);
   const event = JSON.parse(await boundedFile(env.GITHUB_EVENT_PATH, 5 * 1024 * 1024));
+  const approved = await publishedShaForRun(run, WORKFLOW_PATH, "repository-analysis-codeql", env.GH_TOKEN);
   const planned = plan(context, run, runtime, event, JSON.parse(env.CODEQL_BUILD ?? "null"),
-    env.CODEQL_SOURCE_DIRECTORY);
+    env.CODEQL_SOURCE_DIRECTORY, approved);
   if (env.CODEQL_MODE === "plan") {
     if (planned.hasLanguages) {
       await authorizeSource({ repository: runtime.repository, repositoryId: runtime.repositoryId,

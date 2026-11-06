@@ -8,13 +8,16 @@ remain separate integration work. Its `repository-analysis-local-set-v1` artifac
 explicitly sets `fullProfileEvidence: false`; do not treat it as a complete profile,
 post-merge finding-resolution proof, publication permission or freshness cache.
 
-Invoke once per workflow run, using an exact reviewed `repository-analysis/vX.Y.Z`
-tag. The package owns this reusable workflow and its helper/dependency closure,
+Invoke once per workflow run, using the full commit SHA of an exact reviewed
+`repository-analysis/vX.Y.Z` tag. The package owns this reusable workflow and its helper/dependency closure,
 including an internal evidence composite in `repository-analysis/action.yml`.
 That composite is an implementation helper, not the workflow's consumer API.
 Folder-scoped immutable and rolling tags
 are published by the existing release workflow, but this analysis caller accepts
-only immutable patch tags outside the shared repository's own integration tests.
+only immutable patch tags or their published commit SHAs outside the shared repository's own integration tests.
+SHA admission requires the authenticated called definition to match a live,
+lightweight exact package patch tag; lookup failures fail closed. A random commit,
+rolling tag, or commit released only under another package is not sufficient.
 
 ```yaml
 jobs:
@@ -23,7 +26,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: frasermolyneux/actions/.github/workflows/repository-analysis-local.yml@repository-analysis/vX.Y.Z
+    uses: frasermolyneux/actions/.github/workflows/repository-analysis-local.yml@<FULL_RELEASE_SHA> # repository-analysis/vX.Y.Z
     with:
       profile: ${{ vars.REPOSITORY_ANALYSIS_PROFILE }}
       expected-sha: ${{ github.sha }}
@@ -81,7 +84,7 @@ detector and NBGV path filters include that closure, so a dependency change cann
 leave an installed workflow silently using an unversioned implementation.
 The package is released after its composite dependencies.
 Local/state/native-verifier composites similarly release when their commit-bound
-context dependency changes. External consumers retain folder-scoped release tags;
+context dependency changes. External consumers use the resolved release commit SHA;
 `$/` is used only for same-repository implementation composition.
 
 `Analysis workflow contracts` executes the actual reusable workflow against this

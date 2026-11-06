@@ -5,6 +5,9 @@ Use this reusable workflow to run SonarCloud analysis, CodeQL, and shared build/
 For .NET Sonar analyses, the requested SDKs are installed before installing or
 starting the scanner, including when the scanner is cached. The supplied SDK
 versions must satisfy the caller's `global.json`.
+The workflow is released as the `codequality` package. Resolve its latest exact
+patch tag to a full commit SHA before substituting `<FULL_RELEASE_SHA>` below.
+The commit-bound first-party dependencies require runner 2.336.0 or later.
 
 ## Inputs
 - `sonar-project-key` (required): SonarCloud project key, e.g., `frasermolyneux_portal-server-events`.
@@ -59,7 +62,7 @@ permissions:
 
 jobs:
   quality:
-    uses: frasermolyneux/actions/.github/workflows/codequality.yml@main
+    uses: frasermolyneux/actions/.github/workflows/codequality.yml@<FULL_RELEASE_SHA> # codequality/vX.Y.Z
     with:
       sonar-project-key: frasermolyneux_my-project
       build-target: dotnet-ci
@@ -88,7 +91,7 @@ permissions:
 
 jobs:
   quality:
-    uses: frasermolyneux/actions/.github/workflows/codequality.yml@main
+    uses: frasermolyneux/actions/.github/workflows/codequality.yml@<FULL_RELEASE_SHA> # codequality/vX.Y.Z
     with:
       sonar-project-key: frasermolyneux_my-webapp
       build-target: dotnet-web-ci
@@ -119,7 +122,7 @@ permissions:
 
 jobs:
   quality:
-    uses: frasermolyneux/actions/.github/workflows/codequality.yml@main
+    uses: frasermolyneux/actions/.github/workflows/codequality.yml@<FULL_RELEASE_SHA> # codequality/vX.Y.Z
     with:
       sonar-project-key: frasermolyneux_portal-server-events
       build-target: dotnet-func-ci
@@ -172,7 +175,7 @@ permissions:
 
 jobs:
   quality:
-    uses: frasermolyneux/actions/.github/workflows/codequality.yml@main
+    uses: frasermolyneux/actions/.github/workflows/codequality.yml@<FULL_RELEASE_SHA> # codequality/vX.Y.Z
     with:
       sonar-project-key: frasermolyneux_portal-cod4x-plugin
       build-target: cmake-ci

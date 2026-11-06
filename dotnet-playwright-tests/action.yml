@@ -47,7 +47,7 @@ runs:
 
     - name: Setup .NET SDKs
       if: inputs.perform-build == 'true'
-      uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
+      uses: frasermolyneux/actions/dotnet-sdk-setup@027d7e31bb32b734090aaed01b36d74f1d658b61 # dotnet-sdk-setup/v1.1.2
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
@@ -108,7 +108,7 @@ runs:
     - name: Run integration tests with GitHub reporting
       id: tests
       if: inputs.test-reporting == 'true'
-      uses: frasermolyneux/actions/dotnet-test@dotnet-test/v1
+      uses: frasermolyneux/actions/dotnet-test@c4dcaf4142a2e56a5c50af52c7c9eb8c441ebfab # dotnet-test/v1.1.1
       with:
         suite: Integration
         working-directory: ${{ inputs.src-folder }}

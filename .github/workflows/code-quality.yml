@@ -23,7 +23,7 @@ jobs:
     permissions:
       contents: read
       actions: read
-    uses: frasermolyneux/actions/.github/workflows/repository-analysis-sonar.yml@repository-analysis-sonar/v1.3.0 # zizmor: ignore[unpinned-uses] Immutable release tags are required by source-bound workflow admission.
+    uses: $/.github/workflows/repository-analysis-sonar.yml
     with:
       profile: ${{ vars.REPOSITORY_ANALYSIS_PROFILE }}
       recipe: ${{ vars.REPOSITORY_ANALYSIS_SONAR_RECIPE }}
@@ -38,7 +38,7 @@ jobs:
       actions: read
       id-token: write
       security-events: write
-    uses: frasermolyneux/actions/.github/workflows/devops-secure-scanning.yml@main
+    uses: $/.github/workflows/devops-secure-scanning.yml
 
   dependency-review:
     permissions:

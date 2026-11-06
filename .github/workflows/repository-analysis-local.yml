@@ -59,7 +59,18 @@ jobs:
             const immutable = /^(?:refs\/tags\/)?repository-analysis\/v\d+\.\d+\.\d+$/.test(reference);
             const ownContract = process.env.GITHUB_REPOSITORY === "frasermolyneux/actions" &&
               /^refs\/(?:heads\/[A-Za-z0-9_./-]+|pull\/[1-9]\d*\/merge)$/.test(reference);
-            if (!immutable && !ownContract) {
+            let publishedSha = false;
+            if (/^[a-f0-9]{40}$/.test(reference) && reference === matches[0].sha) {
+              const { data: refs } = await github.request(
+                "GET /repos/{owner}/{repo}/git/matching-refs/{ref}", {
+                  owner: "frasermolyneux", repo: "actions", ref: "tags/repository-analysis/v",
+                });
+              if (!Array.isArray(refs) || refs.length > 10000) throw new Error("Invalid release lookup");
+              publishedSha = refs.some((entry) =>
+                /^refs\/tags\/repository-analysis\/v\d+\.\d+\.\d+$/.test(entry.ref ?? "") &&
+                entry.object?.type === "commit" && entry.object.sha === reference);
+            }
+            if (!immutable && !ownContract && !publishedSha) {
               throw new Error("Reject an unreviewed mutable definition before checkout or execution");
             }
             core.setOutput("sha", matches[0].sha);
@@ -79,6 +90,7 @@ jobs:
           ANALYSIS_DEFINITION_SHA: ${{ steps.definition.outputs.sha }}
           ANALYSIS_LOGICAL_SHA: ${{ steps.definition.outputs.logical-sha }}
           ANALYSIS_RUN: ${{ steps.definition.outputs.run }}
+          GH_TOKEN: ${{ github.token }}
         uses: $/repository-analysis
 
   local:

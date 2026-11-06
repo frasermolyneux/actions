@@ -68,12 +68,12 @@ runs:
 
     - name: Resolve Nerdbank.GitVersioning metadata
       id: nbgv-metadata
-      uses: frasermolyneux/actions/nbgv-metadata@nbgv-metadata/v1
+      uses: frasermolyneux/actions/nbgv-metadata@027d7e31bb32b734090aaed01b36d74f1d658b61 # nbgv-metadata/v1.2.1
       with:
         perform-checkout: 'false'
 
     - name: Setup .NET SDKs
-      uses: frasermolyneux/actions/dotnet-sdk-setup@dotnet-sdk-setup/v1
+      uses: frasermolyneux/actions/dotnet-sdk-setup@027d7e31bb32b734090aaed01b36d74f1d658b61 # dotnet-sdk-setup/v1.1.2
       with:
         dotnet-version: ${{ inputs.dotnet-version }}
 
@@ -147,7 +147,7 @@ runs:
     - name: Test with GitHub reporting
       id: tests
       if: inputs.test-reporting == 'true'
-      uses: frasermolyneux/actions/dotnet-test@dotnet-test/v1
+      uses: frasermolyneux/actions/dotnet-test@c4dcaf4142a2e56a5c50af52c7c9eb8c441ebfab # dotnet-test/v1.1.1
       with:
         working-directory: ${{ inputs.src-folder }}
         artifact-name: test-results-${{ inputs.dotnet-project }}

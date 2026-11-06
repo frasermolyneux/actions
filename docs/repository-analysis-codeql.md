@@ -2,12 +2,15 @@
 
 `.github/workflows/repository-analysis-codeql.yml` is the selected-native
 component, released with the `repository-analysis-codeql` folder. Foreign
-callers must pin a published, exact `repository-analysis-codeql/vX.Y.Z` release;
+callers must pin the full commit SHA of a published, exact
+`repository-analysis-codeql/vX.Y.Z` release (exact patch tags remain supported);
 mutable foreign branches are rejected before source checkout. Its required
 inputs are the catalog `profile` and actual originating `expected-sha`. Compiled
 profiles also declare their original `build` JSON and `source-directory`, using
 the SDK, Windows Framework or CMake recipe contract documented for Sonar.
 CodeQL eligibility does **not** depend on Sonar selection or credentials.
+SHA admission checks the authenticated called definition against a live exact
+lightweight package patch tag and fails closed if release lookup fails.
 
 Metadata-only planning resolves live visibility, immutable called definition,
 run attempt and actual/logical source before initializing licensed tooling.

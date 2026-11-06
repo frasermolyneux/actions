@@ -3,6 +3,7 @@ import { appendFile, lstat, mkdir, readFile, readdir, writeFile } from "node:fs/
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { engineDigest, selectTool } from "../repository-analysis-local/scan.mjs";
+import { admittedReference, publishedShaForRun } from "../repository-analysis-context/release.mjs";
 
 export const WORKFLOW_PATH = ".github/workflows/repository-analysis-local.yml";
 export const ARTIFACT_SCHEMA = "repository-analysis-local-artifact-v1";
@@ -21,7 +22,7 @@ function requireValue(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-export function definitionFromRun(run, runtime) {
+export function definitionFromRun(run, runtime, approvedSha) {
   requireValue(run?.id === runtime.runId && run.run_attempt === runtime.attempt &&
     run.repository?.id === runtime.repositoryId && run.repository.full_name === runtime.repository &&
     run.head_sha === runtime.logicalHeadSha && run.event === runtime.event &&
@@ -31,10 +32,7 @@ export function definitionFromRun(run, runtime) {
   requireValue(matches?.length === 1 && SHA.test(matches[0].sha ?? ""),
     "Missing or ambiguous authenticated shared workflow definition");
   const reference = matches[0].ref ?? matches[0].path.split("@")[1];
-  requireValue(/^refs\/tags\/repository-analysis\/v\d+\.\d+\.\d+$/.test(reference) ||
-    /^repository-analysis\/v\d+\.\d+\.\d+$/.test(reference) ||
-    (runtime.repository === "frasermolyneux/actions" &&
-      /^refs\/(?:heads\/[A-Za-z0-9_./-]+|pull\/[1-9]\d*\/merge)$/.test(reference)),
+  requireValue(admittedReference(reference, matches[0].sha, runtime.repository, "repository-analysis", approvedSha),
   "Shared workflow must use an immutable release; branch/merge definitions are only for its own contracts");
   return matches[0].sha;
 }
@@ -43,7 +41,7 @@ export async function definitionDigest() {
   const base = new URL("../", import.meta.url);
   const filenames = [
     WORKFLOW_PATH, "repository-analysis/action.yml", "repository-analysis/workflow.mjs", "repository-analysis/version.json",
-    "repository-analysis-context/action.yml", "repository-analysis-context/policy.mjs",
+    "repository-analysis-context/action.yml", "repository-analysis-context/policy.mjs", "repository-analysis-context/release.mjs",
     "repository-analysis-local/action.yml", "repository-analysis-local/scan.mjs",
     "repository-analysis-local/reports.mjs", "repository-analysis-local/sarif.mjs",
     "repository-analysis-local/tools.json", "repository-analysis-local/powershell-scan.ps1",
@@ -168,7 +166,8 @@ export async function main(env = process.env) {
   const digest = await definitionDigest();
   if (env.ANALYSIS_MODE === "plan") {
     const run = JSON.parse(env.ANALYSIS_RUN ?? "");
-    requireValue(definitionFromRun(run, runtime) === runtime.definitionSha,
+    const approved = await publishedShaForRun(run, WORKFLOW_PATH, "repository-analysis", env.GH_TOKEN);
+    requireValue(definitionFromRun(run, runtime, approved) === runtime.definitionSha,
       "The checked-out definition is not the authenticated called workflow");
     requireValue(context.repository === runtime.repository && context.repositoryId === runtime.repositoryId &&
       Array.isArray(context.localTools), "Live workflow context repository mismatch");

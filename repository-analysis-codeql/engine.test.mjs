@@ -78,6 +78,15 @@ test("only the actual Actions producer can exercise its reviewed branch before a
     /immutable foreign/);
 });
 
+test("SHA definitions require a matching approved package commit", () => {
+  const origin = structuredClone(run);
+  origin.referenced_workflows[0].ref = definition;
+  assert.throws(() => makePlan(contextFor(), origin), /immutable foreign/);
+  assert.equal(plan(contextFor(), origin, runtime, {}, null, ".", definition).definitionSha, definition);
+  origin.referenced_workflows[0].ref = sha;
+  assert.throws(() => plan(contextFor(), origin, runtime, {}, null, ".", definition), /immutable foreign/);
+});
+
 test("PR logical head is distinct and foreign, draft or superseded origins cannot plan publication", () => {
   const event = { pull_request: { number: 3, draft: false, head: { sha: logical, repo: repository } } };
   const origin = { ...run, event: "pull_request", head_sha: logical };

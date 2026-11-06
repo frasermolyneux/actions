@@ -80,6 +80,9 @@ test("only one exact authenticated workflow definition can be selected", () => {
   for (const ref of ["main", "refs/heads/main", "repository-analysis/v1", "repository-analysis/v1.0"]) {
     assert.throws(() => definitionFromRun(run(ref), runtime), /immutable release/);
   }
+  assert.throws(() => definitionFromRun(run(definitionSha), runtime), /immutable release/);
+  assert.equal(definitionFromRun(run(definitionSha), runtime, definitionSha), definitionSha);
+  assert.throws(() => definitionFromRun(run(sourceSha), runtime, definitionSha), /immutable release/);
   const fixtureRuntime = { ...runtime, repository: "frasermolyneux/actions" };
   const fixtureRun = run("refs/pull/44/merge");
   fixtureRun.repository.full_name = fixtureRuntime.repository;
@@ -186,6 +189,23 @@ test("actual bootstrap rejects a mutable external definition before any checkout
   for (const ref of ["refs/heads/main", "main", "repository-analysis/v1"]) {
     await assert.rejects(bootstrap({ request: async () => ({ data: run(ref) }) },
       current, core, { env: environment }), /unreviewed mutable/);
+  }
+  const shaRun = run(definitionSha);
+  const request = async (endpoint) => endpoint.startsWith("GET /repos/{owner}/{repo}/actions/")
+    ? { data: shaRun }
+    : { data: [{ ref: "refs/tags/repository-analysis/v1.0.0",
+      object: { type: "commit", sha: definitionSha } }] };
+  await bootstrap({ request }, current, core, { env: environment });
+  for (const refs of [
+    [],
+    [{ ref: "refs/tags/repository-analysis-codeql/v1.0.0", object: { type: "commit", sha: definitionSha } }],
+    [{ ref: "refs/tags/repository-analysis/v1.0", object: { type: "commit", sha: definitionSha } }],
+    [{ ref: "refs/tags/repository-analysis/v1.0.0", object: { type: "tag", sha: definitionSha } }],
+    [{ ref: "refs/tags/repository-analysis/v1.0.0", object: { type: "commit", sha: sourceSha } }],
+  ]) {
+    await assert.rejects(bootstrap({ request: async (endpoint) =>
+      endpoint.startsWith("GET /repos/{owner}/{repo}/actions/") ? { data: shaRun } : { data: refs } },
+    current, core, { env: environment }), /unreviewed mutable/);
   }
   await assert.rejects(bootstrap({}, current, core, { env: { ...environment, EXPECTED_SHA: definitionSha } }),
     /exact supported workflow source/);

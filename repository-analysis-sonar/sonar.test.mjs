@@ -84,6 +84,15 @@ const managedPolicy = {
   })),
 };
 
+test("producer revalidation requires approved exact SHA definitions", () => {
+  const changed = structuredClone(producer);
+  changed.referenced_workflows[0].ref = input.definitionSha;
+  assert.throws(() => validateProducerRun(changed, input, runtime, {}), /immutable release/);
+  validateProducerRun(changed, input, runtime, {}, input.definitionSha);
+  changed.referenced_workflows[0].ref = input.sourceSha;
+  assert.throws(() => validateProducerRun(changed, input, runtime, {}, input.definitionSha), /immutable release/);
+});
+
 test("native CLI completes module loading and surfaces initial failures instead of deadlocking", () => {
   const filename = fileURLToPath(new URL("./sonar.mjs", import.meta.url));
   const build = { kind: "dotnet", sdk: ["9.0.x", "10.0.x"], globalJson: "global.json",
