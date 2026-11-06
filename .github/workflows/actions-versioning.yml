@@ -70,6 +70,7 @@ jobs:
             stale-branch-sweep
             terraform-setup
             terraform-receipt
+            terraform-plan-storage
             terraform-validate
             terraform-apply
             terraform-destroy
@@ -104,10 +105,14 @@ jobs:
               PATTERN="^(${ACTION}|repository-analysis-context)/"
             elif [[ "$ACTION" == "terraform-receipt" ]]; then
               PATTERN='^terraform-(receipt|setup)/'
+            elif [[ "$ACTION" == "terraform-plan-storage" ]]; then
+              PATTERN='^terraform-plan-storage/'
             elif [[ "$ACTION" == terraform-* && "$ACTION" != "terraform-setup" ]]; then
               PATTERN="^(${ACTION}|terraform-setup|terraform-receipt)/"
               if [[ "$ACTION" == "terraform-plan" || "$ACTION" == "terraform-plan-readonly" || "$ACTION" == "terraform-plan-and-apply" || "$ACTION" == "terraform-import" ]]; then
-                PATTERN="^(${ACTION}|terraform-setup|terraform-receipt|terraform-pr-comment)/"
+                PATTERN="^(${ACTION}|terraform-setup|terraform-receipt|terraform-pr-comment|terraform-plan-storage)/"
+              elif [[ "$ACTION" == "terraform-apply" ]]; then
+                PATTERN="^(${ACTION}|terraform-setup|terraform-receipt|terraform-plan-storage)/"
               fi
             else
               PATTERN="^${ACTION}/"

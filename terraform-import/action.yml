@@ -60,6 +60,12 @@ inputs:
   import-id:
     description: "The cloud provider ID of the existing resource (e.g. full Azure resource ID)"
     required: true
+  plan-file-name:
+    description: "Filename for the saved post-import plan"
+    default: "plan.tfplan"
+  plan-artifact-name:
+    description: "Run-scoped identifier for the saved post-import plan"
+    default: "terraform-import-plan"
   perform-checkout:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
@@ -184,7 +190,7 @@ runs:
         # file (not an environment variable) so large plans do not exceed the process
         # env/argument size limit when the PR-comment step spawns Node. Keep stderr on
         # its own channel (no 2>&1) so deprecation warnings aren't double-counted.
-        terraform plan -no-color -var-file=${{ inputs.terraform-var-file }} | tee "$RUNNER_TEMP/tf-plan-output.txt"
+        terraform plan -no-color -var-file=${{ inputs.terraform-var-file }} -out="${{ inputs.plan-file-name }}" | tee "$RUNNER_TEMP/tf-plan-output.txt"
       env:
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
@@ -235,6 +241,28 @@ runs:
           });
 
           await fmt.postComment(github, context, marker, body);
+
+    - name: Bind saved plan to source and toolchain
+      if: steps.plan.outcome == 'success'
+      shell: bash
+      env:
+        TF_CONTEXT: ${{ steps.toolchain.outputs.directory }}
+        TF_PLAN: ${{ inputs.plan-file-name }}
+        TF_ENVIRONMENT: ${{ inputs.terraform-environment }}
+        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+      run: node "${{ github.action_path }}/../terraform-setup/context.cjs" save-plan
+
+    - name: Store Terraform plan
+      if: steps.plan.outcome == 'success'
+      uses: $/terraform-plan-storage
+      with:
+        operation: upload
+        context-directory: ${{ steps.toolchain.outputs.directory }}
+        plan-file-name: ${{ inputs.plan-file-name }}
+        plan-artifact-name: ${{ inputs.plan-artifact-name }}
+        azure-client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        azure-tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        azure-subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Fail if validate or plan failed
       if: steps.validate.outputs.exitcode != '0' || steps.plan.outputs.exitcode != '0'

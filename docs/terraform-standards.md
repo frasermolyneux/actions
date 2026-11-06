@@ -1,11 +1,14 @@
-# Terraform action v2 contract
+# Terraform action contracts
 
-The ten execution actions (`terraform-plan`, `terraform-plan-readonly`,
+The original v2 execution actions (`terraform-plan`, `terraform-plan-readonly`,
 `terraform-plan-and-apply`, `terraform-apply`, `terraform-output`,
 `terraform-state-check`, `terraform-state-rm`, `terraform-import`,
 `terraform-destroy`, `terraform-destroy-resources`) release as **v2.0.0**.
 Existing v1 tags remain unchanged. Do not migrate consumers until the exact v2
 tags exist after the reviewed change is merged and `actions-versioning` succeeds.
+The plan-producing actions and split apply now release as **v3** because saved
+plans move from GitHub artifacts to Azure Blob Storage. Upgrade producers and
+consumers together; v2 and v3 saved-plan transfers are not compatible.
 
 ## Root toolchain
 
@@ -54,18 +57,42 @@ Git on Windows), never a checkout/PATH-selected Git executable.
 
 ## Saved plan boundary
 
-Plan and readonly-plan upload exactly the binary plan, its
-`<plan-file-name>.metadata.json` and the selected root `.terraform.lock.hcl`.
-Hidden-file upload is explicitly enabled only for these selected files, never an
-entire Terraform directory. Plans can contain secrets; existing plan artifact
-access controls still apply. Plan names must be simple filenames.
+Plan, readonly-plan, combined plan-and-apply, and the post-import plan each save
+one bundle containing the binary plan, its `<plan-file-name>.metadata.json`, and
+the selected root `.terraform.lock.hcl`. No binary plan is uploaded to GitHub
+artifacts. The combined action stores the plan before applying it. Import stores
+its post-import plan after the import has already changed state: if storage fails,
+inspect the completed import before retrying.
+
+The commit-bound `terraform-plan-storage` helper uses `azure/login` with GitHub
+OIDC and Azure CLI `--auth-mode login`. Jobs need `id-token: write`, Azure CLI,
+and an identity with blob data write access (including readonly-plan) to the
+pre-existing private `tfplan` container. Configure the federated identity and
+container separately; the actions do not create them or use storage keys. The
+account is the effective `storage_account_name` in the initialized `azurerm`
+backend, including backend-file settings, explicit overrides and `TF_DATA_DIR`.
+Missing or non-Azure backends and missing account names fail closed. No management
+plane account lookup is required. Plans can contain secrets; account-level blob
+permissions and the container's retention/lifecycle policy govern their access and
+retention.
+
+The retained `plan-artifact-name` input is now a **blob identifier**, not a
+GitHub artifact name. A producer and split apply must use the same identifier,
+plan filename, repository, workflow run and run attempt, as well as the same
+backend account. Use distinct identifiers for matrix entries or multiple plans in
+one run. Uploads are create-only: a duplicate identifier in the same attempt
+fails rather than replacing an existing plan. A job-only rerun in a later attempt
+cannot retrieve an earlier attempt's plan; rerun the producer as well. The
+combined action defaults to `terraform-plan` and import to
+`terraform-import-plan`. Plan names must be simple filenames.
 
 Metadata schema `terraform-saved-plan-v1` contains `sourceCommit`, `rootDirectory`,
 `terraformVersion`, `lockSha256`, `environment`, and `planSha256`. Split apply
-downloads into an isolated invocation directory rather than overwriting the
-checkout lock, performs readonly init, verifies every identity/hash against the
-current checkout, and only then copies/applies the binary plan. Legacy v1 artifacts
-are intentionally rejected by v2 apply.
+performs readonly init, retrieves into an isolated invocation directory rather
+than overwriting the checkout lock, verifies every identity/hash against the
+current checkout, and only then copies/applies the binary plan. A missing blob,
+failed transfer, corrupt bundle or failed verification stops apply. There is no
+GitHub-artifact fallback.
 
 ## Execution receipt
 
@@ -142,7 +169,8 @@ callers using an older exact or minor tag retain the old behavior.
 
 There is no publication dispatch or dispatch input. A reviewed push/merge to
 `main` triggers `actions-versioning`; it computes the changed-action dependency
-closure and publishes policy, setup, receipt, then the ten operations. Setup and
+closure and publishes policy, setup, receipt and plan storage before their operation
+consumers. Setup and
 receipt sibling references use `$/`, binding the executable closure to the same
 actions commit. Exact patch tags point to that main commit; the workflow then
 updates rolling minor/major tags. Consumers requiring historical producer trust
@@ -159,7 +187,7 @@ blobs.
 ## Validation
 
 ```powershell
-node --test terraform-setup/context.test.cjs dependabot-policy/policy.test.cjs
+node --test terraform-setup/context.test.cjs terraform-plan-storage/storage.test.cjs dependabot-policy/policy.test.cjs
 git diff --check
 ```
 

@@ -1,5 +1,5 @@
 name: "terraform-plan"
-description: "Runs terraform init, validate, and plan with Azure OIDC authentication, uploads the plan artifact, and optionally posts results to the PR"
+description: "Runs terraform init, validate, and plan with Azure OIDC authentication, saves the plan to Azure storage, and optionally posts results to the PR"
 
 inputs:
   terraform-version:
@@ -59,7 +59,7 @@ inputs:
     required: false
     default: "plan.tfplan"
   plan-artifact-name:
-    description: "The GitHub Actions artifact name to upload the plan file as."
+    description: "Run-scoped saved plan identifier shared with terraform-apply."
     required: false
     default: "terraform-plan"
   perform-checkout:
@@ -229,17 +229,18 @@ runs:
         TF_VAR_FILE: ${{ inputs.terraform-var-file }}
       run: node "${{ github.action_path }}/../terraform-setup/context.cjs" save-plan
 
-    - name: Upload Terraform Plan Artifact
-      if: steps.plan.outputs.exitcode == '0'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+    - name: Store Terraform plan
+      id: store
+      if: steps.plan.outcome == 'success'
+      uses: $/terraform-plan-storage
       with:
-        name: ${{ inputs.plan-artifact-name }}
-        path: |
-          ${{ inputs.terraform-folder }}/${{ inputs.plan-file-name }}
-          ${{ inputs.terraform-folder }}/${{ inputs.plan-file-name }}.metadata.json
-          ${{ inputs.terraform-folder }}/.terraform.lock.hcl
-        include-hidden-files: true
-        if-no-files-found: error
+        operation: upload
+        context-directory: ${{ steps.toolchain.outputs.directory }}
+        plan-file-name: ${{ inputs.plan-file-name }}
+        plan-artifact-name: ${{ inputs.plan-artifact-name }}
+        azure-client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        azure-tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        azure-subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Fail if validate or plan failed
       if: steps.validate.outputs.exitcode != '0' || steps.plan.outputs.exitcode != '0'
@@ -255,6 +256,6 @@ runs:
       with:
         context-directory: ${{ steps.toolchain.outputs.directory }}
         operation: plan
-        outcome: ${{ steps.validate.outcome == 'success' && steps.plan.outcome == 'success' && 'success' || 'failure' }}
+        outcome: ${{ steps.validate.outcome == 'success' && steps.plan.outcome == 'success' && steps.store.outcome == 'success' && 'success' || 'failure' }}
         environment: ${{ inputs.terraform-environment }}
         terraform-var-file: ${{ inputs.terraform-var-file }}
