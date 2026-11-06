@@ -30,7 +30,7 @@
   selected-native reusable, actual archived source and independently verified processing.
 - [docs/repository-publication-origin.md](docs/repository-publication-origin.md) - Metadata-only
   publication admission and verified downstream workflow lineage before App merge cutover.
-- [docs/copilot-setup.md](docs/copilot-setup.md) - Copilot setup v2 contract and migration guidance for repositories that need custom environment setup.
+- [docs/copilot-setup.md](docs/copilot-setup.md) - Repository-native Copilot setup v2 guidance for projects that need custom runtime installation or dependency restore.
 - [docs/dotnet-test-reporting.md](docs/dotnet-test-reporting.md) - Shared .NET test execution, optional pinned native coverage, multi-project TRX reporting, test-environment setup and owned PR result summaries.
 - [docs/nerdbank-gitversioning.md](docs/nerdbank-gitversioning.md) - How composites satisfy Nerdbank.GitVersioning requirements.
 
