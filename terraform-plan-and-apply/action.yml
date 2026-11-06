@@ -57,6 +57,9 @@ inputs:
     description: "Filename to write the terraform plan output (-out) and later apply"
     required: false
     default: "plan.tfplan"
+  plan-artifact-name:
+    description: "Run-scoped identifier for the saved plan."
+    default: "terraform-plan"
   perform-checkout:
     description: "Set to false if the repository has already been checked out with fetch-depth 0"
     required: false
@@ -199,6 +202,28 @@ runs:
           });
 
           await fmt.postComment(github, context, marker, body);
+
+    - name: Bind saved plan to source and toolchain
+      if: steps.plan.outcome == 'success'
+      shell: bash
+      env:
+        TF_CONTEXT: ${{ steps.toolchain.outputs.directory }}
+        TF_PLAN: ${{ inputs.plan-file-name }}
+        TF_ENVIRONMENT: ${{ inputs.terraform-environment }}
+        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
+      run: node "${{ github.action_path }}/../terraform-setup/context.cjs" save-plan
+
+    - name: Store Terraform plan
+      if: steps.plan.outcome == 'success'
+      uses: $/terraform-plan-storage
+      with:
+        operation: upload
+        context-directory: ${{ steps.toolchain.outputs.directory }}
+        plan-file-name: ${{ inputs.plan-file-name }}
+        plan-artifact-name: ${{ inputs.plan-artifact-name }}
+        azure-client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        azure-tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        azure-subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Terraform Apply
       id: apply

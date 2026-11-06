@@ -1,5 +1,5 @@
 name: "terraform-apply"
-description: "Downloads a Terraform plan artifact and applies it with Azure OIDC authentication"
+description: "Retrieves and applies a saved Terraform plan with Azure OIDC authentication"
 
 inputs:
   terraform-version:
@@ -38,11 +38,11 @@ inputs:
     required: false
     default: ""
   plan-file-name:
-    description: "The filename of the previously generated plan artifact (binary .tfplan)."
+    description: "The filename of the previously generated binary plan."
     required: false
     default: "plan.tfplan"
   plan-artifact-name:
-    description: "The GitHub Actions artifact name that contains the plan file."
+    description: "Run-scoped saved plan identifier shared with the producer."
     required: false
     default: "terraform-plan"
   terraform-additional-apply-args:
@@ -79,12 +79,6 @@ runs:
         terraform-folder: ${{ inputs.terraform-folder }}
         terraform-version: ${{ inputs.terraform-version }}
         terraform_wrapper: "false"
-
-    - name: Download Terraform Plan Artifact
-      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-      with:
-        name: ${{ inputs.plan-artifact-name }}
-        path: ${{ steps.toolchain.outputs.directory }}/saved-plan
 
     - name: Terraform Init
       shell: pwsh
@@ -128,6 +122,17 @@ runs:
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
         ARM_USE_AZUREAD: true
         ARM_USE_OIDC: true
+
+    - name: Retrieve Terraform plan
+      uses: $/terraform-plan-storage
+      with:
+        operation: download
+        context-directory: ${{ steps.toolchain.outputs.directory }}
+        plan-file-name: ${{ inputs.plan-file-name }}
+        plan-artifact-name: ${{ inputs.plan-artifact-name }}
+        azure-client-id: ${{ inputs.AZURE_CLIENT_ID }}
+        azure-tenant-id: ${{ inputs.AZURE_TENANT_ID }}
+        azure-subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
 
     - name: Verify saved plan source and toolchain before mutation
       shell: bash
