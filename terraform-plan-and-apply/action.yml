@@ -69,7 +69,7 @@ inputs:
     required: false
     default: "true"
   pr-comment-workspace:
-    description: "Optional TF_WORKSPACE to disambiguate PR comments in matrix runs"
+    description: "Retained for compatibility; comments are appended independently"
     required: false
     default: ""
   pr-comment-expand-summary-details:
@@ -174,34 +174,19 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
       env:
         PLAN_OUTPUT_FILE: ${{ runner.temp }}/tf-plan-output.txt
-        PLAN_STDERR: ${{ steps.plan.outputs.stderr }}
         PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
         PLAN_OUTCOME: ${{ steps.plan.outcome }}
-        TF_WORKSPACE: ${{ inputs.pr-comment-workspace }}
-        TF_VAR_FILE: ${{ inputs.terraform-var-file }}
       with:
         script: |
           const fmt = require('${{ github.action_path }}/../terraform-pr-comment/format.js');
-          const workspace = process.env.TF_WORKSPACE || '';
-          const environment = fmt.deriveEnvironment(process.env.TF_VAR_FILE);
-          const envSuffix = environment ? ` ${environment}` : '';
-          const wsSuffix = workspace ? ` (${workspace})` : '';
-          const marker = `<!-- terraform-pr-comment: plan-and-apply${envSuffix}${wsSuffix} -->`;
-
-          const body = fmt.buildComment({
-            marker,
-            title: '🏗️ Terraform Plan & Apply',
-            workspace,
-            environment,
+          await fmt.postComment(github, context, {
+            kind: 'plan-and-apply',
             plan: {
               stdout: fmt.readOutputFile(process.env.PLAN_OUTPUT_FILE),
-              stderr: process.env.PLAN_STDERR,
               exitcode: process.env.PLAN_EXITCODE,
               outcome: process.env.PLAN_OUTCOME,
             },
           });
-
-          await fmt.postComment(github, context, marker, body);
 
     - name: Bind saved plan to source and toolchain
       if: steps.plan.outcome == 'success'

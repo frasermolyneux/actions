@@ -94,6 +94,21 @@ current checkout, and only then copies/applies the binary plan. A missing blob,
 failed transfer, corrupt bundle or failed verification stops apply. There is no
 GitHub-artifact fallback.
 
+## Pull request comments
+
+The four plan-producing actions can post a fixed action heading, validation and
+plan status labels, numeric add/change/destroy counts, and a generic warning when
+the parsed destroy count is nonzero (including replacements). Missing, failed,
+ambiguous or unparseable output never appears verbatim; a successful plan with no
+parseable summary is marked unavailable. Resource addresses, environment and
+workspace names, and diagnostics are not included in comment bodies.
+
+Comments contain no hidden markers or input-derived identifiers. Each invocation
+appends a separate comment, including matrix jobs and later runs; it does not
+supersede or edit earlier comments. Results cannot be identified by environment
+or workspace in the comment itself. The `pr-comment-workspace` input is retained
+for compatibility but has no effect on comments.
+
 ## Execution receipt
 
 `terraform-receipt/v1.0.0` uploads a single `terraform-execution.json` with schema
@@ -187,7 +202,7 @@ blobs.
 ## Validation
 
 ```powershell
-node --test terraform-setup/context.test.cjs terraform-plan-storage/storage.test.cjs dependabot-policy/policy.test.cjs
+node --test terraform-setup/context.test.cjs terraform-plan-storage/storage.test.cjs terraform-pr-comment/format.test.js dependabot-policy/policy.test.cjs
 git diff --check
 ```
 
