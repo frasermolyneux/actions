@@ -175,7 +175,7 @@ jobs:
         if os.name == "nt":
             self.skipTest("ShellCheck is supplied by the hosted Linux runner")
         subprocess.run(["shellcheck", "--version"], check=True, capture_output=True)
-        self.write(".github/workflows/test.yml", WORKFLOW + "      - run: echo $unassigned\n")
+        self.write(".github/workflows/test.yml", WORKFLOW + '      - run: echo "$unassigned"\n')
         self.assertNotEqual(run(self.executable, self.root), 0)
 
     def test_existing_configuration_and_metadata_are_preserved(self):

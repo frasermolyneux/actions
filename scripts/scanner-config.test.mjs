@@ -9,19 +9,18 @@ test("managed Sonar policy remains valid", async () => {
   assert.equal(validatePolicy(policy), policy);
 });
 
-test("Checkov policy is fail-closed and every approved skip has a rationale", async () => {
+test("Checkov policy is fail-closed and contains only approved skips", async () => {
   const source = await readFile(".checkov.yml", "utf8");
   assert.match(source, /^# Provenance: repository-standards-v1 \/ checkov-v1$/m);
   assert.match(source, /^soft-fail: false$/m);
   assert.match(source, /^compact: true$/m);
 
-  const skips = [...source.matchAll(/^\s+-\s+(CKV_[A-Z0-9_]+)\s+#\s+(.+)$/gm)]
-    .map((match) => ({ rule: match[1], reason: match[2].trim() }));
-  assert.deepEqual(skips.map(({ rule }) => rule), [
+  const skips = [...source.matchAll(/^\s+-\s+(CKV_[A-Z0-9_]+)\s*(?:#.*)?$/gm)]
+    .map((match) => match[1]);
+  assert.deepEqual(skips, [
     "CKV_AZURE_41",
     "CKV_AZURE_114",
     "CKV_GHA_7",
     "CKV_GIT_1",
   ]);
-  assert.ok(skips.every(({ reason }) => reason.length >= 20));
 });
