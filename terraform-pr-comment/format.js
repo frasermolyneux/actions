@@ -26,18 +26,17 @@ function parsePlanSummary(output) {
   let boxed = false;
   let diagnostic = false;
   for (const raw of lines) {
-    const line = raw.trim();
-    if (line === '╷') { boxed = true; continue; }
-    if (boxed && line === '╵') { boxed = false; continue; }
+    if (/^╷\s*$/.test(raw)) { boxed = true; continue; }
+    if (boxed && /^╵\s*$/.test(raw)) { boxed = false; continue; }
     if (boxed) continue;
-    if (/^(?:│\s*)?(?:Warning|Error):/.test(line)) diagnostic = true;
+    if (/^(?:│\s*)?(?:Warning|Error):/.test(raw)) diagnostic = true;
     if (diagnostic) continue;
-    const match = /^Plan: (\d+) to add, (\d+) to change, (\d+) to destroy\.$/.exec(line);
+    const match = /^Plan: (\d+) to add, (\d+) to change, (\d+) to destroy\.\s*$/.exec(raw);
     if (match) {
       const counts = match.slice(1).map(Number);
       if (counts.some(count => !Number.isSafeInteger(count))) return null;
       matches.push({ add: counts[0], change: counts[1], destroy: counts[2] });
-    } else if (line === 'No changes. Your infrastructure matches the configuration.') {
+    } else if (/^No changes\. Your infrastructure matches the configuration\.\s*$/.test(raw)) {
       matches.push({ add: 0, change: 0, destroy: 0 });
     }
   }

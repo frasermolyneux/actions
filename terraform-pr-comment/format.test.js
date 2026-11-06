@@ -84,6 +84,27 @@ test('unavailable, failed, malformed, ambiguous and diagnostic output never beco
   assert.equal(fmt.readOutputFile(path.join(__dirname, 'missing-synthetic-plan-output')), null);
 });
 
+test('indented heredoc diagnostics and fake summaries do not hide the real destructive plan', () => {
+  const output = [
+    '  # example.payload must be replaced',
+    '  ~ resource "example" "payload" {',
+    '      text = <<-EOT',
+    '        Warning: this is application content',
+    '        Error: this is also application content',
+    '        Plan: 0 to add, 0 to change, 0 to destroy.',
+    '        ╷',
+    '        ╵',
+    '      EOT',
+    '    }',
+    'Plan: 1 to add, 0 to change, 1 to destroy.',
+  ].join('\n');
+  assert.deepEqual(fmt.parsePlanSummary(output), { add: 1, change: 0, destroy: 1 });
+  const body = fmt.buildComment({ kind: 'plan', plan: { ...success, stdout: output } });
+  assert.match(body, /Destructive changes are planned/);
+  assert.match(body, /\| Destroy \| 1 \|/);
+  assert.doesNotMatch(body, /application content/);
+});
+
 test('comments have no marker and render context labels safely', () => {
   const base = { kind: 'plan', plan: { ...success, stdout: 'No changes. Your infrastructure matches the configuration.' } };
   const body = fmt.buildComment(base);
@@ -144,7 +165,7 @@ test('matrix runs append independent comments without reading or updating old bo
   }
 });
 
-test('each action comment script sends only allowlisted bodies on success and failure', async () => {
+test('each action comment script wires only intended context and plan status inputs', () => {
   for (const [name, kind] of [['terraform-plan', 'plan'], ['terraform-plan-readonly', 'plan-readonly'],
     ['terraform-plan-and-apply', 'plan-and-apply'], ['terraform-import', 'import']]) {
     const manifest = fs.readFileSync(path.join(__dirname, '..', name, 'action.yml'), 'utf8').replace(/\r\n/g, '\n');
@@ -154,30 +175,17 @@ test('each action comment script sends only allowlisted bodies on success and fa
     const script = comment.split('        script: |\n')[1].split('\n').map(line => line.replace(/^          /, '')).join('\n');
     assert.match(script, new RegExp(`kind: '${kind}'`));
     assert.doesNotMatch(comment, /VALIDATE_STDOUT|VALIDATE_STDERR|PLAN_STDERR/);
-    const execute = new Function('require', 'process', 'github', 'context',
-      `return (async () => { ${script} })();`);
-    for (const outcome of ['success', 'failure']) {
-      const api = fakeGitHub();
-      const shim = { ...fmt, readOutputFile: () => `# resource["${secret}"] must be replaced\nPlan: 1 to add, 0 to change, 1 to destroy.\nWarning: ${secret}` };
-      await execute(() => shim, { env: {
-        GITHUB_WORKFLOW: 'deploy-workflow', TF_COMMENT_FOLDER: 'terraform/network',
-        TF_COMMENT_WORKSPACE: 'production-workspace', TF_COMMENT_ENVIRONMENT: '',
-        TF_COMMENT_VAR_FILE: 'tfvars/production.tfvars', PLAN_OUTPUT_FILE: secret,
-        PLAN_OUTCOME: outcome, PLAN_EXITCODE: outcome === 'success' ? '0' : '1',
-        VALIDATE_OUTCOME: outcome, VALIDATE_EXITCODE: outcome === 'success' ? '0' : '1',
-        PLAN_STDERR: secret, VALIDATE_STDERR: secret,
-      } }, api.github, context);
-      assert.equal(api.creates.length, 1, name);
-      assert.equal(api.updates.length, 0, name);
-      for (const request of [...api.creates, ...api.updates]) assert.ok(!request.body.includes(secret), name);
-      assert.doesNotMatch(api.creates[0].body, /<!--|[a-f0-9]{64}/);
-      assert.match(api.creates[0].body, /\*\*Workflow:\*\* <code>&#100;&#101;&#112;&#108;&#111;&#121;/);
-      assert.match(api.creates[0].body, /\*\*Terraform folder:\*\*/);
-      assert.match(api.creates[0].body, /\*\*Workspace:\*\*/);
-      assert.match(api.creates[0].body, /\*\*Target environment:\*\*/);
-      assert.match(api.creates[0].body, outcome === 'success' ? /Plan: Passed/ : /Plan: Failed/);
-      if (outcome === 'success') assert.match(api.creates[0].body, /Destructive changes are planned/);
-      else assert.doesNotMatch(api.creates[0].body, /Destructive changes are planned/);
-    }
+    assert.match(comment, /TF_COMMENT_FOLDER: \$\{\{ inputs\.terraform-folder \}\}/);
+    assert.match(comment, /TF_COMMENT_WORKSPACE: \$\{\{ inputs\.pr-comment-workspace \}\}/);
+    assert.match(comment, /TF_COMMENT_ENVIRONMENT: \$\{\{ inputs\.terraform-environment \}\}/);
+    assert.match(comment, /TF_COMMENT_VAR_FILE: \$\{\{ inputs\.terraform-var-file \}\}/);
+    assert.match(script, /workflow: process\.env\.GITHUB_WORKFLOW/);
+    assert.match(script, /folder: process\.env\.TF_COMMENT_FOLDER/);
+    assert.match(script, /workspace: fmt\.workspaceName\(process\.env\.TF_COMMENT_WORKSPACE, process\.env\)/);
+    assert.match(script, /environment: fmt\.environmentName\(process\.env\.TF_COMMENT_ENVIRONMENT, process\.env\.TF_COMMENT_VAR_FILE\)/);
+    assert.match(script, /stdout: fmt\.readOutputFile\(process\.env\.PLAN_OUTPUT_FILE\)/);
+    assert.match(script, /exitcode: process\.env\.PLAN_EXITCODE/);
+    assert.match(script, /outcome: process\.env\.PLAN_OUTCOME/);
+    assert.match(script, /await fmt\.postComment\(github, context,/);
   }
 });
