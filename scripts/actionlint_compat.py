@@ -98,12 +98,18 @@ def prepare_copy(source, destination):
         raise ValueError("No repository workflows to validate")
 
 
-def run(actionlint, source):
+def run(actionlint, source, quiet=False):
     executable = Path(actionlint).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="actionlint-self-") as directory:
         destination = Path(directory)
         prepare_copy(Path(source).resolve(strict=True), destination)
-        return subprocess.run([str(executable), "-color"], cwd=destination).returncode
+        output = subprocess.DEVNULL if quiet else None
+        return subprocess.run(
+            [str(executable), "-color"],
+            cwd=destination,
+            stdout=output,
+            stderr=output,
+        ).returncode
 
 
 if __name__ == "__main__":
