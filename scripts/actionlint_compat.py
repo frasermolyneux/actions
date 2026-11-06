@@ -104,7 +104,8 @@ def run(actionlint, source, quiet=False):
         destination = Path(directory)
         prepare_copy(Path(source).resolve(strict=True), destination)
         output = subprocess.DEVNULL if quiet else None
-        return subprocess.run(
+        # The executable is strict-resolved above and receives only fixed arguments.
+        return subprocess.run(  # nosec B603
             [str(executable), "-color"],
             cwd=destination,
             stdout=output,
