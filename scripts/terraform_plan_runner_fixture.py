@@ -90,13 +90,17 @@ def verify(action, case):
     expected_result = "failure" if case in {"plan-error", "gated-change", "show-error"} else "success"
     expected_show = ("failure" if case == "show-error" else "skipped" if case in {"plan-error", "gated-change"} else "success")
     expected_markers = [] if expected_result == "failure" else ["bind", "store"] + (["apply"] if action == "terraform-plan-and-apply" else [])
-    assert trace[0:2] == [expected_code, expected_outcome], f"Wrong plan result: {trace}"
+    if trace[0:2] != [expected_code, expected_outcome]:
+        raise AssertionError(f"Wrong plan result: {trace}")
     if action != "terraform-import":
-        assert trace[3] == expected_show, f"Wrong show outcome: {trace}"
-        if expected_show == "success":
-            assert trace[2] == "0", f"Wrong show exitcode: {trace}"
-    assert os.environ["RUNNER_ACTION_OUTCOME"] == expected_result, f"Wrong composite outcome: {os.environ['RUNNER_ACTION_OUTCOME']}"
-    assert markers == expected_markers, f"Wrong gated side effects: {markers}"
+        if len(trace) < 4 or trace[3] != expected_show:
+            raise AssertionError(f"Wrong show outcome: {trace}")
+        if expected_show == "success" and trace[2] != "0":
+            raise AssertionError(f"Wrong show exitcode: {trace}")
+    if os.environ["RUNNER_ACTION_OUTCOME"] != expected_result:
+        raise AssertionError(f"Wrong composite outcome: {os.environ['RUNNER_ACTION_OUTCOME']}")
+    if markers != expected_markers:
+        raise AssertionError(f"Wrong gated side effects: {markers}")
     print(f"{action} {case}: plan={trace[0]} outcome={expected_result} markers={markers}")
 
 

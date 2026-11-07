@@ -46,7 +46,8 @@ jobs:
       - name: Execute production plan and gating steps
         id: execute
         continue-on-error: true
-        uses: ./.runner-plan-contract
+        # Generated in this job; $/ would resolve the committed repository, not this fixture.
+        uses: ./.runner-plan-contract # zizmor: ignore[self-repository]
         with:
           terraform-folder: ${{ env.RUNNER_PLAN_ROOT }}
           terraform-var-file: ${{ matrix.case == 'plan-error' && 'missing.tfvars' || 'empty.tfvars' }}

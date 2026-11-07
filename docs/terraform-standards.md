@@ -266,3 +266,13 @@ show and failure steps and their original conditions in generated composites
 on GitHub-hosted runners. Storage, binding and apply are replaced by markers,
 so no Azure access or mutation is performed; a real local apply is covered by
 the wrapper contract suite instead.
+
+The test harness intentionally runs checked-out action shell steps and the
+test-supplied Terraform wrapper/binary. Run it only on an isolated runner with
+trusted tool paths, no secrets and no Azure credentials; it is not an admission
+boundary for untrusted scripts. The runner workflow uses a generated local
+composite because `$/` resolves committed source rather than the generated
+fixture. Its `pull_request` jobs have only `contents: read`, disable checkout
+credential persistence and do not request an OIDC token. The narrowly scoped
+Bandit subprocess and zizmor self-repository exceptions apply only to this test
+execution, not to published actions.

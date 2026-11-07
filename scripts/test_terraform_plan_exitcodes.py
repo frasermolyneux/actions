@@ -2,7 +2,8 @@ import os
 from pathlib import Path
 import re
 import shutil
-import subprocess
+# Test harness intentionally executes checked-out scripts and the local Terraform wrapper.
+import subprocess  # nosec B404
 import tempfile
 import unittest
 
@@ -58,7 +59,8 @@ class PlanExitCodeTests(unittest.TestCase):
               fi
             }
         '''
-        result = subprocess.run(
+        # Test-only: the script is extracted from the checked-out action; run only in a trusted, isolated test environment.
+        result = subprocess.run(  # nosec B603
             [bash_executable(), "-c", harness + script], cwd=root,
             env=environment, capture_output=True, text=True,
         )
@@ -101,7 +103,8 @@ class PlanExitCodeTests(unittest.TestCase):
                     root = Path(directory)
                     (root / "main.tf").write_text(config, encoding="utf-8")
                     (root / "empty.tfvars").write_text("", encoding="utf-8")
-                    init = subprocess.run(
+                    # The executable is the test-supplied Terraform binary; arguments and fixture are local and fixed.
+                    init = subprocess.run(  # nosec B603
                         [self.binary, "init", "-backend=false", "-input=false"],
                         cwd=root, capture_output=True, text=True,
                         env={k: v for k, v in os.environ.items() if not k.startswith("TF_CLI_ARGS") and k not in ("TF_DATA_DIR", "TF_WORKSPACE")},
@@ -148,7 +151,8 @@ class PlanExitCodeTests(unittest.TestCase):
                     'resource "terraform_data" "example" {}\n' if has_change else "", encoding="utf-8"
                 )
                 (root / "empty.tfvars").write_text("", encoding="utf-8")
-                init = subprocess.run(
+                # The executable is the test-supplied Terraform binary; arguments and fixture are local and fixed.
+                init = subprocess.run(  # nosec B603
                     [self.binary, "init", "-backend=false", "-input=false"],
                     cwd=root, capture_output=True, text=True,
                     env={k: v for k, v in os.environ.items() if not k.startswith("TF_CLI_ARGS") and k not in ("TF_DATA_DIR", "TF_WORKSPACE")},
@@ -183,7 +187,8 @@ class PlanExitCodeTests(unittest.TestCase):
                 root = Path(directory)
                 (root / "main.tf").write_text(config, encoding="utf-8")
                 (root / "empty.tfvars").write_text("", encoding="utf-8")
-                init = subprocess.run(
+                # The executable is the test-supplied Terraform binary; arguments and fixture are local and fixed.
+                init = subprocess.run(  # nosec B603
                     [self.binary, "init", "-backend=false", "-input=false"],
                     cwd=root, capture_output=True, text=True,
                     env={k: v for k, v in os.environ.items() if not k.startswith("TF_CLI_ARGS") and k not in ("TF_DATA_DIR", "TF_WORKSPACE")},

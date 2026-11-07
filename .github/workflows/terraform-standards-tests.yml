@@ -35,6 +35,8 @@ jobs:
         run: python scripts/test_terraform_backend_init.py
       - name: Test shell argument and template boundaries
         run: python scripts/test_template_arguments.py
+      - name: Verify runner fixture checks under Python optimization
+        run: python -O scripts/test_terraform_plan_runner_fixture.py
       - name: Exercise readonly toolchain validation and binary receipt
         uses: $/terraform-validate
         with:
