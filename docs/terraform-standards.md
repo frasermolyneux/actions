@@ -260,3 +260,8 @@ wrapper enabled and uploads a real metadata-only validation receipt from the
 committed, two-platform provider-lock fixture.
 It also runs `scripts/test_terraform_plan_exitcodes.py` against that pinned
 wrapper and an isolated local Terraform configuration, without Azure access.
+The separate Terraform plan runner gates workflow executes the original plan,
+show and failure steps and their original conditions in generated composites
+on GitHub-hosted runners. Storage, binding and apply are replaced by markers,
+so no Azure access or mutation is performed; a real local apply is covered by
+the wrapper contract suite instead.

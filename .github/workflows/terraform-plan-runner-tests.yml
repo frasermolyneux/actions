@@ -1,0 +1,58 @@
+name: Terraform plan runner gates
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions: {}
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        action: [terraform-plan, terraform-plan-readonly, terraform-plan-and-apply, terraform-import]
+        case: [no-change, plan-error, gated-change, ordinary-change, show-error]
+        exclude:
+          - action: terraform-import
+            case: show-error
+    env:
+      TEST_ACTION: ${{ matrix.action }}
+      TEST_CASE: ${{ matrix.case }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e
+        with:
+          terraform_version: '1.17.0'
+          terraform_wrapper: 'true'
+      - name: Build isolated runner fixture and initialize local Terraform
+        shell: bash
+        env:
+          RUNNER_PLAN_ROOT: ${{ runner.temp }}/terraform-plan-fixture
+          RUNNER_PLAN_TRACE: ${{ runner.temp }}/terraform-plan-trace
+          RUNNER_PLAN_MARKERS: ${{ runner.temp }}/terraform-plan-markers
+        run: |
+          set -euo pipefail
+          printf 'RUNNER_PLAN_ROOT=%s\nRUNNER_PLAN_TRACE=%s\nRUNNER_PLAN_MARKERS=%s\n' "$RUNNER_PLAN_ROOT" "$RUNNER_PLAN_TRACE" "$RUNNER_PLAN_MARKERS" >> "$GITHUB_ENV"
+          python scripts/terraform_plan_runner_fixture.py prepare "$TEST_ACTION" "$TEST_CASE"
+          terraform -chdir="$RUNNER_PLAN_ROOT" init -backend=false -input=false
+      - name: Execute production plan and gating steps
+        id: execute
+        continue-on-error: true
+        uses: ./.runner-plan-contract
+        env:
+          TF_CLI_ARGS_plan: ${{ matrix.case == 'ordinary-change' && '' || '-detailed-exitcode' }}
+        with:
+          terraform-folder: ${{ env.RUNNER_PLAN_ROOT }}
+          terraform-var-file: ${{ matrix.case == 'plan-error' && 'missing.tfvars' || 'empty.tfvars' }}
+          test-case: ${{ matrix.case }}
+      - name: Verify native exit, runner outcome, and gated side effects
+        if: always()
+        shell: bash
+        env:
+          RUNNER_ACTION_OUTCOME: ${{ steps.execute.outcome }}
+        run: python scripts/terraform_plan_runner_fixture.py verify "$TEST_ACTION" "$TEST_CASE"
