@@ -38,14 +38,15 @@ jobs:
         run: |
           set -euo pipefail
           printf 'RUNNER_PLAN_ROOT=%s\nRUNNER_PLAN_TRACE=%s\nRUNNER_PLAN_MARKERS=%s\n' "$RUNNER_PLAN_ROOT" "$RUNNER_PLAN_TRACE" "$RUNNER_PLAN_MARKERS" >> "$GITHUB_ENV"
+          if [ "$TEST_CASE" != ordinary-change ]; then
+            echo 'TF_CLI_ARGS_plan=-detailed-exitcode' >> "$GITHUB_ENV"
+          fi
           python scripts/terraform_plan_runner_fixture.py prepare "$TEST_ACTION" "$TEST_CASE"
           terraform -chdir="$RUNNER_PLAN_ROOT" init -backend=false -input=false
       - name: Execute production plan and gating steps
         id: execute
         continue-on-error: true
         uses: ./.runner-plan-contract
-        env:
-          TF_CLI_ARGS_plan: ${{ matrix.case == 'ordinary-change' && '' || '-detailed-exitcode' }}
         with:
           terraform-folder: ${{ env.RUNNER_PLAN_ROOT }}
           terraform-var-file: ${{ matrix.case == 'plan-error' && 'missing.tfvars' || 'empty.tfvars' }}
