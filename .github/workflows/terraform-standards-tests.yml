@@ -53,6 +53,10 @@ jobs:
           set -euo pipefail
           terraform -chdir=terraform-setup/fixtures init -backend=false -input=false -lockfile=readonly
           terraform -chdir=terraform-setup/fixtures validate
+      - name: Test plan exit codes using the pinned Terraform wrapper
+        env:
+          TERRAFORM_WRAPPER_JS: ${{ env.TERRAFORM_CLI_PATH }}/terraform
+        run: python scripts/test_terraform_plan_exitcodes.py
       - name: Exercise actual metadata-only receipt artifact publication
         if: always() && steps.setup-smoke.outcome == 'success'
         uses: $/terraform-receipt
