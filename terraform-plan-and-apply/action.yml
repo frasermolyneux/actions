@@ -71,6 +71,10 @@ inputs:
   pr-comment-workspace:
     description: "Optional workspace label override for PR comments; otherwise use the selected Terraform workspace"
     default: ""
+outputs:
+  plan-exitcode:
+    description: "Native Terraform plan exit code, or empty if plan did not run"
+    value: ${{ steps.plan.outputs.exitcode }}
 runs:
   using: "composite"
 
@@ -159,6 +163,24 @@ runs:
         rm -f -- "$args_file"
         trap - EXIT
         terraform plan -var-file="$ACTION_TF_VARS_PATH" -out="$TF_PLAN_FILE" "${additional_args[@]}"
+      env:
+        TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
+        TF_PLAN_FILE: ${{ inputs.plan-file-name }}
+        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
+        ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
+        ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
+        ARM_USE_AZUREAD: true
+        ARM_USE_OIDC: true
+
+    - name: Show Terraform plan
+      id: show
+      if: steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '0'
+      continue-on-error: true
+      shell: bash
+      working-directory: ${{ inputs.terraform-folder }}
+      run: |
+        set -euo pipefail
         # Show the plan in human readable form
         terraform show "$TF_PLAN_FILE"
         # Write a no-color copy for the PR comment step. The comment reads this from a
@@ -166,9 +188,7 @@ runs:
         # env/argument size limit when the PR-comment step spawns Node.
         terraform show -no-color "$TF_PLAN_FILE" > "$RUNNER_TEMP/tf-plan-output.txt"
       env:
-        TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
         TF_PLAN_FILE: ${{ inputs.plan-file-name }}
-        ACTION_TF_VARS_PATH: ${{ inputs.terraform-var-file }}
         ARM_CLIENT_ID: ${{ inputs.AZURE_CLIENT_ID }}
         ARM_SUBSCRIPTION_ID: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
@@ -181,7 +201,7 @@ runs:
       env:
         PLAN_OUTPUT_FILE: ${{ runner.temp }}/tf-plan-output.txt
         PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
-        PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        PLAN_OUTCOME: ${{ steps.show.outcome == 'failure' && 'failure' || steps.plan.outcome }}
         TF_COMMENT_FOLDER: ${{ inputs.terraform-folder }}
         TF_COMMENT_WORKSPACE: ${{ inputs.pr-comment-workspace }}
         TF_COMMENT_ENVIRONMENT: ${{ inputs.terraform-environment }}
@@ -202,8 +222,19 @@ runs:
             },
           });
 
+    - name: Fail if plan or show failed
+      if: steps.plan.outcome != 'success' || steps.plan.outputs.exitcode != '0' || steps.show.outcome != 'success'
+      shell: bash
+      env:
+        PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
+        SHOW_OUTCOME: ${{ steps.show.outcome }}
+      run: |
+        echo "Terraform plan exit code: $PLAN_EXITCODE"
+        echo "Terraform show outcome: $SHOW_OUTCOME"
+        exit 1
+
     - name: Bind saved plan to source and toolchain
-      if: steps.plan.outcome == 'success'
+      if: steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '0' && steps.show.outcome == 'success'
       shell: bash
       env:
         TF_CONTEXT: ${{ steps.toolchain.outputs.directory }}
@@ -213,7 +244,7 @@ runs:
       run: node "${{ github.action_path }}/../terraform-setup/context.cjs" save-plan
 
     - name: Store Terraform plan
-      if: steps.plan.outcome == 'success'
+      if: steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '0' && steps.show.outcome == 'success'
       uses: $/terraform-plan-storage
       with:
         operation: upload
@@ -226,7 +257,7 @@ runs:
 
     - name: Terraform Apply
       id: apply
-      if: steps.plan.outputs.exitcode == '0'
+      if: steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '0' && steps.show.outcome == 'success'
       shell: bash
       working-directory: ${{ inputs.terraform-folder }}
       run: |
@@ -237,12 +268,19 @@ runs:
         mapfile -d '' -t additional_args < "$args_file"
         rm -f -- "$args_file"
         trap - EXIT
+        apply_args=()
+        for arg in "${additional_args[@]}"; do
+          case "$arg" in
+            -detailed-exitcode|--detailed-exitcode|-detailed-exitcode=*|--detailed-exitcode=*) ;;
+            *) apply_args+=("$arg") ;;
+          esac
+        done
         if [ ! -f "$TF_PLAN_FILE" ]; then
           echo "Expected plan file '$TF_PLAN_FILE' not found" >&2
           ls -al
           exit 1
         fi
-        terraform apply -auto-approve "${additional_args[@]}" "$TF_PLAN_FILE"
+        terraform apply -auto-approve "${apply_args[@]}" "$TF_PLAN_FILE"
       env:
         TF_ADDITIONAL_ARGS: ${{ inputs.terraform-additional-args }}
         TF_PLAN_FILE: ${{ inputs.plan-file-name }}
@@ -251,15 +289,6 @@ runs:
         ARM_TENANT_ID: ${{ inputs.AZURE_TENANT_ID }}
         ARM_USE_AZUREAD: true
         ARM_USE_OIDC: true
-
-    - name: Fail if plan failed
-      if: steps.plan.outputs.exitcode != '0'
-      shell: bash
-      env:
-        PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
-      run: |
-        echo "Terraform plan exit code: $PLAN_EXITCODE"
-        exit 1
 
     - name: Publish Terraform apply execution evidence
       if: always() && steps.toolchain.outcome == 'success'

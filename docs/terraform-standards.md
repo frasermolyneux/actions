@@ -16,6 +16,29 @@ The safe argument parsing change releases `terraform-plan`,
 `terraform-destroy-resources`, and `terraform-state-rm` as **v3**. Upgrade only
 after the corresponding tags are published.
 
+The plan, readonly-plan, combined plan-and-apply and import actions release as
+**v6** because detailed exit codes now enforce a no-change gate before storage.
+For the first three, pass `-detailed-exitcode` through
+`terraform-additional-args`: a native exit code of 2 fails the action before
+showing, binding, uploading or applying the plan; code 1 and show failures also
+fail. Without that option, Terraform normally returns 0 even for a plan with
+changes, and those plans continue to be shown, stored and, for the combined
+action, applied. The combined action removes `-detailed-exitcode` and its
+double-dash and `=true`/`=false` forms from the arguments passed to apply. A
+caller that previously used the flag but intended to accept changes must remove
+it before upgrading. Terraform environment
+arguments that enable detailed exit codes have the same gate effect.
+The post-import plan does not consume `terraform-additional-args`; set
+`TF_CLI_ARGS_plan=-detailed-exitcode` to gate that plan. Import has already
+changed state before its post-import gate runs, even if the gate fails.
+
+The `plan-exitcode` output is the original native plan exit code, not a later
+`terraform show` result; it is empty if the plan command never produced an
+output. Without detailed exit codes, 0 alone does **not** prove no changes.
+The saved-plan storage and OIDC contract are unchanged. Upgrade callers only
+after the reviewed v6 exact tags have been published; the release workflow
+allocates the patch number from existing tags.
+
 `terraform-additional-args` and `terraform-additional-apply-args` are parsed as
 POSIX-style quoted argument lists using Python's `shlex`, not executed as shell
 code. Whitespace, single and double quotes, and backslash escaping delimit
@@ -236,3 +259,20 @@ and destruction of an isolated local random-ID fixture. No cloud state is access
 Hosted CI additionally exercises the actual setup composite with the HashiCorp
 wrapper enabled and uploads a real metadata-only validation receipt from the
 committed, two-platform provider-lock fixture.
+It also runs `scripts/test_terraform_plan_exitcodes.py` against that pinned
+wrapper and an isolated local Terraform configuration, without Azure access.
+The separate Terraform plan runner gates workflow executes the original plan,
+show and failure steps and their original conditions in generated composites
+on GitHub-hosted runners. Storage, binding and apply are replaced by markers,
+so no Azure access or mutation is performed; a real local apply is covered by
+the wrapper contract suite instead.
+
+The test harness intentionally runs checked-out action shell steps and the
+test-supplied Terraform wrapper/binary. Run it only on an isolated runner with
+trusted tool paths, no secrets and no Azure credentials; it is not an admission
+boundary for untrusted scripts. The runner workflow uses a generated local
+composite because `$/` resolves committed source rather than the generated
+fixture. Its `pull_request` jobs have only `contents: read`, disable checkout
+credential persistence and do not request an OIDC token. The narrowly scoped
+Bandit subprocess and zizmor self-repository exceptions apply only to this test
+execution, not to published actions.

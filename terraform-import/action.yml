@@ -77,6 +77,10 @@ inputs:
   pr-comment-workspace:
     description: "Optional workspace label override for PR comments; otherwise use the selected Terraform workspace"
     default: ""
+outputs:
+  plan-exitcode:
+    description: "Native post-import Terraform plan exit code, or empty if plan did not run"
+    value: ${{ steps.plan.outputs.exitcode }}
 runs:
   using: "composite"
 
@@ -240,8 +244,19 @@ runs:
             },
           });
 
+    - name: Fail if validate or plan failed
+      if: steps.validate.outcome != 'success' || steps.validate.outputs.exitcode != '0' || steps.plan.outcome != 'success' || steps.plan.outputs.exitcode != '0'
+      shell: bash
+      env:
+        VALIDATE_EXITCODE: ${{ steps.validate.outputs.exitcode }}
+        PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
+      run: |
+        echo "Terraform validate exit code: $VALIDATE_EXITCODE"
+        echo "Terraform plan exit code: $PLAN_EXITCODE"
+        exit 1
+
     - name: Bind saved plan to source and toolchain
-      if: steps.plan.outcome == 'success'
+      if: steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '0'
       shell: bash
       env:
         TF_CONTEXT: ${{ steps.toolchain.outputs.directory }}
@@ -251,7 +266,7 @@ runs:
       run: node "${{ github.action_path }}/../terraform-setup/context.cjs" save-plan
 
     - name: Store Terraform plan
-      if: steps.plan.outcome == 'success'
+      if: steps.plan.outcome == 'success' && steps.plan.outputs.exitcode == '0'
       uses: $/terraform-plan-storage
       with:
         operation: upload
@@ -261,17 +276,6 @@ runs:
         azure-client-id: ${{ inputs.AZURE_CLIENT_ID }}
         azure-tenant-id: ${{ inputs.AZURE_TENANT_ID }}
         azure-subscription-id: ${{ inputs.AZURE_SUBSCRIPTION_ID }}
-
-    - name: Fail if validate or plan failed
-      if: steps.validate.outputs.exitcode != '0' || steps.plan.outputs.exitcode != '0'
-      shell: bash
-      env:
-        VALIDATE_EXITCODE: ${{ steps.validate.outputs.exitcode }}
-        PLAN_EXITCODE: ${{ steps.plan.outputs.exitcode }}
-      run: |
-        echo "Terraform validate exit code: $VALIDATE_EXITCODE"
-        echo "Terraform plan exit code: $PLAN_EXITCODE"
-        exit 1
 
     - name: Publish Terraform import execution evidence
       if: always() && steps.toolchain.outcome == 'success'
