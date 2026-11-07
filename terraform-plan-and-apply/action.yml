@@ -270,7 +270,10 @@ runs:
         trap - EXIT
         apply_args=()
         for arg in "${additional_args[@]}"; do
-          if [ "$arg" != "-detailed-exitcode" ]; then apply_args+=("$arg"); fi
+          case "$arg" in
+            -detailed-exitcode|--detailed-exitcode|-detailed-exitcode=*|--detailed-exitcode=*) ;;
+            *) apply_args+=("$arg") ;;
+          esac
         done
         if [ ! -f "$TF_PLAN_FILE" ]; then
           echo "Expected plan file '$TF_PLAN_FILE' not found" >&2

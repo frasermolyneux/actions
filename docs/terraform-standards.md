@@ -23,9 +23,10 @@ For the first three, pass `-detailed-exitcode` through
 showing, binding, uploading or applying the plan; code 1 and show failures also
 fail. Without that option, Terraform normally returns 0 even for a plan with
 changes, and those plans continue to be shown, stored and, for the combined
-action, applied. The combined action removes `-detailed-exitcode` from the
-arguments passed to apply. A caller that previously used the flag but intended
-to accept changes must remove it before upgrading. Terraform environment
+action, applied. The combined action removes `-detailed-exitcode` and its
+double-dash and `=true`/`=false` forms from the arguments passed to apply. A
+caller that previously used the flag but intended to accept changes must remove
+it before upgrading. Terraform environment
 arguments that enable detailed exit codes have the same gate effect.
 The post-import plan does not consume `terraform-additional-args`; set
 `TF_CLI_ARGS_plan=-detailed-exitcode` to gate that plan. Import has already

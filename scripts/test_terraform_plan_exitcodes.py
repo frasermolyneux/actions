@@ -89,7 +89,7 @@ class PlanExitCodeTests(unittest.TestCase):
             if action == "terraform-plan-and-apply":
                 apply = manifest.split("    - name: Terraform Apply\n", 1)[1].split("\n    - name:", 1)[0]
                 self.assertIn(f"      if: {gate} && steps.show.outcome == 'success'\n", apply)
-                self.assertIn('if [ "$arg" != "-detailed-exitcode" ]', apply)
+                self.assertIn("-detailed-exitcode|--detailed-exitcode|-detailed-exitcode=*|--detailed-exitcode=*", apply)
             for case, config, args, extra_env, varfile, expected_shell, expected_code, should_show in (
                 ("no changes", "", "-detailed-exitcode", {}, "empty.tfvars", 0, "0", True),
                 ("changes gated", 'resource "terraform_data" "example" {}\n', "-detailed-exitcode", {}, "empty.tfvars", 0, "2", False),
@@ -131,6 +131,35 @@ class PlanExitCodeTests(unittest.TestCase):
                             self.assertEqual(exitcode(apply_output), "0")
                     else:
                         self.assertFalse((root / "tf-plan-output.txt").exists())
+
+    def test_combined_action_accepts_detailed_exitcode_flag_forms(self):
+        plan = step_script("terraform-plan-and-apply/action.yml", "Terraform Plan")
+        apply = step_script("terraform-plan-and-apply/action.yml", "Terraform Apply")
+        for flag, has_change in (
+            ("--detailed-exitcode", False),
+            ("-detailed-exitcode=true", False),
+            ("--detailed-exitcode=true", False),
+            ("-detailed-exitcode=false", True),
+            ("--detailed-exitcode=false", True),
+        ):
+            with self.subTest(flag=flag), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / "main.tf").write_text(
+                    'resource "terraform_data" "example" {}\n' if has_change else "", encoding="utf-8"
+                )
+                (root / "empty.tfvars").write_text("", encoding="utf-8")
+                init = subprocess.run(
+                    [self.binary, "init", "-backend=false", "-input=false"],
+                    cwd=root, capture_output=True, text=True,
+                    env={k: v for k, v in os.environ.items() if not k.startswith("TF_CLI_ARGS") and k not in ("TF_DATA_DIR", "TF_WORKSPACE")},
+                )
+                self.assertEqual(init.returncode, 0, init.stdout + init.stderr)
+                result, output = self.run_script(plan, root, {"TF_ADDITIONAL_ARGS": flag}, root / "plan-output")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(exitcode(output), "0")
+                result, output = self.run_script(apply, root, {"TF_ADDITIONAL_ARGS": flag}, root / "apply-output")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(exitcode(output), "0")
 
     def test_post_import_plan_gates_before_storage(self):
         manifest = (ROOT / "terraform-import" / "action.yml").read_text(encoding="utf-8")
