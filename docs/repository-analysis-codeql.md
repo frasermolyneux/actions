@@ -52,9 +52,8 @@ publishes verified current-source native results.
 
 ## Integration acceptance
 
-`.github/workflows/repository-analysis-codeql-tests.yml` exercises the pinned
-CodeQL action at `2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2` and the exact
-2.27.1 bundle. This is integration acceptance for the estate engine workstream,
+[`repository-analysis-codeql-tests.yml`](../.github/workflows/repository-analysis-codeql-tests.yml)
+exercises the pinned CodeQL action and bundle. This is integration acceptance for the estate engine workstream,
 including the actual selected-native reusable for maintained source, not adoption
 of a complete estate profile. Existing SDK/Framework/C++ fixture acceptance remains
 compiler-family evidence, not a foreign production scan.
@@ -90,7 +89,7 @@ Separate SDK .NET, Windows Framework 4.8 and C++ fixtures exercise manual
 extraction around the preserved analysis-only restore/build/test commands.
 Fixture query output and databases are **never uploaded** to native code scanning.
 Their bounded proof artifacts explicitly identify fixture-only scope.
-Artifacts stay in the originating repository and expire after 14 days. Raw
+Artifacts stay in the originating repository; the workflow defines retention. Raw
 database archives and source bytes are not copied into proof artifacts.
 
 Every proof records `fullProfileEvidence: false`. A successful fixture or

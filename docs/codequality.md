@@ -9,33 +9,19 @@ The workflow is released as the `codequality` package. Resolve its latest exact
 patch tag to a full commit SHA before substituting `<FULL_RELEASE_SHA>` below.
 The commit-bound first-party dependencies require runner 2.336.0 or later.
 
-## Inputs
-- `sonar-project-key` (required): SonarCloud project key, e.g., `frasermolyneux_portal-server-events`.
-- `sonar-organization` (default `frasermolyneux`): SonarCloud organization key.
-- `sonar-host-url` (default `https://sonarcloud.io`): Sonar endpoint.
-- `build-target` (default `dotnet-ci`): `dotnet-ci`, `dotnet-web-ci`, `dotnet-func-ci`, or `cmake-ci` composite to run.
-- `skip-format-check` (default `false`): Set to `true` for .NET build targets when format validation already runs in dedicated build/test workflows.
-- `test-reporting` (default `false`): Opt in to isolated multi-project .NET TRX artifacts, validated step summaries, failure annotations and a bounded structured quality artifact. Requires real test execution; missing, zero-test and all-skipped runs fail. See [test reporting](dotnet-test-reporting.md). Does not publish PR comments from this analysis job.
-- `dotnet-project`: Required when `build-target` is `dotnet-web-ci` or `dotnet-func-ci`; project name to upload as the artifact. For `dotnet-web-ci/v3`, use a single project name without path separators.
-- `publish-frameworks` (default empty): For `dotnet-web-ci`, optional comma/newline list of target frameworks to publish explicitly.
-- `nuget-artifact-name` (default `nuget-packages`): For `dotnet-web-ci`, artifact name for NuGet packages.
-- `dotnet-version` (default `9.0.x`): SDK version(s) to install.
-- `src-folder` (default `src`): Folder containing the solution/projects.
-- `use-framework-output-root` (default `false`): For Functions builds, upload the first framework-specific output folder instead of `bin/Release`.
-- `codeql-languages` (default `csharp`): CodeQL language selection (for example `cpp`).
-- `codeql-category` (default `/language:csharp`): CodeQL category label (for example `/language:cpp`).
-- `cmake-source-dir` (default `.`): Source folder used by `cmake -S`.
-- `cmake-build-dir` (default `build`): Build folder used by `cmake -B` and `ctest --test-dir`.
-- `cmake-configure-args` (default `-DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON`): Extra configure args for CMake.
-- `cmake-build-args` (default `--config Release`): Extra build args for CMake.
-- `ctest-args` (default `--output-on-failure --build-config Release`): Extra test args for CTest.
+## Inputs and secrets
 
-## Secrets
-- `SONAR_TOKEN` (required): SonarCloud token with analysis permissions.
+The [workflow definition](../.github/workflows/codequality.yml) is the source
+for inputs, defaults, outputs and secrets. Set `skip-sonar` or `skip-codeql`
+when the corresponding analysis is not wanted. `SONAR_TOKEN` is optional in
+the workflow interface but is needed when running SonarCloud analysis.
+For web and Functions builds, provide `dotnet-project`; the web action expects
+a single project name without path separators. Opt-in `test-reporting` requires
+real test execution; see [test reporting](dotnet-test-reporting.md).
 
 ## Structured test evidence
 
-When .NET `test-reporting` is enabled, a separate always-run job publishes the selected composite's report through `test-results-summary/v1.1.0`. It receives only the sanitized test output and authoritative analysis-job outcome, checks out no source, has no GitHub token permissions, and never publishes PR comments. Scanner/setup/build/artifact failures cannot be replaced by passing test counters.
+When .NET `test-reporting` is enabled, a separate always-run job publishes the selected composite's report through `test-results-summary`. It receives only the sanitized test output and authoritative analysis-job outcome, checks out no source, has no GitHub token permissions, and never publishes PR comments. Scanner/setup/build/artifact failures cannot be replaced by passing test counters.
 
 The optional workflow output `quality-evidence-artifact-id` identifies the exact uploaded `estate-quality.json` artifact. This producer is enabled consistently for every existing opted-in .NET caller; no caller-side extra summary is needed. CMake and callers without real test reporting remain unchanged.
 
@@ -43,6 +29,7 @@ Consumers must independently qualify the originating caller repository, default-
 
 ## Usage
 Reference the workflow directly from consuming repositories:
+Replace the SDK and target-framework placeholders with values from the consumer.
 
 ### Standard .NET solution
 ```yaml
@@ -67,7 +54,7 @@ jobs:
       sonar-project-key: frasermolyneux_my-project
       build-target: dotnet-ci
       skip-format-check: true
-      dotnet-version: 9.0.x
+      dotnet-version: <YOUR_SDK_VERSION>
       src-folder: src
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -97,9 +84,9 @@ jobs:
       build-target: dotnet-web-ci
       skip-format-check: true
       dotnet-project: My.WebApp
-      dotnet-version: 9.0.x
+      dotnet-version: <YOUR_SDK_VERSION>
       src-folder: src
-      publish-frameworks: net9.0
+      publish-frameworks: <YOUR_TARGET_FRAMEWORK>
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 ```
@@ -128,7 +115,7 @@ jobs:
       build-target: dotnet-func-ci
       skip-format-check: true
       dotnet-project: XtremeIdiots.Portal.ServerEvents.App
-      dotnet-version: 9.0.x
+      dotnet-version: <YOUR_SDK_VERSION>
       src-folder: src
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -154,7 +141,7 @@ rationale retained in SARIF properties.
 The CMake argument-list inputs are parsed using Python 3 `shlex` on PATH. Quotes
 and backslash escapes group arguments; shell expansion, globbing, substitution,
 redirection and pipelines are not executed, and unmatched quotes fail the step.
-The same contract applies to `cmake-ci/v2` once its new tag is published.
+The same contract applies to the current `cmake-ci` action.
 The workflow's web build uses the `dotnet-web-ci` action from the same commit
 as the reusable workflow, rather than depending on a separately published tag.
 

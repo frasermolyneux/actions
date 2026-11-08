@@ -113,7 +113,8 @@ SDK build recipe:
 ```
 
 Declared SDKs and the repository's actual `global.json` SDK are installed
-**before** installing or beginning the pinned Sonar .NET scanner **11.3.0**.
+**before** installing or beginning the pinned Sonar .NET scanner. The
+[scanner implementation](../repository-analysis-sonar/scanner.ps1) owns its pin.
 The final SDK-selection filename must be exactly `global.json`, not a matching
 suffix that the .NET CLI would not discover.
 It must be in the source directory or one of its repository ancestors, not an
@@ -121,7 +122,8 @@ unrelated sibling or descendant. Solution inputs are paths, never option-prefixe
 values that could make restore/build return successful help without compilation.
 Restore, original format policy and Release/CI build are preserved. Successful
 unit tests use the existing `FullyQualifiedName!~IntegrationTests` selection and
-pinned native `dotnet-coverage` **18.11.2**, without test-package dependency changes.
+pinned native `dotnet-coverage`, without test-package dependency changes; the
+[coverage tool configuration](../dotnet-test/coverage-tools.json) owns its pin.
 Verification reads the producer's same package pin, accepts its supported native
 build-metadata suffix, and preserves the observed version without admitting another package version.
 Separate existing integration/browser jobs and runsettings are not replaced.
@@ -142,7 +144,8 @@ not enable a plugin binary or invent a coverage collector.
 `script` retains `nodeVersion` (`20.x` or `22`) and explicit `npmInstall`.
 The static-site recipe does not pretend its echo-only build is application testing
 or invoke Static Web Apps deployment. CLI/C++ use the reviewed official scan action,
-scanner **8.1.0.6389** and signature verification.
+the scanner version in the [workflow](../.github/workflows/repository-analysis-sonar.yml)
+and signature verification.
 
 ## Completed evidence, not accepted uploads
 

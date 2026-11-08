@@ -1,8 +1,8 @@
 # Copilot setup
 
-`copilot-setup` v2 is a deterministic environment setup action for GitHub Copilot cloud agent setup workflows. It provides optional repository checkout and opt-in installation of the .NET, Node.js, and Python runtimes.
+`copilot-setup` is a deterministic environment setup action for GitHub Copilot cloud agent setup workflows. It provides optional repository checkout and opt-in installation of the .NET, Node.js, and Python runtimes.
 
-The action is published at `copilot-setup/v2`. Use it only when a repository needs custom runtime installation or dependency restore before an agent starts.
+Use it only when a repository needs custom runtime installation or dependency restore before an agent starts. Resolve a reviewed release as described in [action versioning](action-versioning.md).
 
 The action:
 
@@ -15,20 +15,14 @@ Copilot cloud agent checks out the repository after setup when setup does not ne
 
 ## Inputs
 
-| Input | Default | Description |
-|---|---:|---|
-| `checkout-repo` | `'false'` | Checkout the current repository during setup. Enable only when later setup steps need repository files. |
-| `checkout-fetch-depth` | `'1'` | Fetch depth used when `checkout-repo` is enabled. |
-| `setup-dotnet` | `'false'` | Install .NET SDK versions supplied through `dotnet-version`. |
-| `dotnet-version` | `''` | .NET SDK version or versions. Required when `setup-dotnet` is enabled. |
-| `setup-node` | `'false'` | Install the Node.js version supplied through `node-version`. |
-| `node-version` | `''` | Node.js version. Required when `setup-node` is enabled. |
-| `setup-python` | `'false'` | Install the Python version supplied through `python-version`. |
-| `python-version` | `''` | Python version. Required when `setup-python` is enabled. |
+The [action manifest](../copilot-setup/action.yml) defines all inputs and defaults.
 
 Runtime versions are deliberately consumer-owned. The shared action does not select or update versions and does not configure dependency caching because lockfile locations and cache requirements are repository-specific.
 
 ## Examples
+
+Replace release and runtime placeholders with the consumer's reviewed release
+and runtime versions.
 
 ### No custom setup
 
@@ -39,13 +33,11 @@ When no runtime or pre-session dependency restore is required, omit the shared a
 ```yaml
 steps:
   - name: Set up Copilot environment
-    uses: frasermolyneux/actions/copilot-setup@copilot-setup/v2
+    uses: frasermolyneux/actions/copilot-setup@<FULL_RELEASE_SHA> # copilot-setup/vX.Y.Z
     with:
       checkout-repo: 'true'
       setup-dotnet: 'true'
-      dotnet-version: |
-        9.0.x
-        10.0.x
+      dotnet-version: <YOUR_SDK_VERSION>
 
   - name: Restore dependencies
     run: dotnet restore
@@ -56,11 +48,11 @@ steps:
 ```yaml
 steps:
   - name: Set up Copilot environment
-    uses: frasermolyneux/actions/copilot-setup@copilot-setup/v2
+    uses: frasermolyneux/actions/copilot-setup@<FULL_RELEASE_SHA> # copilot-setup/vX.Y.Z
     with:
       checkout-repo: 'true'
       setup-node: 'true'
-      node-version: 20.x
+      node-version: <YOUR_NODE_VERSION>
 
   - name: Restore dependencies
     run: npm ci

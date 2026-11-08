@@ -64,7 +64,7 @@ git diff --check
 ```
 
 `repository-analysis-native-tests.yml` exercises the boundaries on Linux/Windows and actually
-extracts/query-analyzes this public repository's Actions source using pinned CodeQL 2.27.1.
+extracts/query-analyzes this public repository's Actions source using its pinned CodeQL bundle.
 It verifies the real uploaded analysis through this composite and retains the proof. Fork
 PRs do not execute that write-bearing native integration job. Deterministic private-policy
 tests are not claimed as an actual private-repository hosted scan.

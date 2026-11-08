@@ -4,6 +4,11 @@ These composites support repositories that run `dotnet test` suites (optionally 
 front end) and want consistent TRX reporting without duplicating the parsing/annotation logic in every
 consumer repo.
 
+Examples use `<FULL_RELEASE_SHA>` for a reviewed action release; resolve each
+action's release separately as described in [action versioning](action-versioning.md).
+Replace SDK placeholders with the consumer's version. Each linked action manifest
+is authoritative for inputs, defaults and outputs.
+
 ## `dotnet-node-setup`
 
 Sets up the .NET SDK from `global.json`, Node.js from `.node-version`, npm caching, and NuGet package
@@ -11,18 +16,13 @@ caching in one step. Intended for repositories that combine a .NET solution with
 end (e.g. Razor/Blazor apps bundling SCSS/TypeScript).
 
 ```yaml
-- uses: frasermolyneux/actions/dotnet-node-setup@dotnet-node-setup/v1
+- uses: frasermolyneux/actions/dotnet-node-setup@<FULL_RELEASE_SHA> # dotnet-node-setup/vX.Y.Z
   with:
     npm-cache-dependency-path: src/MyApp/package-lock.json
 ```
 
-| Input | Required | Default | Description |
-| --- | --- | --- | --- |
-| `npm-cache-dependency-path` | yes | - | Path to `package-lock.json`, passed through to `actions/setup-node`. |
-| `global-json-file` | no | `global.json` | Path used to resolve the .NET SDK version. |
-| `node-version-file` | no | `.node-version` | Path containing the required Node.js version. |
-
-Output: `dotnet-version` - the resolved SDK version (`dotnet --version`).
+See the [`dotnet-node-setup` manifest](../dotnet-node-setup/action.yml) for its
+inputs and resolved SDK output.
 
 Repository-specific steps (npm install, solution build, browser installs, etc.) stay in the consumer
 repository; this composite only covers runtime setup and caching.
@@ -38,7 +38,7 @@ diagnostics) as an artifact, writes a step summary table, and emits `::error` an
   id: tests
   run: dotnet test src/MyApp.Tests --configuration Release --logger trx --results-directory TestResults/Unit
 
-- uses: frasermolyneux/actions/dotnet-test-report@dotnet-test-report/v1
+- uses: frasermolyneux/actions/dotnet-test-report@<FULL_RELEASE_SHA> # dotnet-test-report/vX.Y.Z
   if: always()
   with:
     suite: Unit
@@ -48,20 +48,9 @@ diagnostics) as an artifact, writes a step summary table, and emits `::error` an
     source-path-pattern: '^src/MyApp\.Tests/.+\.cs$'
 ```
 
-| Input | Required | Default | Description |
-| --- | --- | --- | --- |
-| `suite` | yes | - | Label for the suite (e.g. `Unit`, `HttpIntegration`). |
-| `results-directory` | yes | - | Directory expected to contain exactly one `*.trx` by default; relative paths resolve against `repository-root`. |
-| `allow-multiple` | no | `false` | Accept all project/framework TRX files from one isolated invocation (v1.1+). Never point this at a reused results directory. |
-| `run-outcome` | no | `unknown` | Outcome of the preceding test step. A `success` outcome that doesn't resolve to a passing report fails this action. |
-| `artifact-name` | no | *(none)* | When set, uploads `artifact-paths` (default: everything under `results-directory`) as an artifact. |
-| `artifact-paths` | no | `results-directory/**` | Newline-separated paths to upload. |
-| `retention-days` | no | `7` | Artifact retention. |
-| `artifact-id` | no | *(none)* | Reuse an already-uploaded artifact's ID instead of uploading a new one (e.g. when another step already uploaded these results). Takes precedence over `artifact-name`/`artifact-paths`. |
-| `source-path-pattern` | no | *(none)* | Regex a repository-relative source path must match before a failure gets a file/line annotation. Omit to skip source-mapped annotations. |
-| `repository-root` | no | `GITHUB_WORKSPACE` | Root used to resolve relative source paths. |
-
-Outputs: `report` (the JSON report) and `artifact-id`.
+See the [`dotnet-test-report` manifest](../dotnet-test-report/action.yml) for
+inputs and outputs. `allow-multiple` accepts all project/framework TRX files
+from one isolated invocation; never point it at a reused results directory.
 
 The report schema is intentionally minimal - `schema`, `suite`, `status`, `reason`, `total`, `executed`,
 `passed`, `failed`, `skipped`, `durationSeconds`, `artifactId` - so it is safe to pass between jobs as a
@@ -69,7 +58,7 @@ job output and aggregate across suites in a consuming repository. It does not in
 performance-baseline data: repositories that need that (for example a coverage/perf-baseline gate) layer
 their own enrichment step on top of this action's `report` output before publishing or gating on it.
 
-Version 1.1 keeps single-file validation as the default. Multi-file mode accepts at most 128 files,
+Single-file validation is the default. Multi-file mode accepts at most 128 files,
 32 MiB per file and 128 MiB combined, with at most one million results. Every file is validated;
 one malformed file invalidates the complete report. Counts include separate target-framework runs,
 and `durationSeconds` sums their TRX windows, not elapsed wall-clock time. Empty filtered projects
@@ -93,7 +82,7 @@ or frameworks. It always reports/uploads evidence after the test command and nev
 its failure. It requires an already-configured .NET SDK and repository checkout.
 
 ```yaml
-- uses: frasermolyneux/actions/dotnet-test@dotnet-test/v1
+- uses: frasermolyneux/actions/dotnet-test@<FULL_RELEASE_SHA> # dotnet-test/vX.Y.Z
   id: tests
   with:
     suite: Unit
@@ -101,19 +90,10 @@ its failure. It requires an already-configured .NET SDK and repository checkout.
     artifact-name: test-results-Unit
 ```
 
-| Input | Default | Description |
-| --- | --- | --- |
-| `suite` | `Unit` | Report label. |
-| `working-directory` | `src` | Solution/project directory. |
-| `project` | `.` | Project or solution relative to that directory. |
-| `configuration` | `Release` | Build configuration. |
-| `no-build` | `true` | Reuse current outputs; `false` builds/restores before testing. |
-| `filter` | `FullyQualifiedName!~IntegrationTests` | Preserves existing unit-test selection. Set `""` to run all tests in a selected integration project. |
-| `artifact-name` | `test-results-Unit` | Must be unique within the workflow run, including matrix jobs. |
-| `source-path-pattern` | `^src/.+\.(?:cs\|fs\|feature)$` | Eligible source annotations; paths outside the checkout are always rejected. |
-| `coverage` | `false` | Collect native Cobertura with pinned `dotnet-coverage` 18.11.2; no test-project collector dependency is added (v1.1+). |
-
-Outputs: `report`, `artifact-id`, `coverage-report` and `results-directory`. TRX artifacts are retained for seven days. Browser installation,
+See the [`dotnet-test` manifest](../dotnet-test/action.yml) for inputs and
+outputs. Artifact names must be unique within the workflow run, including matrix
+jobs. The [coverage tool configuration](../dotnet-test/coverage-tools.json)
+owns the collector pin. Browser installation,
 coverage profiles, provider import, external-service setup and repository-specific diagnostics remain with consumers.
 This runner targets the VSTest/TRX contract; it does not change projects to Microsoft.Testing.Platform.
 
@@ -133,8 +113,8 @@ build/runtime verification rather than being inferred from the SDK fixture.
 
 ### Opt in from existing CI composites
 
-`dotnet-ci`, `dotnet-web-ci` and `dotnet-func-ci` v2.1 add `test-reporting: "true"` and the
-`test-report` output. `dotnet-playwright-tests` v1.2 supports the same opt-in while retaining its
+`dotnet-ci`, `dotnet-web-ci` and `dotnet-func-ci` support `test-reporting: "true"` and the
+`test-report` output. `dotnet-playwright-tests` supports the same opt-in while retaining its
 existing solution-wide integration filter. Defaults remain unchanged so repositories without test
 projects are not broken by rolling tags. Opted-in repositories must actually execute tests.
 Build/version/package/application outputs and artifact names are unchanged.
@@ -159,9 +139,9 @@ jobs:
       test_report: ${{ steps.ci.outputs.test-report }}
     steps:
       - id: ci
-        uses: frasermolyneux/actions/dotnet-ci@dotnet-ci/v2.1
+        uses: frasermolyneux/actions/dotnet-ci@<FULL_RELEASE_SHA> # dotnet-ci/vX.Y.Z
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: <YOUR_SDK_VERSION>
           test-reporting: "true"
 
   test-results:
@@ -174,7 +154,7 @@ jobs:
       group: test-results-${{ github.repository }}-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: false
     steps:
-      - uses: frasermolyneux/actions/test-results-summary@test-results-summary/v1
+      - uses: frasermolyneux/actions/test-results-summary@<FULL_RELEASE_SHA> # test-results-summary/vX.Y.Z
         with:
           jobs: ${{ toJSON(needs) }}
 ```
@@ -191,7 +171,7 @@ The summary accepts at most 32 jobs/64 reports and outputs at most 32 KiB of san
 It never includes test names, stack traces, arbitrary report fields, or inferred cross-suite totals.
 Portal-web keeps its richer coverage/provenance, browser bootstrap and required-suite policy local.
 
-Version 1.1 also retains `estate-quality.json` in a unique
+The action also retains `estate-quality.json` in a unique
 `mxio-test-evidence-*` artifact for seven days by default. It contains only the
 sanitized reports and authoritative job outcomes, plus repository, originating
 workflow revision, event/ref, run ID and exact attempt. It never archives the

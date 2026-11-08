@@ -5,7 +5,8 @@
 execute CodeQL or Sonar, upload to GitHub Security, deploy, publish packages, or implement
 the complete estate schedule/freshness/build/coverage contract.
 
-Use an exact reviewed `repository-analysis-local/v1.X.Y` tag. The action requires a Linux
+Use the full commit SHA of an exact reviewed `repository-analysis-local` release.
+The action requires a Linux
 runner with trusted `/usr/bin/git` and `/usr/bin/pwsh`. It installs Node.js 22 through the released
 preflight and Python 3.12 where needed. The metadata token is used only by preflight; scanner
 processes receive an explicit environment allowlist without provider or Actions credentials.
@@ -102,7 +103,7 @@ keep them private when the originating repository is private.
   with:
     persist-credentials: false
 - id: local
-  uses: frasermolyneux/actions/repository-analysis-local@repository-analysis-local/v1.X.Y
+  uses: frasermolyneux/actions/repository-analysis-local@<FULL_RELEASE_SHA> # repository-analysis-local/vX.Y.Z
   with:
     profile: ${{ vars.REPOSITORY_ANALYSIS_PROFILE }}
     tool: bandit

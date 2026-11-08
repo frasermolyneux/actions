@@ -1,24 +1,12 @@
 # Terraform action contracts
 
-The original v2 execution actions (`terraform-plan`, `terraform-plan-readonly`,
-`terraform-plan-and-apply`, `terraform-apply`, `terraform-output`,
-`terraform-state-check`, `terraform-state-rm`, `terraform-import`,
-`terraform-destroy`, `terraform-destroy-resources`) release as **v2.0.0**.
-Existing v1 tags remain unchanged. Do not migrate consumers until the exact v2
-tags exist after the reviewed change is merged and `actions-versioning` succeeds.
-The plan-producing actions and split apply now release as **v3** because saved
-plans move from GitHub artifacts to Azure Blob Storage. Upgrade producers and
-consumers together; v2 and v3 saved-plan transfers are not compatible.
+These contracts describe the current action definitions. Check each action's
+`action.yml`, `version.json` and published release before upgrading; see
+[action versioning](action-versioning.md). Upgrade saved-plan producers and
+split apply together: older GitHub-artifact transfers are incompatible with the
+current Azure Blob Storage boundary.
 
-The safe argument parsing change releases `terraform-plan`,
-`terraform-plan-readonly`, `terraform-plan-and-apply`, and `terraform-import` as
-**v5**, `terraform-apply` as **v4**, and `terraform-destroy`,
-`terraform-destroy-resources`, and `terraform-state-rm` as **v3**. Upgrade only
-after the corresponding tags are published.
-
-The plan, readonly-plan, combined plan-and-apply and import actions release as
-**v6** because detailed exit codes now enforce a no-change gate before storage.
-For the first three, pass `-detailed-exitcode` through
+For plan, readonly-plan and combined plan-and-apply, pass `-detailed-exitcode` through
 `terraform-additional-args`: a native exit code of 2 fails the action before
 showing, binding, uploading or applying the plan; code 1 and show failures also
 fail. Without that option, Terraform normally returns 0 even for a plan with
@@ -35,9 +23,7 @@ changed state before its post-import gate runs, even if the gate fails.
 The `plan-exitcode` output is the original native plan exit code, not a later
 `terraform show` result; it is empty if the plan command never produced an
 output. Without detailed exit codes, 0 alone does **not** prove no changes.
-The saved-plan storage and OIDC contract are unchanged. Upgrade callers only
-after the reviewed v6 exact tags have been published; the release workflow
-allocates the patch number from existing tags.
+The release workflow allocates patch numbers from existing tags.
 
 `terraform-additional-args` and `terraform-additional-apply-args` are parsed as
 POSIX-style quoted argument lists using Python's `shlex`, not executed as shell
@@ -73,10 +59,11 @@ as a **required nonempty saved-plan identity**, matching either the producer's
 explicit value or its var-file-derived environment. Empty identities are rejected
 before applying a saved plan.
 
-Direct CLI workflows can use `terraform-setup@terraform-setup/v1.0.0`:
+Direct CLI workflows can use `terraform-setup`. Resolve a reviewed exact release
+to its commit SHA as described in [action versioning](action-versioning.md):
 
 ```yaml
-- uses: frasermolyneux/actions/terraform-setup@terraform-setup/v1.0.0
+- uses: frasermolyneux/actions/terraform-setup@<FULL_RELEASE_SHA> # terraform-setup/vX.Y.Z
   id: terraform
   with:
     terraform-folder: terraform
@@ -114,7 +101,13 @@ plane account lookup is required. Plans can contain secrets; account-level blob
 permissions and the container's retention/lifecycle policy govern their access and
 retention.
 
-The retained `plan-artifact-name` input is now a **blob identifier**, not a
+The binary plan and Terraform's human-readable plan output can contain sensitive
+values. Plan and show commands write output to job logs, and the comment formatter
+also reads a temporary copy from the runner. Restrict log and runner access and
+retention as well as blob access; sanitized PR comments and metadata-only
+receipts do not make those other surfaces safe to share.
+
+The `plan-artifact-name` input is a **blob identifier**, not a
 GitHub artifact name. A producer and split apply must use the same identifier,
 plan filename, repository, workflow run and run attempt, as well as the same
 backend account. Use distinct identifiers for matrix entries or multiple plans in
@@ -150,14 +143,13 @@ supersede or edit earlier comments. The workspace label uses the optional
 directory's selected workspace, or `default` when no selection file exists.
 The target environment is `terraform-environment` when set, otherwise the
 var-file basename. Missing context is shown as `Not specified`; labels longer
-than 256 characters are truncated. The four plan-producing actions release as
-v4 because the unused `pr-comment-expand-summary-details` and
-`pr-comment-highlight-changes` inputs have been removed; remove those inputs
-from caller workflows when upgrading.
+than 256 characters are truncated. The unused
+`pr-comment-expand-summary-details` and `pr-comment-highlight-changes` inputs
+have been removed; remove those inputs from caller workflows when upgrading.
 
 ## Execution receipt
 
-`terraform-receipt/v1.0.0` uploads a single `terraform-execution.json` with schema
+`terraform-receipt` uploads a single `terraform-execution.json` with schema
 `terraform-execution-v1`. The allowlisted fields are:
 
 - `repository`: owner/name; `sourceCommit`: actual checkout `git rev-parse HEAD`;
@@ -174,7 +166,7 @@ from caller workflows when upgrading.
   version; `lockSha256`: lowercase SHA256 of the committed root lock.
 - Optional `producerRevision`: exact actions SHA when determinable from the action
   ref. Mutable/semantic refs and the caller commit are never invented producer SHAs.
-- The receipt helper's v1.1 stream adds optional `binaryInventory` using
+- Optional `binaryInventory` uses
   `go-buildinfo-v1`. It records only CLI/provider identity, exact selection,
   platform, binary SHA-256 and embedded stable Go version. Provider observations
   additionally require the installed package's canonical h1 content checksum to
@@ -216,7 +208,7 @@ receipt publication**. Inspect the already-completed mutation and its logs first
 
 ## Dependabot
 
-Starting with `dependabot-policy/v2`, auto-merge eligibility depends only on the
+For the current `dependabot-policy`, auto-merge eligibility depends only on the
 pull request author: `dependabot[bot]` or `mx-io-idp-bot[bot]`. Terraform files,
 toolchain and action changes, all update types and missing metadata do not block
 eligibility. The caller must enable GitHub auto-merge without bypassing branch
@@ -253,7 +245,9 @@ git diff --check
 ```
 
 The contract suite runs on Windows and Linux. Set `TERRAFORM_NATIVE_TEST=1` with
-Terraform 1.17.0 on PATH to also generate a genuine provider lock and exercise
+the Terraform version configured in [the contract workflow](../.github/workflows/terraform-standards-tests.yml)
+and [native fixture](../terraform-setup/context.test.cjs)
+on PATH to also generate a genuine provider lock and exercise
 readonly init, validation, source-bound saved-plan application, state/output reads
 and destruction of an isolated local random-ID fixture. No cloud state is accessed.
 Hosted CI additionally exercises the actual setup composite with the HashiCorp
