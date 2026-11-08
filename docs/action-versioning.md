@@ -1,6 +1,8 @@
 # Action Versioning
 
-Each composite action in this repository owns a dedicated `version.json` so Nerdbank.GitVersioning can calculate versions that only advance when files inside that folder change.
+Each published action has a dedicated `version.json`. The release workflow uses
+Nerdbank.GitVersioning for its major/minor baseline and allocates an exact patch
+from existing tags when its tracked definition changes.
 
 The `repository-analysis` workflow package is the explicit exception: its internal
 evidence composite supports a reusable workflow consumer API. Its path filters and release detector include the reusable
@@ -39,9 +41,9 @@ jobs:
 
 | Tag shape         | Example             | Update cadence                                   |
 | ----------------- | ------------------- | ------------------------------------------------ |
-| `<folder>/vX.Y.Z` | `dotnet-ci/v1.0.15` | Never moves; change only when you edit workflow. |
-| `<folder>/vX.Y`   | `dotnet-ci/v1.2`    | Moves whenever a new `v1.2.*` patch publishes.   |
-| `<folder>/vX`     | `dotnet-ci/v1`      | Moves whenever any `v1.*.*` patch publishes.     |
+| `<folder>/vX.Y.Z` | `action/vX.Y.Z` | Immutable release tag. |
+| `<folder>/vX.Y`   | `action/vX.Y`    | Moves on a new patch in that minor release. |
+| `<folder>/vX`     | `action/vX`      | Moves on a new release in that major version. |
 
 These tags identify releases; the caller pin is the resolved commit SHA, not a
 rolling tag. For workflow packages, use the same release tag prefix to resolve

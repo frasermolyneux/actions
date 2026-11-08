@@ -1,14 +1,16 @@
 # Sonar policy arguments
 
 `sonar-policy-arguments` validates a platform-managed `.sonarcloud.json` file and emits scanner CLI arguments for repositories that cannot use the shared .NET code-quality workflow.
+Resolve a reviewed action release as described in [action versioning](action-versioning.md),
+and pin the Sonar action to a separately reviewed commit.
 
 ```yaml
 - name: Prepare managed Sonar policy
   id: sonar-policy
-  uses: frasermolyneux/actions/sonar-policy-arguments@sonar-policy-arguments/v1.0
+  uses: frasermolyneux/actions/sonar-policy-arguments@<FULL_RELEASE_SHA> # sonar-policy-arguments/vX.Y.Z
 
 - name: Run Sonar analysis
-  uses: SonarSource/sonarcloud-github-action@v5
+  uses: SonarSource/sonarcloud-github-action@<REVIEWED_SONAR_ACTION_SHA>
   with:
     args: >
       -Dsonar.projectKey=example

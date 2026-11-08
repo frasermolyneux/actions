@@ -72,7 +72,7 @@ jobs:
       allowed: ${{ steps.origin.outputs.publication-allowed }}
     steps:
       - id: origin
-        uses: frasermolyneux/actions/repository-publication-origin@repository-publication-origin/v1.0.0
+        uses: frasermolyneux/actions/repository-publication-origin@<FULL_RELEASE_SHA> # repository-publication-origin/vX.Y.Z
         with:
           github-token: ${{ github.token }}
           app-id: ${{ vars.GH_APP_ID }}

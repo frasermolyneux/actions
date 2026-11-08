@@ -1,6 +1,6 @@
 # Workflow linting
 
-`Lint` runs checksum-verified actionlint 1.7.12 with its normal rules and embedded
+`Lint` runs checksum-verified actionlint with its normal rules and embedded
 ShellCheck integration. Composite Bash scripts receive an additional ShellCheck
 pass, including the analysis evidence and native-verification helpers.
 
@@ -24,7 +24,8 @@ Unsupported syntax must not silently become a successful validation.
 The same job exercises the actual released parser against positive self-action
 and reusable-workflow fixtures and negative missing-action, input, expression and
 ShellCheck cases. It also verifies that source files are unchanged. To run locally
-with Python, PyYAML 6.0.3 and the released actionlint binary:
+with Python, the PyYAML version and actionlint binary configured in
+[the lint workflow](../.github/workflows/lint.yml):
 
 ```powershell
 $env:ACTIONLINT = 'C:\Tools\actionlint.exe'
