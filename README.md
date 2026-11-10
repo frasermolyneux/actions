@@ -6,6 +6,7 @@
 [![Devops Secure Scanning](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml/badge.svg)](https://github.com/frasermolyneux/actions/actions/workflows/devops-secure-scanning.yml)
 
 ## Documentation
+- [docs/publish-nuget-packages.md](docs/publish-nuget-packages.md) - OIDC-only NuGet publishing v3, trusted publishing prerequisites and migration from stored keys.
 - [docs/terraform-standards.md](docs/terraform-standards.md) - Terraform root pins,
   readonly provider locks, source-bound saved plans and metadata-only execution receipts.
 - [docs/workflow-linting.md](docs/workflow-linting.md) - Released-parser compatibility

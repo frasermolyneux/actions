@@ -1,7 +1,10 @@
 name: "publish-nuget-packages"
-description: "Publish NuGet packages and symbols, skipping symbol push when nupkg uploads are duplicates"
+description: "Publish NuGet packages and symbols using OIDC only; requires job id-token: write"
 
 inputs:
+  nuget-user:
+    description: "NuGet username of the trusted publishing policy creator (not necessarily the package owner)"
+    required: true
   artifact-name:
     description: "The name of the artifact that contains the packages"
     required: true
@@ -48,12 +51,20 @@ runs:
         run-id: ${{ inputs.artifact-run-id }}
         github-token: ${{ inputs.github-token }}
 
+    - name: Log in to NuGet.org using OIDC
+      id: nuget-login
+      uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0; Node 24, runner >= 2.327.1
+      with:
+        user: ${{ inputs.nuget-user }}
+
     - name: Publish to NuGet.org
       shell: bash
       env:
         ARTIFACT_OUTPUT_PATH: ${{ inputs.artifact-output-path }}
+        NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
       run: |
         set -euo pipefail
+        : "${NUGET_API_KEY:?NuGet OIDC login did not return an API key}"
         cd "$ARTIFACT_OUTPUT_PATH"
 
         NUGET_LOG=/tmp/nuget-push.log

@@ -1,0 +1,32 @@
+name: NuGet publisher contracts
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'publish-nuget-packages/**'
+      - 'scripts/test_publish_nuget_packages.py'
+      - 'scripts/test_template_arguments.py'
+      - '.github/workflows/publish-nuget-packages-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'publish-nuget-packages/**'
+      - 'scripts/test_publish_nuget_packages.py'
+      - 'scripts/test_template_arguments.py'
+      - '.github/workflows/publish-nuget-packages-tests.yml'
+permissions: {}
+jobs:
+  contracts:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Exercise OIDC contract and package/symbol push behavior without publishing
+        run: python -m unittest discover -s scripts -p 'test_publish_nuget_packages.py'
