@@ -97,7 +97,7 @@ jobs:
           persist-credentials: false
       - name: Install declared SDKs before installing or starting the .NET scanner
         if: fromJson(needs.plan.outputs.build).kind == 'dotnet' || fromJson(needs.plan.outputs.build).kind == 'netfx'
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         with:
           dotnet-version: ${{ needs.plan.outputs.sdk }}
           global-json-file: ${{ fromJson(needs.plan.outputs.build).globalJson || '' }}
@@ -107,7 +107,7 @@ jobs:
           node-version: ${{ fromJson(needs.plan.outputs.build).nodeVersion || '22' }}
           package-manager-cache: false
       - name: Install the analysis JDK
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
           java-version: "17"
           distribution: zulu
@@ -250,7 +250,7 @@ jobs:
           sonar-token: ${{ secrets.SONAR_TOKEN }}
       - name: Scan substantive CLI/C++ source using signed pinned binaries
         if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
-        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304
+        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:

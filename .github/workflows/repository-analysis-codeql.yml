@@ -74,7 +74,7 @@ jobs:
         run: |
           $executable = Join-Path $env:pythonLocation $(if ($IsWindows) { 'python.exe' } else { 'bin/python' })
           "executable=$executable" >> $env:GITHUB_OUTPUT
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         if: matrix.language == 'csharp'
         with:
           dotnet-version: ${{ matrix.sdk }}
@@ -95,7 +95,7 @@ jobs:
           language: ${{ matrix.language }}
           github-token: ${{ github.token }}
       - id: init
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066
         env:
           # Overlay archives can retain base-revision bytes; this boundary requires full extraction.
           CODEQL_ACTION_OVERLAY_ANALYSIS: "false"
@@ -116,7 +116,7 @@ jobs:
           language: ${{ matrix.language }}
           github-token: ${{ github.token }}
       - id: analyze
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066
         with:
           category: /language:${{ matrix.language }}
           upload: never
@@ -138,7 +138,7 @@ jobs:
           python: ${{ steps.python.outputs.executable }}
           github-token: ${{ github.token }}
       - id: upload
-        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066
         with:
           sarif_file: ${{ steps.analyze.outputs.sarif-output }}
           category: /language:${{ matrix.language }}
