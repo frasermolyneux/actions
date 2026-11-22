@@ -145,7 +145,7 @@ jobs:
 
       - name: Set up JDK 17
         if: ${{ inputs.skip-sonar != true }}
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
         with:
           java-version: 17
           distribution: zulu
@@ -451,7 +451,7 @@ jobs:
 
       - name: Run SonarCloud analysis (C/C++)
         if: ${{ inputs.skip-sonar != true && inputs.build-target == 'cmake-ci' }}
-        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65 # v8
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:

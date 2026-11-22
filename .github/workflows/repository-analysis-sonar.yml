@@ -107,7 +107,7 @@ jobs:
           node-version: ${{ fromJson(needs.plan.outputs.build).nodeVersion || '22' }}
           package-manager-cache: false
       - name: Install the analysis JDK
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
         with:
           java-version: "17"
           distribution: zulu
@@ -250,7 +250,7 @@ jobs:
           sonar-token: ${{ secrets.SONAR_TOKEN }}
       - name: Scan substantive CLI/C++ source using signed pinned binaries
         if: fromJson(needs.plan.outputs.recipe).driver != 'dotnet'
-        uses: SonarSource/sonarqube-scan-action@e805d875275f728fac1885b413934be6d7c63f65
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
