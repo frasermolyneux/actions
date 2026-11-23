@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Run and retain one test invocation under three names
         id: ci
         uses: $/dotnet-ci
@@ -24,6 +25,7 @@ jobs:
             9.0.x
             10.0.x
           src-folder: .github
+          perform-checkout: "false"
           skip-format-check: "true"
           skip-nuget-artifact-upload: "true"
           test-reporting: "true"
@@ -139,6 +141,9 @@ jobs:
           }
 
   contracts:
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -195,6 +200,8 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           artifact-ids: ${{ steps.evidence-smoke.outputs.evidence-artifact-id }}
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
           path: ${{ runner.temp }}/estate-quality-smoke
           merge-multiple: true
 
