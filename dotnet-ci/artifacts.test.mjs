@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -34,4 +34,29 @@ test('aliases retain upload failure and one authoritative report', () => {
   assert.match(manifest, /steps\.tests\.outputs\.results-directory/);
   assert.equal((manifest.match(/if-no-files-found: \$\{\{ inputs\.test-reporting == 'true' && 'error' \|\| 'warn' \}\}/g) || []).length, 2);
   assert.doesNotMatch(manifest, /continue-on-error/);
+});
+
+test('failed directory allocation cannot upload from a root-level TRX glob', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'dotnet-ci-allocation-'));
+  try {
+    const output = join(temp, 'output');
+    const invalidRoot = join(temp, 'not-a-directory');
+    writeFileSync(invalidRoot, 'file');
+    const result = spawnSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      encoding: 'utf8',
+      env: { ...process.env, PRIMARY_NAME: 'primary', SECONDARY_NAMES: 'one\ntwo', SRC_FOLDER: 'src', RUNNER_TEMP: invalidRoot, GITHUB_OUTPUT: output },
+    });
+    assert.notEqual(result.status, 0);
+    const outputs = readFileSync(output, 'utf8');
+    assert.match(outputs, /secondary1=one/);
+    assert.match(outputs, /secondary2=two/);
+    assert.doesNotMatch(outputs, /legacy-directory=/);
+    const conditions = [...manifest.matchAll(/name: Upload secondary test results \d\n\s+if: (.+)/g)];
+    assert.equal(conditions.length, 2);
+    for (const [, condition] of conditions) {
+      assert.match(condition, /^always\(\) && steps\.test-artifacts\.outcome == 'success' && /);
+    }
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
 });

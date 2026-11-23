@@ -42,10 +42,10 @@ runs:
             case "$framework" in
               .|..|*/*|*\\*) echo "::error::Invalid publish framework." >&2; exit 1 ;;
             esac
-            dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --no-build --framework "$framework" --output "$publish_dir/$framework" /p:ContinuousIntegrationBuild=true /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg
+            dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --no-build --framework "$framework" --output "$publish_dir/$framework" -p:ContinuousIntegrationBuild=true -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
           done <<< "$frameworks"
         else
-          dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --no-build --output "$publish_dir" /p:ContinuousIntegrationBuild=true /p:IncludeSymbols=true /p:SymbolPackageFormat=snupkg
+          dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --no-build --output "$publish_dir" -p:ContinuousIntegrationBuild=true -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
         fi
 
     - name: Upload artifact ${{ inputs.dotnet-project }}

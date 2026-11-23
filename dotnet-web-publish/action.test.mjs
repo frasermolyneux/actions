@@ -19,7 +19,9 @@ test('publish reuses Release builds and preserves framework output layout', () =
     writeFileSync(join(project, 'Web.csproj'), '<Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFrameworks>net9.0;net10.0</TargetFrameworks></PropertyGroup><ItemGroup><Content Include=".hidden" CopyToPublishDirectory="Always" /></ItemGroup></Project>');
     writeFileSync(join(project, 'Program.cs'), 'System.Console.WriteLine("hello");');
     writeFileSync(join(project, '.hidden'), 'included');
-    const env = { ...process.env, RUNNER_TEMP: runner.replaceAll('\\', '/'), SRC_FOLDER: src.replaceAll('\\', '/'), DOTNET_PROJECT: 'Web', PUBLISH_FRAMEWORKS: 'net9.0,\nnet10.0', MSYS_NO_PATHCONV: '1', DOTNET_NOLOGO: '1' };
+    const env = { ...process.env, RUNNER_TEMP: runner.replaceAll('\\', '/'), SRC_FOLDER: src.replaceAll('\\', '/'), DOTNET_PROJECT: 'Web', PUBLISH_FRAMEWORKS: 'net9.0,\nnet10.0', DOTNET_NOLOGO: '1' };
+    delete env.MSYS_NO_PATHCONV;
+    delete env.MSYS2_ARG_CONV_EXCL;
     const publish = () => spawnSync('bash', ['-c', script], { env, encoding: 'utf8' });
     let result = publish();
     assert.notEqual(result.status, 0, 'unbuilt project must fail rather than build');
@@ -56,8 +58,11 @@ test('single-framework publish retains the root output layout', () => {
     writeFileSync(join(project, 'Program.cs'), 'System.Console.WriteLine("hello");');
     const result = spawnSync('dotnet', ['build', join(project, 'Web.csproj'), '--configuration', 'Release', '/p:ContinuousIntegrationBuild=true', '/p:IncludeSymbols=true', '/p:SymbolPackageFormat=snupkg'], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    const env = { ...process.env, RUNNER_TEMP: runner.replaceAll('\\', '/'), SRC_FOLDER: join(root, 'src').replaceAll('\\', '/'), DOTNET_PROJECT: 'Web', PUBLISH_FRAMEWORKS: '' };
+    delete env.MSYS_NO_PATHCONV;
+    delete env.MSYS2_ARG_CONV_EXCL;
     const publish = spawnSync('bash', ['-c', script], {
-      env: { ...process.env, RUNNER_TEMP: runner.replaceAll('\\', '/'), SRC_FOLDER: join(root, 'src').replaceAll('\\', '/'), DOTNET_PROJECT: 'Web', PUBLISH_FRAMEWORKS: '', MSYS_NO_PATHCONV: '1' },
+      env,
       encoding: 'utf8',
     });
     assert.equal(publish.status, 0, publish.stdout + publish.stderr);
