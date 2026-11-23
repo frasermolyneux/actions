@@ -34,6 +34,14 @@ inputs:
     description: "Opt in to isolated multi-project TRX reporting; fails on missing, zero, or all-skipped tests."
     required: false
     default: "false"
+  test-results-artifact-name:
+    description: "Optional primary test-results artifact name; defaults to test-results-<src-folder>."
+    required: false
+    default: ""
+  secondary-test-results-artifact-names:
+    description: "Optional newline-separated additional artifact names (at most two) containing the same test results."
+    required: false
+    default: ""
 
 outputs:
   test-report:
@@ -49,6 +57,28 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - name: Prepare test artifact names
+      id: test-artifacts
+      shell: pwsh
+      env:
+        PRIMARY_NAME: ${{ inputs.test-results-artifact-name }}
+        SECONDARY_NAMES: ${{ inputs.secondary-test-results-artifact-names }}
+        SRC_FOLDER: ${{ inputs.src-folder }}
+      run: |
+        $primary = if ($env:PRIMARY_NAME) { $env:PRIMARY_NAME } else { "test-results-$env:SRC_FOLDER" }
+        $secondary = @($env:SECONDARY_NAMES -split '\r?\n' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        if ($primary -match '[\r\n]' -or $secondary.Count -gt 2) { throw 'Supply a single primary name and at most two secondary artifact names.' }
+        $names = @($primary) + $secondary
+        if (@($names | Select-Object -Unique).Count -ne $names.Count) { throw 'Test artifact names must be distinct.' }
+        "primary=$primary" >> $env:GITHUB_OUTPUT
+        if ($secondary.Count -gt 0) { "secondary1=$($secondary[0])" >> $env:GITHUB_OUTPUT }
+        if ($secondary.Count -gt 1) { "secondary2=$($secondary[1])" >> $env:GITHUB_OUTPUT }
+        if ($secondary.Count -gt 0) {
+          $directory = Join-Path $env:RUNNER_TEMP "dotnet-ci-tests/$([guid]::NewGuid().ToString('N'))"
+          New-Item -ItemType Directory -Path $directory -ErrorAction Stop | Out-Null
+          "legacy-directory=$directory" >> $env:GITHUB_OUTPUT
+        }
+
     - name: Checkout repository
       if: inputs.perform-checkout == 'true'
       uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
@@ -121,16 +151,17 @@ runs:
       shell: bash
       env:
         SRC_FOLDER: ${{ inputs.src-folder }}
+        RESULTS_DIRECTORY: ${{ steps.test-artifacts.outputs.legacy-directory }}
       run: |
         cd -- "$SRC_FOLDER"
-        dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory ./TestResults
+        dotnet test --configuration Release --no-build --verbosity normal --filter FullyQualifiedName!~IntegrationTests --logger "trx;LogFileName=test-results.trx" --results-directory "${RESULTS_DIRECTORY:-./TestResults}"
 
     - name: Upload Test Results
-      if: always() && inputs.test-reporting != 'true'
+      if: always() && inputs.test-reporting != 'true' && steps.test-artifacts.outcome == 'success'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: test-results-${{ inputs.src-folder }}
-        path: ${{ inputs.src-folder }}/TestResults/**/*.trx
+        name: ${{ steps.test-artifacts.outputs.primary }}
+        path: ${{ steps.test-artifacts.outputs.legacy-directory != '' && format('{0}/**/*.trx', steps.test-artifacts.outputs.legacy-directory) || format('{0}/TestResults/**/*.trx', inputs.src-folder) }}
         retention-days: 7
 
     - name: Test with GitHub reporting
@@ -139,7 +170,25 @@ runs:
       uses: frasermolyneux/actions/dotnet-test@c4dcaf4142a2e56a5c50af52c7c9eb8c441ebfab # dotnet-test/v1.1.1
       with:
         working-directory: ${{ inputs.src-folder }}
-        artifact-name: test-results-${{ inputs.src-folder }}
+        artifact-name: ${{ steps.test-artifacts.outputs.primary }}
+
+    - name: Upload secondary test results 1
+      if: always() && steps.test-artifacts.outcome == 'success' && steps.test-artifacts.outputs.secondary1 != '' && (inputs.test-reporting != 'true' || steps.tests.outputs.results-directory != '')
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.test-artifacts.outputs.secondary1 }}
+        path: ${{ inputs.test-reporting == 'true' && format('{0}/**', steps.tests.outputs.results-directory) || format('{0}/**/*.trx', steps.test-artifacts.outputs.legacy-directory) }}
+        retention-days: 7
+        if-no-files-found: ${{ inputs.test-reporting == 'true' && 'error' || 'warn' }}
+
+    - name: Upload secondary test results 2
+      if: always() && steps.test-artifacts.outcome == 'success' && steps.test-artifacts.outputs.secondary2 != '' && (inputs.test-reporting != 'true' || steps.tests.outputs.results-directory != '')
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.test-artifacts.outputs.secondary2 }}
+        path: ${{ inputs.test-reporting == 'true' && format('{0}/**', steps.tests.outputs.results-directory) || format('{0}/**/*.trx', steps.test-artifacts.outputs.legacy-directory) }}
+        retention-days: 7
+        if-no-files-found: ${{ inputs.test-reporting == 'true' && 'error' || 'warn' }}
 
     - name: Upload NuGet Packages
       if: inputs.skip-nuget-artifact-upload != 'true'

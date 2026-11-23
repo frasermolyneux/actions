@@ -10,6 +10,95 @@ permissions:
   contents: read
 
 jobs:
+  shared-build-artifacts:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Run and retain one test invocation under three names
+        id: ci
+        uses: $/dotnet-ci
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+          src-folder: .github
+          perform-checkout: "false"
+          skip-format-check: "true"
+          skip-nuget-artifact-upload: "true"
+          test-reporting: "true"
+          test-results-artifact-name: shared-tests
+          secondary-test-results-artifact-names: |
+            shared-tests-one
+            shared-tests-two
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: shared-tests
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          path: ${{ runner.temp }}/primary
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: shared-tests-one
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          path: ${{ runner.temp }}/secondary-one
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: shared-tests-two
+          github-token: ${{ github.token }}
+          run-id: ${{ github.run_id }}
+          path: ${{ runner.temp }}/secondary-two
+      - name: Verify aliases contain the same isolated test results
+        shell: pwsh
+        env:
+          TEST_REPORT: ${{ steps.ci.outputs.test-report }}
+        run: |
+          $report = $env:TEST_REPORT | ConvertFrom-Json
+          if ($report.status -ne 'passed' -or $report.total -ne 4 -or -not $report.artifactId) { throw 'Expected one complete authoritative report.' }
+          $sets = foreach ($directory in @('primary', 'secondary-one', 'secondary-two')) {
+            $root = Join-Path $env:RUNNER_TEMP $directory
+            @(Get-ChildItem -LiteralPath $root -File -Recurse | ForEach-Object {
+              "$([IO.Path]::GetRelativePath($root, $_.FullName)):$((Get-FileHash -LiteralPath $_.FullName).Hash)"
+            } | Sort-Object) -join "`n"
+          }
+          if (-not $sets[0] -or $sets[0] -ne $sets[1] -or $sets[0] -ne $sets[2]) { throw 'Test artifact copies differ.' }
+      - name: Verify an alias upload failure fails the composite
+        id: failed-upload
+        continue-on-error: true
+        uses: $/dotnet-ci
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+          src-folder: .github
+          perform-checkout: "false"
+          skip-format-check: "true"
+          skip-nuget-artifact-upload: "true"
+          test-reporting: "true"
+          test-results-artifact-name: second-test-run
+          secondary-test-results-artifact-names: shared-tests
+      - name: Require failed upload to fail the action
+        if: always()
+        shell: pwsh
+        env:
+          UPLOAD_OUTCOME: ${{ steps.failed-upload.outcome }}
+          SECOND_RUN_REPORT: ${{ steps.failed-upload.outputs.test-report }}
+          FIRST_RUN_REPORT: ${{ steps.ci.outputs.test-report }}
+        run: |
+          if ($env:UPLOAD_OUTCOME -ne 'failure') { throw 'A duplicate artifact upload must fail the action.' }
+          $second = $env:SECOND_RUN_REPORT | ConvertFrom-Json -ErrorAction Stop
+          $first = $env:FIRST_RUN_REPORT | ConvertFrom-Json -ErrorAction Stop
+          if ($second.status -ne 'passed' -or $second.total -ne 4 -or $second.passed -ne 4 -or
+              "$($second.artifactId)" -notmatch '^[1-9][0-9]+$' -or $second.artifactId -eq $first.artifactId) {
+            throw 'The second run must complete all four passing tests and upload its own primary artifact before the duplicate alias failure.'
+          }
+
   shared-quality-producer:
     permissions:
       contents: read
@@ -69,6 +158,9 @@ jobs:
           }
 
   contracts:
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -79,16 +171,16 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "22"
-      - name: Test TRX parsing and PR publishing contracts
-        run: node --test dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
-      - name: Test analysis capability selection
-        shell: pwsh
-        run: node --test repository-analysis-context/policy.test.mjs
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         with:
           dotnet-version: |
             9.0.x
             10.0.x
+      - name: Test TRX parsing and PR publishing contracts
+        run: node --test scripts/download-test-evidence.test.mjs dotnet-ci/artifacts.test.mjs dotnet-web-publish/action.test.mjs dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
+      - name: Test analysis capability selection
+        shell: pwsh
+        run: node --test repository-analysis-context/policy.test.mjs
       - name: Resolve sibling actions locally for pre-release smoke test
         shell: pwsh
         run: |
@@ -122,11 +214,26 @@ jobs:
           }
 
       - name: Download the actual structured evidence artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        id: downloaded-evidence
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          EVIDENCE_ARTIFACT_ID: ${{ steps.evidence-smoke.outputs.evidence-artifact-id }}
         with:
-          artifact-ids: ${{ steps.evidence-smoke.outputs.evidence-artifact-id }}
-          path: ${{ runner.temp }}/estate-quality-smoke
-          merge-multiple: true
+          script: |
+            const path = require('node:path');
+            const { download } = require(path.join(process.env.GITHUB_WORKSPACE, 'scripts', 'download-test-evidence.cjs'));
+            await download({
+              github, core, ...context.repo, runId: context.runId,
+              artifactId: process.env.EVIDENCE_ARTIFACT_ID,
+              directory: path.join(process.env.RUNNER_TEMP, 'estate-quality-download'),
+            });
+
+      - name: Extract the verified evidence archive
+        shell: pwsh
+        env:
+          EVIDENCE_ARCHIVE: ${{ steps.downloaded-evidence.outputs.archive-path }}
+        run: |
+          Expand-Archive -LiteralPath $env:EVIDENCE_ARCHIVE -DestinationPath (Join-Path $env:RUNNER_TEMP 'estate-quality-smoke') -ErrorAction Stop
 
       - name: Verify retained identity and measured counters
         shell: pwsh

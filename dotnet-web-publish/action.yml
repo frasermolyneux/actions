@@ -1,0 +1,58 @@
+name: "dotnet-web-publish"
+description: "Publishes a previously built ASP.NET Core web project without rebuilding or restoring"
+
+inputs:
+  dotnet-project:
+    description: "The .NET project name (a single path component)"
+    required: true
+  src-folder:
+    description: "The folder containing the .NET projects"
+    required: false
+    default: "src"
+  publish-frameworks:
+    description: "Optional list (comma or newline separated) of target frameworks to publish explicitly"
+    required: false
+    default: ""
+  skip-artifact-upload:
+    description: "Set to true to skip uploading the published web application artifact"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Publish ${{ inputs.dotnet-project }}
+      shell: bash
+      env:
+        SRC_FOLDER: ${{ inputs.src-folder }}
+        DOTNET_PROJECT: ${{ inputs.dotnet-project }}
+        PUBLISH_FRAMEWORKS: ${{ inputs.publish-frameworks }}
+      run: |
+        set -euo pipefail
+        cd -- "$SRC_FOLDER"
+        case "$DOTNET_PROJECT" in
+          ''|.|..|*/*|*\\*) echo "::error::dotnet-project must be a single project name." >&2; exit 1 ;;
+        esac
+        publish_dir="$RUNNER_TEMP/dotnet-publish/$DOTNET_PROJECT"
+        rm -rf "$publish_dir"
+        mkdir -p "$publish_dir"
+        frameworks=$(printf '%s' "$PUBLISH_FRAMEWORKS" | tr ',[:space:]' '\n' | sed '/^$/d')
+        if [ -n "$frameworks" ]; then
+          while IFS= read -r framework; do
+            case "$framework" in
+              .|..|*/*|*\\*) echo "::error::Invalid publish framework." >&2; exit 1 ;;
+            esac
+            dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --no-build --framework "$framework" --output "$publish_dir/$framework" -p:ContinuousIntegrationBuild=true -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
+          done <<< "$frameworks"
+        else
+          dotnet publish "$DOTNET_PROJECT/$DOTNET_PROJECT.csproj" --configuration Release --no-build --output "$publish_dir" -p:ContinuousIntegrationBuild=true -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
+        fi
+
+    - name: Upload artifact ${{ inputs.dotnet-project }}
+      if: inputs.skip-artifact-upload != 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.dotnet-project }}
+        path: ${{ runner.temp }}/dotnet-publish/${{ inputs.dotnet-project }}
+        if-no-files-found: error
+        include-hidden-files: true

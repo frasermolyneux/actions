@@ -121,6 +121,44 @@ Build/version/package/application outputs and artifact names are unchanged.
 The reusable `codequality.yml` workflow accepts the same opt-in as a boolean, so analysis builds
 can retain the same reporting contract without granting PR-write permissions to build steps.
 
+### Build once and publish multiple web projects
+
+Use `dotnet-ci` once per job, followed by `dotnet-web-publish` for each application.
+The checkout, SDKs, restore, Release build and test are shared. Publish requires the
+same job and the same project graph, configuration and frameworks already built.
+`--no-build` also disables restore; missing required build outputs fail rather
+than trigger a rebuild. Callers must not change source or build properties in between.
+Explicit `publish-frameworks` publishes into a subdirectory per
+framework; omit it for the existing single-framework output layout. The application
+artifact keeps the project name and includes hidden files.
+
+```yaml
+- id: ci
+  uses: frasermolyneux/actions/dotnet-ci@<FULL_RELEASE_SHA> # dotnet-ci/vX.Y.Z
+  with:
+    dotnet-version: <YOUR_SDK_VERSION>
+    skip-nuget-artifact-upload: "true"
+    test-reporting: "true"
+    test-results-artifact-name: test-results-src
+    secondary-test-results-artifact-names: |
+      test-results-WebOne
+      test-results-WebTwo
+- uses: frasermolyneux/actions/dotnet-web-publish@<FULL_RELEASE_SHA> # dotnet-web-publish/vX.Y.Z
+  with:
+    dotnet-project: WebOne
+- uses: frasermolyneux/actions/dotnet-web-publish@<FULL_RELEASE_SHA> # dotnet-web-publish/vX.Y.Z
+  with:
+    dotnet-project: WebTwo
+```
+
+The primary name defaults to `test-results-<src-folder>`. Up to two distinct
+newline-separated secondary names upload copies of the same isolated test results,
+with seven-day retention. Artifact names must be unique across the workflow run;
+upload failures fail the job. With reporting enabled the primary artifact is the
+one referenced by the single test report. Without reporting, aliases retain the
+legacy TRX upload's missing-file warning behavior. Existing `dotnet-web-ci` and
+`dotnet-func-ci` behavior is unchanged.
+
 ## `test-results-summary`
 
 Generalizes portal-web's bounded summaries and owned, stale-run-aware PR comment publishing.
@@ -194,5 +232,9 @@ failure propagation, source annotations, and comment ownership/write-context/sta
 The `Test reporting contracts` workflow additionally runs two real xUnit projects on both .NET 9
 and .NET 10 on Linux and Windows, and asserts that all four executions, the artifact ID and
 real native coverage instrumentation survive.
+The evidence round-trip checks the exact uploaded artifact and current run, verifies
+the archive digest, and retries only temporary HTTP 404 responses up to six attempts
+five seconds apart. Persistent absence, permission errors, and digest mismatches fail;
+the test never substitutes local evidence for the downloaded archive.
 The coverage smoke uses an independently checked out reviewed revision different from its
 caller definition, proving that actual tested-source provenance is preserved.
