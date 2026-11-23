@@ -10,6 +10,76 @@ permissions:
   contents: read
 
 jobs:
+  shared-build-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Run and retain one test invocation under three names
+        id: ci
+        uses: $/dotnet-ci
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+          src-folder: .github
+          skip-format-check: "true"
+          skip-nuget-artifact-upload: "true"
+          test-reporting: "true"
+          test-results-artifact-name: shared-tests
+          secondary-test-results-artifact-names: |
+            shared-tests-one
+            shared-tests-two
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: shared-tests
+          path: ${{ runner.temp }}/primary
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: shared-tests-one
+          path: ${{ runner.temp }}/secondary-one
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: shared-tests-two
+          path: ${{ runner.temp }}/secondary-two
+      - name: Verify aliases contain the same isolated test results
+        shell: pwsh
+        env:
+          TEST_REPORT: ${{ steps.ci.outputs.test-report }}
+        run: |
+          $report = $env:TEST_REPORT | ConvertFrom-Json
+          if ($report.status -ne 'passed' -or $report.total -ne 4 -or -not $report.artifactId) { throw 'Expected one complete authoritative report.' }
+          $sets = foreach ($directory in @('primary', 'secondary-one', 'secondary-two')) {
+            $root = Join-Path $env:RUNNER_TEMP $directory
+            @(Get-ChildItem -LiteralPath $root -File -Recurse | ForEach-Object {
+              "$([IO.Path]::GetRelativePath($root, $_.FullName)):$((Get-FileHash -LiteralPath $_.FullName).Hash)"
+            } | Sort-Object) -join "`n"
+          }
+          if (-not $sets[0] -or $sets[0] -ne $sets[1] -or $sets[0] -ne $sets[2]) { throw 'Test artifact copies differ.' }
+      - name: Verify an alias upload failure fails the composite
+        id: failed-upload
+        continue-on-error: true
+        uses: $/dotnet-ci
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+          src-folder: .github
+          perform-checkout: "false"
+          skip-format-check: "true"
+          skip-nuget-artifact-upload: "true"
+          test-reporting: "true"
+          test-results-artifact-name: second-test-run
+          secondary-test-results-artifact-names: shared-tests
+      - name: Require failed upload to fail the action
+        if: always()
+        shell: pwsh
+        env:
+          UPLOAD_OUTCOME: ${{ steps.failed-upload.outcome }}
+        run: |
+          if ($env:UPLOAD_OUTCOME -ne 'failure') { throw 'A duplicate artifact upload must fail the action.' }
+
   shared-quality-producer:
     permissions:
       contents: read
@@ -79,16 +149,16 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "22"
-      - name: Test TRX parsing and PR publishing contracts
-        run: node --test dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
-      - name: Test analysis capability selection
-        shell: pwsh
-        run: node --test repository-analysis-context/policy.test.mjs
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
         with:
           dotnet-version: |
             9.0.x
             10.0.x
+      - name: Test TRX parsing and PR publishing contracts
+        run: node --test dotnet-ci/artifacts.test.mjs dotnet-web-publish/action.test.mjs dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
+      - name: Test analysis capability selection
+        shell: pwsh
+        run: node --test repository-analysis-context/policy.test.mjs
       - name: Resolve sibling actions locally for pre-release smoke test
         shell: pwsh
         run: |

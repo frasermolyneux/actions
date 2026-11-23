@@ -55,6 +55,7 @@ jobs:
             dotnet-playwright-tests
             test-results-summary
             dotnet-web-ci
+            dotnet-web-publish
             logic-app-ci
             publish-nuget-packages
             run-api-integration-tests
