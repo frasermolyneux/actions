@@ -10,6 +10,14 @@ import firewall
 
 
 class FirewallTests(unittest.TestCase):
+    def test_run_resolves_cli_executable(self):
+        result = SimpleNamespace(stdout="ok")
+        with patch.object(firewall.shutil, "which", return_value="C:\\tools\\az.cmd"), \
+                patch.object(firewall.subprocess, "run", return_value=result) as process:
+            self.assertEqual(firewall.run(["az", "sql", "server", "list"]), "ok")
+            process.assert_called_once_with(["C:\\tools\\az.cmd", "sql", "server", "list"],
+                                            check=True, text=True, capture_output=True)
+
     def test_extracts_only_sql_firewall_address(self):
         error = ("credential error contacting 169.254.169.254\n"
                  "Client with IP address '3.42.157.109' is not allowed to access the server.")
@@ -57,10 +65,29 @@ class FirewallTests(unittest.TestCase):
 
             with patch.dict(os.environ, environment), \
                     patch.object(firewall, "install_sqlcmd", return_value="sqlcmd"), \
-                    patch.object(firewall, "probe", return_value=("3.42.157.109", None)), \
+                    patch.object(firewall, "probe", side_effect=[("3.42.157.109", None),
+                                                                ("3.42.157.109", None), (None, None)]), \
+                    patch.object(firewall.time, "sleep") as sleep, \
                     patch.object(firewall, "run", side_effect=az):
                 firewall.create()
                 self.assertIn("resource-group=group\n", output.read_text())
+                sleep.assert_called_once()
+
+    def test_rule_timeout_fails_with_cleanup_identity_recorded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "output"
+            environment = {"SQL_SERVER_FQDN": "server.example", "SQL_DATABASE_NAME": "db",
+                           "GITHUB_OUTPUT": str(output), "RUNNER_TEMP": directory}
+            servers = json.dumps([{"fullyQualifiedDomainName": "server.example",
+                                   "name": "server", "resourceGroup": "group"}])
+            with patch.dict(os.environ, environment), \
+                    patch.object(firewall, "install_sqlcmd", return_value="sqlcmd"), \
+                    patch.object(firewall, "probe", return_value=("3.42.157.109", None)), \
+                    patch.object(firewall.time, "monotonic", side_effect=[0, 301]), \
+                    patch.object(firewall, "run", side_effect=[servers, ""]):
+                with self.assertRaisesRegex(RuntimeError, "did not become active"):
+                    firewall.create()
+                self.assertIn("rule-name=GitHubActions_", output.read_text())
 
     def test_non_firewall_error_is_not_suppressed(self):
         with patch.dict(os.environ, {"SQL_SERVER_FQDN": "server", "SQL_DATABASE_NAME": "db"}), \

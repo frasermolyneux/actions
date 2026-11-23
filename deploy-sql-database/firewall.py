@@ -2,10 +2,12 @@ import ipaddress
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.request
 import uuid
 import zipfile
@@ -17,7 +19,10 @@ FIREWALL_ERROR = re.compile(r"Client with IP address '([^']+)' is not allowed to
 
 
 def run(args):
-    return subprocess.run(args, check=True, text=True, capture_output=True).stdout
+    executable = shutil.which(args[0])
+    if not executable:
+        raise FileNotFoundError(f"Executable not found: {args[0]}")
+    return subprocess.run([executable, *args[1:]], check=True, text=True, capture_output=True).stdout
 
 
 def install_sqlcmd(directory):
@@ -72,34 +77,52 @@ def probe_sqlpackage(server, database, directory):
     return interpret_probe(result)
 
 
+def check_connectivity(sqlcmd, server, database, directory):
+    address, error = probe(sqlcmd, server, "master")
+    if error is not None:
+        address, error = probe(sqlcmd, server, database)
+    if error is not None:
+        sqlcmd_error = error
+        address, error = probe_sqlpackage(server, database, directory)
+        if error is not None:
+            raise RuntimeError(f"Unable to check SQL connectivity:\n{sqlcmd_error}\n{error}")
+    return address
+
+
 def create():
     server = os.environ["SQL_SERVER_FQDN"]
     database = os.environ["SQL_DATABASE_NAME"]
     with tempfile.TemporaryDirectory(dir=os.environ.get("RUNNER_TEMP")) as directory:
         sqlcmd = install_sqlcmd(directory)
-        address, error = probe(sqlcmd, server, "master")
-        if error is not None:
-            address, error = probe(sqlcmd, server, database)
-        if error is not None:
-            sqlcmd_error = error
-            address, error = probe_sqlpackage(server, database, directory)
-            if error is not None:
-                raise RuntimeError(f"Unable to check SQL connectivity:\n{sqlcmd_error}\n{error}")
+        address = check_connectivity(sqlcmd, server, database, directory)
         if address is None:
             print("SQL server is already accessible; no firewall rule needed.")
             return
 
-    servers = json.loads(run(["az", "sql", "server", "list", "--output", "json"]))
-    matches = [item for item in servers if item["fullyQualifiedDomainName"].lower() == server.lower()]
-    if len(matches) != 1:
-        raise RuntimeError(f"Expected one SQL server matching {server}, found {len(matches)}.")
-    resource = matches[0]
-    name = f"GitHubActions_{uuid.uuid4().hex}"
-    with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-        output.write(f"server={resource['name']}\nresource-group={resource['resourceGroup']}\nrule-name={name}\n")
-    print(f"Adding temporary SQL firewall rule for {address}.", flush=True)
-    run(["az", "sql", "server", "firewall-rule", "create", "--resource-group", resource["resourceGroup"],
-         "--server", resource["name"], "--name", name, "--start-ip-address", address, "--end-ip-address", address])
+        servers = json.loads(run(["az", "sql", "server", "list", "--output", "json"]))
+        matches = [item for item in servers if item["fullyQualifiedDomainName"].lower() == server.lower()]
+        if len(matches) != 1:
+            raise RuntimeError(f"Expected one SQL server matching {server}, found {len(matches)}.")
+        resource = matches[0]
+        name = f"GitHubActions_{uuid.uuid4().hex}"
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+            output.write(f"server={resource['name']}\nresource-group={resource['resourceGroup']}\nrule-name={name}\n")
+        print(f"Adding temporary SQL firewall rule for {address}.", flush=True)
+        run(["az", "sql", "server", "firewall-rule", "create", "--resource-group", resource["resourceGroup"],
+             "--server", resource["name"], "--name", name, "--start-ip-address", address, "--end-ip-address", address])
+
+        deadline = time.monotonic() + 300
+        while True:
+            blocked_address = check_connectivity(sqlcmd, server, database, directory)
+            if blocked_address is None:
+                print("SQL firewall rule is active.")
+                return
+            if blocked_address != address:
+                raise RuntimeError(f"SQL server now reports a different runner IP: {blocked_address}.")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError(f"SQL firewall rule for {address} did not become active within five minutes.")
+            time.sleep(min(10, remaining))
 
 
 def delete():
