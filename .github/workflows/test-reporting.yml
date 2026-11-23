@@ -88,8 +88,16 @@ jobs:
         shell: pwsh
         env:
           UPLOAD_OUTCOME: ${{ steps.failed-upload.outcome }}
+          SECOND_RUN_REPORT: ${{ steps.failed-upload.outputs.test-report }}
+          FIRST_RUN_REPORT: ${{ steps.ci.outputs.test-report }}
         run: |
           if ($env:UPLOAD_OUTCOME -ne 'failure') { throw 'A duplicate artifact upload must fail the action.' }
+          $second = $env:SECOND_RUN_REPORT | ConvertFrom-Json -ErrorAction Stop
+          $first = $env:FIRST_RUN_REPORT | ConvertFrom-Json -ErrorAction Stop
+          if ($second.status -ne 'passed' -or $second.total -ne 4 -or $second.passed -ne 4 -or
+              "$($second.artifactId)" -notmatch '^[1-9][0-9]+$' -or $second.artifactId -eq $first.artifactId) {
+            throw 'The second run must complete all four passing tests and upload its own primary artifact before the duplicate alias failure.'
+          }
 
   shared-quality-producer:
     permissions:
