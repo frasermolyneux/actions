@@ -169,7 +169,7 @@ jobs:
             9.0.x
             10.0.x
       - name: Test TRX parsing and PR publishing contracts
-        run: node --test dotnet-ci/artifacts.test.mjs dotnet-web-publish/action.test.mjs dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
+        run: node --test scripts/download-test-evidence.test.mjs dotnet-ci/artifacts.test.mjs dotnet-web-publish/action.test.mjs dotnet-test/action.test.js dotnet-test/coverage.test.js dotnet-test/run-tests.test.js dotnet-test-report/report.test.js test-results-summary/summary.test.js
       - name: Test analysis capability selection
         shell: pwsh
         run: node --test repository-analysis-context/policy.test.mjs
@@ -206,13 +206,26 @@ jobs:
           }
 
       - name: Download the actual structured evidence artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        id: downloaded-evidence
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          EVIDENCE_ARTIFACT_ID: ${{ steps.evidence-smoke.outputs.evidence-artifact-id }}
         with:
-          artifact-ids: ${{ steps.evidence-smoke.outputs.evidence-artifact-id }}
-          github-token: ${{ github.token }}
-          run-id: ${{ github.run_id }}
-          path: ${{ runner.temp }}/estate-quality-smoke
-          merge-multiple: true
+          script: |
+            const path = require('node:path');
+            const { download } = require(path.join(process.env.GITHUB_WORKSPACE, 'scripts', 'download-test-evidence.cjs'));
+            await download({
+              github, core, ...context.repo, runId: context.runId,
+              artifactId: process.env.EVIDENCE_ARTIFACT_ID,
+              directory: path.join(process.env.RUNNER_TEMP, 'estate-quality-download'),
+            });
+
+      - name: Extract the verified evidence archive
+        shell: pwsh
+        env:
+          EVIDENCE_ARCHIVE: ${{ steps.downloaded-evidence.outputs.archive-path }}
+        run: |
+          Expand-Archive -LiteralPath $env:EVIDENCE_ARCHIVE -DestinationPath (Join-Path $env:RUNNER_TEMP 'estate-quality-smoke') -ErrorAction Stop
 
       - name: Verify retained identity and measured counters
         shell: pwsh

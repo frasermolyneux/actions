@@ -232,5 +232,9 @@ failure propagation, source annotations, and comment ownership/write-context/sta
 The `Test reporting contracts` workflow additionally runs two real xUnit projects on both .NET 9
 and .NET 10 on Linux and Windows, and asserts that all four executions, the artifact ID and
 real native coverage instrumentation survive.
+The evidence round-trip checks the exact uploaded artifact and current run, verifies
+the archive digest, and retries only temporary HTTP 404 responses up to six attempts
+five seconds apart. Persistent absence, permission errors, and digest mismatches fail;
+the test never substitutes local evidence for the downloaded archive.
 The coverage smoke uses an independently checked out reviewed revision different from its
 caller definition, proving that actual tested-source provenance is preserved.
