@@ -68,6 +68,14 @@ runs:
       shell: bash
       run: dotnet tool install -g microsoft.sqlpackage
 
+    - name: Allow runner through SQL firewall
+      id: sql-firewall
+      shell: bash
+      env:
+        SQL_SERVER_FQDN: ${{ inputs.sql-server-fqdn }}
+        SQL_DATABASE_NAME: ${{ inputs.sql-database-name }}
+      run: python "$GITHUB_ACTION_PATH/firewall.py" create
+
     - name: Validate allow-data-loss inputs
       if: inputs.allow-data-loss == 'true'
       shell: bash
@@ -176,6 +184,7 @@ runs:
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
+        skip-firewall-check: true
         build-arguments: '-c Release'
         arguments: '${{ inputs.sql-args }}${{ inputs.allow-data-loss == ''true'' && '' /p:BlockOnPossibleDataLoss=false'' || '''' }}'
 
@@ -193,6 +202,7 @@ runs:
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
+        skip-firewall-check: true
         build-arguments: '-c Release'
         arguments: '${{ inputs.sql-args }}${{ inputs.allow-data-loss == ''true'' && '' /p:BlockOnPossibleDataLoss=false'' || '''' }}'
 
@@ -209,5 +219,15 @@ runs:
         connection-string: 'Server=tcp:${{ inputs.sql-server-fqdn }};Authentication=Active Directory Default; Database=${{ inputs.sql-database-name }};'   
         path: '${{ inputs.project-folder }}/${{ inputs.project-file }}'
         action: 'publish'
+        skip-firewall-check: true
         build-arguments: '-c Release'
         arguments: '${{ inputs.sql-args }}${{ inputs.allow-data-loss == ''true'' && '' /p:BlockOnPossibleDataLoss=false'' || '''' }}'
+
+    - name: Remove runner SQL firewall rule
+      if: always() && steps.sql-firewall.outputs.rule-name != ''
+      shell: bash
+      env:
+        SQL_FIREWALL_SERVER: ${{ steps.sql-firewall.outputs.server }}
+        SQL_FIREWALL_RESOURCE_GROUP: ${{ steps.sql-firewall.outputs.resource-group }}
+        SQL_FIREWALL_RULE_NAME: ${{ steps.sql-firewall.outputs.rule-name }}
+      run: python "$GITHUB_ACTION_PATH/firewall.py" delete
